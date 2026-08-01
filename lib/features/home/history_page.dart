@@ -20,6 +20,10 @@ class _HistoryPageState extends State<HistoryPage> {
   bool _loading = true;
   String? _errorMessage;
   String? _analyzingDocumentId;
+  String? _deletingDocumentId;
+
+  bool get _operationInProgress =>
+      _analyzingDocumentId != null || _deletingDocumentId != null;
 
   @override
   void initState() {
@@ -50,7 +54,7 @@ class _HistoryPageState extends State<HistoryPage> {
   }
 
   Future<void> _startAnalysis(DocumentHistoryItem document) async {
-    if (_analyzingDocumentId != null) {
+    if (_operationInProgress) {
       return;
     }
 
@@ -92,6 +96,79 @@ class _HistoryPageState extends State<HistoryPage> {
     }
   }
 
+  Future<void> _requestDeletion(DocumentHistoryItem document) async {
+    if (_operationInProgress || !document.canDelete) {
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          icon: const Icon(
+            Icons.delete_forever_outlined,
+            color: AppColors.primary,
+            size: 42,
+          ),
+          title: const Text('Supprimer ce document ?'),
+          content: Text(
+            'Le ${document.typeLabel.toLowerCase()}, son fichier privé '
+            "et son analyse seront définitivement supprimés.\n\n"
+            'Cette action est irréversible.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Supprimer définitivement'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() => _deletingDocumentId = document.id);
+
+    try {
+      await _service.deleteDocument(document.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _documents = _documents
+            .where((item) => item.id != document.id)
+            .toList(growable: false);
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Le document a été supprimé.')),
+      );
+    } on DocumentAnalysisException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message),
+            duration: const Duration(seconds: 7),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _deletingDocumentId = null);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,9 +176,7 @@ class _HistoryPageState extends State<HistoryPage> {
         title: const Text('Historique'),
         actions: [
           IconButton(
-            onPressed: _loading || _analyzingDocumentId != null
-                ? null
-                : _loadDocuments,
+            onPressed: _loading || _operationInProgress ? null : _loadDocuments,
             icon: const Icon(Icons.refresh),
             tooltip: 'Actualiser',
           ),
@@ -187,13 +262,18 @@ class _HistoryPageState extends State<HistoryPage> {
       itemBuilder: (context, index) {
         final document = _documents[index];
         final analyzing = _analyzingDocumentId == document.id;
+        final deleting = _deletingDocumentId == document.id;
+        final blockedByAnotherOperation =
+            _operationInProgress && !analyzing && !deleting;
 
         return _DocumentCard(
           document: document,
           analyzing: analyzing,
-          blockedByAnotherAnalysis: _analyzingDocumentId != null && !analyzing,
+          deleting: deleting,
+          blockedByAnotherOperation: blockedByAnotherOperation,
           onAnalyze: () => _startAnalysis(document),
           onView: () => context.push('/history/${document.id}/analysis'),
+          onDelete: () => _requestDeletion(document),
         );
       },
     );
@@ -204,16 +284,20 @@ class _DocumentCard extends StatelessWidget {
   const _DocumentCard({
     required this.document,
     required this.analyzing,
-    required this.blockedByAnotherAnalysis,
+    required this.deleting,
+    required this.blockedByAnotherOperation,
     required this.onAnalyze,
     required this.onView,
+    required this.onDelete,
   });
 
   final DocumentHistoryItem document;
   final bool analyzing;
-  final bool blockedByAnotherAnalysis;
+  final bool deleting;
+  final bool blockedByAnotherOperation;
   final VoidCallback onAnalyze;
   final VoidCallback onView;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -265,6 +349,31 @@ class _DocumentCard extends StatelessWidget {
                 ),
               ),
               _StatusChip(document: document),
+              PopupMenuButton<String>(
+                enabled:
+                    document.canDelete &&
+                    !analyzing &&
+                    !deleting &&
+                    !blockedByAnotherOperation,
+                tooltip: 'Actions du document',
+                onSelected: (value) {
+                  if (value == 'delete') {
+                    onDelete();
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline),
+                        SizedBox(width: 10),
+                        Text('Supprimer'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
           if (document.comment != null) ...[
@@ -285,10 +394,19 @@ class _DocumentCard extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
           ],
+          if (deleting) ...[
+            const SizedBox(height: 18),
+            const LinearProgressIndicator(),
+            const SizedBox(height: 10),
+            const Text(
+              'Suppression définitive du fichier et de ses données…',
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: 18),
           if (document.isCompleted)
             FilledButton.icon(
-              onPressed: blockedByAnotherAnalysis ? null : onView,
+              onPressed: blockedByAnotherOperation || deleting ? null : onView,
               icon: const Icon(Icons.visibility_outlined),
               label: const Text("Voir l'analyse"),
               style: FilledButton.styleFrom(
@@ -309,7 +427,7 @@ class _DocumentCard extends StatelessWidget {
             )
           else if (document.canStartAnalysis)
             FilledButton.icon(
-              onPressed: analyzing || blockedByAnotherAnalysis
+              onPressed: analyzing || deleting || blockedByAnotherOperation
                   ? null
                   : onAnalyze,
               icon: const Icon(Icons.auto_awesome_outlined),

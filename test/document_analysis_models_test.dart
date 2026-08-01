@@ -15,6 +15,7 @@ void main() {
       expect(item.typeLabel, 'Devis');
       expect(item.statusLabel, 'Prêt à analyser');
       expect(item.canStartAnalysis, isTrue);
+      expect(item.canDelete, isTrue);
     });
 
     test('reconnaît une analyse terminée', () {
@@ -27,6 +28,19 @@ void main() {
 
       expect(item.isCompleted, isTrue);
       expect(item.canStartAnalysis, isFalse);
+      expect(item.canDelete, isTrue);
+    });
+
+    test('interdit la suppression pendant une analyse', () {
+      final item = DocumentHistoryItem.fromMap({
+        'id': 'document-1',
+        'document_type': 'estimate',
+        'status': 'processing',
+        'created_at': '2026-08-01T12:00:00Z',
+      });
+
+      expect(item.isProcessing, isTrue);
+      expect(item.canDelete, isFalse);
     });
   });
 

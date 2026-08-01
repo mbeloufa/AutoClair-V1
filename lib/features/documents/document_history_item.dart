@@ -62,6 +62,8 @@ class DocumentHistoryItem {
 
   bool get isProcessing => status == 'processing';
 
+  bool get canDelete => !isProcessing;
+
   static String? _nullableString(dynamic value) {
     final text = value?.toString().trim();
     return text == null || text.isEmpty ? null : text;
