@@ -17,7 +17,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _vehicleService = VehicleService();
-
   Vehicle? _primaryVehicle;
   bool _loadingVehicle = true;
 
@@ -36,13 +35,9 @@ class _HomePageState extends State<HomePage> {
         });
       }
     } on VehicleServiceException {
-      if (mounted) {
-        setState(() => _primaryVehicle = null);
-      }
+      if (mounted) setState(() => _primaryVehicle = null);
     } finally {
-      if (mounted) {
-        setState(() => _loadingVehicle = false);
-      }
+      if (mounted) setState(() => _loadingVehicle = false);
     }
   }
 
@@ -71,8 +66,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'AutoClair vous aide à comprendre les documents liés '
-              'à votre véhicule.',
+              'AutoClair vous aide à comprendre les documents liés à votre véhicule.',
               style: Theme.of(
                 context,
               ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
@@ -81,6 +75,22 @@ class _HomePageState extends State<HomePage> {
             Text('Mon véhicule', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             _buildVehicleSection(context),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: _primaryVehicle == null
+                  ? null
+                  : () => context.push('/documents/new'),
+              icon: const Icon(Icons.document_scanner_outlined),
+              label: const Text('Ajouter un document'),
+            ),
+            if (_primaryVehicle == null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Ajoutez un véhicule avant de transmettre un document.',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
             const SizedBox(height: 28),
             Container(
               padding: const EdgeInsets.all(24),
@@ -104,8 +114,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Le prochain module ajoutera l'import sécurisé "
-                    'des devis et factures.',
+                    "Les documents transmis apparaîtront dans l'historique après l'ajout du module d'analyse.",
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
@@ -152,9 +161,7 @@ class _HomePageState extends State<HomePage> {
             FilledButton.icon(
               onPressed: () async {
                 final changed = await context.push<bool>('/vehicles/new');
-                if (changed == true) {
-                  await _loadPrimaryVehicle();
-                }
+                if (changed == true) await _loadPrimaryVehicle();
               },
               icon: const Icon(Icons.add),
               label: const Text('Ajouter un véhicule'),
@@ -175,9 +182,7 @@ class _HomePageState extends State<HomePage> {
         final changed = await context.push<bool>(
           '/vehicles/${vehicle.id}/edit',
         );
-        if (changed == true) {
-          await _loadPrimaryVehicle();
-        }
+        if (changed == true) await _loadPrimaryVehicle();
       },
       borderRadius: BorderRadius.circular(20),
       child: Container(
