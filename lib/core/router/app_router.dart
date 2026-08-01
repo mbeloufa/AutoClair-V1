@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/forgot_password_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
+import '../../features/documents/analysis_result_page.dart';
 import '../../features/documents/document_upload_page.dart';
 import '../../features/home/account_page.dart';
 import '../../features/home/history_page.dart';
@@ -30,53 +31,83 @@ GoRouter createAppRouter(AppController controller) {
       final path = state.uri.path;
 
       if (path == '/start') {
-        if (controller.isAuthenticated) return '/home';
+        if (controller.isAuthenticated) {
+          return '/home';
+        }
         return controller.onboardingCompleted ? '/login' : '/onboarding';
       }
 
       if (controller.isAuthenticated) {
-        if (publicPaths.contains(path)) return '/home';
+        if (publicPaths.contains(path)) {
+          return '/home';
+        }
         return null;
       }
 
       if (!controller.onboardingCompleted) {
-        if (path != '/onboarding') return '/onboarding';
+        if (path != '/onboarding') {
+          return '/onboarding';
+        }
         return null;
       }
 
-      if (path == '/onboarding') return '/login';
-      if (!publicPaths.contains(path)) return '/login';
+      if (path == '/onboarding') {
+        return '/login';
+      }
+
+      if (!publicPaths.contains(path)) {
+        return '/login';
+      }
+
       return null;
     },
     routes: [
-      GoRoute(path: '/start', builder: (_, _) => const StartPage()),
+      GoRoute(path: '/start', builder: (context, state) => const StartPage()),
       GoRoute(
         path: '/onboarding',
-        builder: (_, _) => OnboardingPage(controller: controller),
+        builder: (context, state) => OnboardingPage(controller: controller),
       ),
-      GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
-      GoRoute(path: '/register', builder: (_, _) => const RegisterPage()),
+      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/register',
+        builder: (context, state) => const RegisterPage(),
+      ),
       GoRoute(
         path: '/forgot-password',
-        builder: (_, _) => const ForgotPasswordPage(),
+        builder: (context, state) => const ForgotPasswordPage(),
       ),
-      GoRoute(path: '/home', builder: (_, _) => const HomePage()),
-      GoRoute(path: '/vehicles', builder: (_, _) => const VehiclesPage()),
+      GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+      GoRoute(
+        path: '/vehicles',
+        builder: (context, state) => const VehiclesPage(),
+      ),
       GoRoute(
         path: '/vehicles/new',
-        builder: (_, _) => const VehicleFormPage(),
+        builder: (context, state) => const VehicleFormPage(),
       ),
       GoRoute(
         path: '/vehicles/:vehicleId/edit',
-        builder: (_, state) =>
+        builder: (context, state) =>
             VehicleFormPage(vehicleId: state.pathParameters['vehicleId']),
       ),
       GoRoute(
         path: '/documents/new',
-        builder: (_, _) => const DocumentUploadPage(),
+        builder: (context, state) => const DocumentUploadPage(),
       ),
-      GoRoute(path: '/history', builder: (_, _) => const HistoryPage()),
-      GoRoute(path: '/account', builder: (_, _) => const AccountPage()),
+      GoRoute(
+        path: '/history',
+        builder: (context, state) => const HistoryPage(),
+      ),
+      GoRoute(
+        path: '/history/:documentId/analysis',
+        builder: (context, state) => AnalysisResultPage(
+          documentId: state.pathParameters['documentId'] ?? '',
+        ),
+      ),
+      GoRoute(
+        path: '/account',
+        builder: (context, state) => const AccountPage(),
+      ),
     ],
     errorBuilder: (context, state) {
       return Scaffold(
