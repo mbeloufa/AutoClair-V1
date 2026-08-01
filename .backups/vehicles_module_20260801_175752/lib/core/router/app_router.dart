@@ -10,7 +10,6 @@ import '../../features/home/home_page.dart';
 import '../../features/home/vehicles_page.dart';
 import '../../features/onboarding/onboarding_page.dart';
 import '../../features/start/start_page.dart';
-import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
 GoRouter createAppRouter(AppController controller) {
@@ -78,15 +77,6 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/vehicles',
         builder: (context, state) => const VehiclesPage(),
-      ),
-      GoRoute(
-        path: '/vehicles/new',
-        builder: (context, state) => const VehicleFormPage(),
-      ),
-      GoRoute(
-        path: '/vehicles/:vehicleId/edit',
-        builder: (context, state) =>
-            VehicleFormPage(vehicleId: state.pathParameters['vehicleId']),
       ),
       GoRoute(
         path: '/history',
