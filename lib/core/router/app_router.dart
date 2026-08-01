@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/account/delete_account_page.dart';
 import '../../features/auth/forgot_password_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
@@ -107,6 +108,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/account',
         builder: (context, state) => const AccountPage(),
+      ),
+      GoRoute(
+        path: '/account/delete',
+        builder: (context, state) => const DeleteAccountPage(),
       ),
     ],
     errorBuilder: (context, state) {
