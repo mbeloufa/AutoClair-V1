@@ -61,8 +61,10 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return AuthLayout(
-      title: 'Se connecter',
-      subtitle: 'Retrouvez vos véhicules et vos analyses AutoClair.',
+      title: 'Ravi de vous revoir',
+      subtitle:
+          'Connectez-vous pour retrouver vos véhicules, vos documents et '
+          'vos analyses AutoClair.',
       child: Form(
         key: _formKey,
         child: Column(
@@ -127,7 +129,7 @@ class _LoginPageState extends State<LoginPage> {
                         strokeWidth: 2.5,
                       ),
                     )
-                  : const Text('Se connecter'),
+                  : const Text('Accéder à mon espace'),
             ),
             const SizedBox(height: 18),
             Row(
