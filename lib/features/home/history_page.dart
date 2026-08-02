@@ -176,6 +176,13 @@ class _HistoryPageState extends State<HistoryPage> {
         title: const Text('Historique'),
         actions: [
           IconButton(
+            onPressed: _operationInProgress
+                ? null
+                : () => context.push('/documents/new'),
+            icon: const Icon(Icons.add_rounded),
+            tooltip: 'Ajouter un document',
+          ),
+          IconButton(
             onPressed: _loading || _operationInProgress ? null : _loadDocuments,
             icon: const Icon(Icons.refresh),
             tooltip: 'Actualiser',
@@ -222,32 +229,50 @@ class _HistoryPageState extends State<HistoryPage> {
     if (_documents.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.fromLTRB(20, 56, 20, 32),
         children: [
-          const SizedBox(height: 90),
-          const Icon(
-            Icons.history_outlined,
-            size: 62,
-            color: AppColors.primary,
-          ),
-          const SizedBox(height: 18),
-          Text(
-            'Aucun document',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Les documents transmis apparaîtront ici.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: FilledButton.icon(
-              onPressed: () => context.push('/documents/new'),
-              icon: const Icon(Icons.add),
-              label: const Text('Ajouter un document'),
+          Container(
+            padding: const EdgeInsets.all(26),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  width: 78,
+                  height: 78,
+                  decoration: BoxDecoration(
+                    color: AppColors.softPrimary,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: const Icon(
+                    Icons.manage_search_outlined,
+                    size: 42,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Votre historique est prêt',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 9),
+                Text(
+                  'Vos documents et leurs analyses apparaîtront ici, '
+                  'dans l’ordre du plus récent au plus ancien.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 22),
+                FilledButton.icon(
+                  onPressed: () => context.push('/documents/new'),
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Analyser mon premier document'),
+                ),
+              ],
             ),
           ),
         ],
@@ -257,10 +282,14 @@ class _HistoryPageState extends State<HistoryPage> {
     return ListView.separated(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
-      itemCount: _documents.length,
+      itemCount: _documents.length + 1,
       separatorBuilder: (_, _) => const SizedBox(height: 14),
       itemBuilder: (context, index) {
-        final document = _documents[index];
+        if (index == 0) {
+          return _HistoryHeader(documentCount: _documents.length);
+        }
+
+        final document = _documents[index - 1];
         final analyzing = _analyzingDocumentId == document.id;
         final deleting = _deletingDocumentId == document.id;
         final blockedByAnotherOperation =
@@ -276,6 +305,55 @@ class _HistoryPageState extends State<HistoryPage> {
           onDelete: () => _requestDeletion(document),
         );
       },
+    );
+  }
+}
+
+class _HistoryHeader extends StatelessWidget {
+  const _HistoryHeader({required this.documentCount});
+
+  final int documentCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = documentCount > 1 ? 'documents suivis' : 'document suivi';
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.softPrimary,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: const Icon(Icons.history_rounded, color: AppColors.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$documentCount $label',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Retrouvez chaque document une seule fois avec son état.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -348,7 +426,6 @@ class _DocumentCard extends StatelessWidget {
                   ],
                 ),
               ),
-              _StatusChip(document: document),
               PopupMenuButton<String>(
                 enabled:
                     document.canDelete &&
@@ -376,6 +453,8 @@ class _DocumentCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          _StatusChip(document: document),
           if (document.comment != null) ...[
             const SizedBox(height: 14),
             Text(
@@ -453,16 +532,45 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = switch (document.status) {
-      'completed' => Icons.check_circle_outline,
-      'processing' => Icons.hourglass_top,
-      'failed' => Icons.refresh,
-      _ => Icons.schedule,
+    final (icon, foreground, background) = switch (document.status) {
+      'completed' => (
+        Icons.check_circle_outline,
+        AppColors.success,
+        AppColors.successSoft,
+      ),
+      'processing' || 'queued' => (
+        Icons.hourglass_top_rounded,
+        AppColors.info,
+        AppColors.infoSoft,
+      ),
+      'failed' => (Icons.refresh_rounded, AppColors.error, AppColors.errorSoft),
+      _ => (Icons.schedule_rounded, AppColors.warning, AppColors.warningSoft),
     };
 
-    return Tooltip(
-      message: document.statusLabel,
-      child: Icon(icon, color: AppColors.primary),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: foreground, size: 17),
+            const SizedBox(width: 7),
+            Text(
+              document.statusLabel,
+              style: TextStyle(
+                color: foreground,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

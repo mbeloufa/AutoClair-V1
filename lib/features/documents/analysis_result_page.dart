@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'document_analysis_result.dart';
@@ -101,13 +102,17 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
         _StringListSection(
           title: 'Questions à poser au garage',
           icon: Icons.help_outline,
+          accentColor: AppColors.success,
+          accentBackground: AppColors.successSoft,
           values: result.stringListAt('questions_to_ask'),
           emptyMessage: 'Aucune question particulière proposée.',
         ),
         const SizedBox(height: 18),
         _StringListSection(
-          title: 'Incertitudes',
-          icon: Icons.visibility_off_outlined,
+          title: 'Points à vérifier',
+          icon: Icons.warning_amber_outlined,
+          accentColor: AppColors.warning,
+          accentBackground: AppColors.warningSoft,
           values: result.stringListAt('uncertainties'),
           emptyMessage: 'Aucune incertitude particulière signalée.',
         ),
@@ -118,6 +123,8 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
               "Cette analyse ne remplace pas un diagnostic mécanique "
                   'ou une expertise professionnelle.',
         ),
+        const SizedBox(height: 18),
+        const _ResultNavigation(),
       ],
     );
   }
@@ -133,8 +140,19 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        color: AppColors.primary,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryDark, AppColors.primary],
+        ),
         borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.15),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,6 +245,8 @@ class _DocumentInformationSection extends StatelessWidget {
     return _SectionCard(
       title: 'Informations relevées',
       icon: Icons.description_outlined,
+      accentColor: AppColors.info,
+      accentBackground: AppColors.infoSoft,
       child: rows.isEmpty
           ? const Text("Aucune information certaine n'a été relevée.")
           : Column(
@@ -265,6 +285,8 @@ class _AmountsSection extends StatelessWidget {
     return _SectionCard(
       title: 'Montants',
       icon: Icons.euro_outlined,
+      accentColor: AppColors.success,
+      accentBackground: AppColors.successSoft,
       child: rows.isEmpty
           ? const Text("Aucun montant suffisamment lisible n'a été relevé.")
           : Column(
@@ -378,6 +400,8 @@ class _ObservationsSection extends StatelessWidget {
     return _SectionCard(
       title: 'Points à retenir',
       icon: Icons.fact_check_outlined,
+      accentColor: AppColors.warning,
+      accentBackground: AppColors.warningSoft,
       child: observations.isEmpty
           ? const Text('Aucun point particulier signalé.')
           : Column(
@@ -402,23 +426,54 @@ class _Observation extends StatelessWidget {
     final title = _text(item['title']) ?? 'Observation';
     final explanation = _text(item['explanation']) ?? '';
     final level = item['level']?.toString();
+    final (label, icon, color, background) = switch (level) {
+      'important' => (
+        'Alerte',
+        Icons.priority_high_rounded,
+        AppColors.error,
+        AppColors.errorSoft,
+      ),
+      'attention' => (
+        'À surveiller',
+        Icons.warning_amber_outlined,
+        AppColors.warning,
+        AppColors.warningSoft,
+      ),
+      _ => (
+        'Information',
+        Icons.info_outline,
+        AppColors.info,
+        AppColors.infoSoft,
+      ),
+    };
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(
-          level == 'important'
-              ? Icons.priority_high
-              : level == 'attention'
-              ? Icons.warning_amber_outlined
-              : Icons.info_outline,
-          color: AppColors.primary,
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: color, size: 21),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.45,
+                ),
+              ),
+              const SizedBox(height: 4),
               Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
               if (explanation.isNotEmpty) ...[
                 const SizedBox(height: 5),
@@ -438,18 +493,24 @@ class _StringListSection extends StatelessWidget {
     required this.icon,
     required this.values,
     required this.emptyMessage,
+    this.accentColor = AppColors.primary,
+    this.accentBackground = AppColors.softPrimary,
   });
 
   final String title;
   final IconData icon;
   final List<String> values;
   final String emptyMessage;
+  final Color accentColor;
+  final Color accentBackground;
 
   @override
   Widget build(BuildContext context) {
     return _SectionCard(
       title: title,
       icon: icon,
+      accentColor: accentColor,
+      accentBackground: accentBackground,
       child: values.isEmpty
           ? Text(emptyMessage)
           : Column(
@@ -460,12 +521,12 @@ class _StringListSection extends StatelessWidget {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Padding(
-                            padding: EdgeInsets.only(top: 7),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 7),
                             child: Icon(
                               Icons.circle,
                               size: 7,
-                              color: AppColors.primary,
+                              color: accentColor,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -485,11 +546,15 @@ class _SectionCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.child,
+    this.accentColor = AppColors.primary,
+    this.accentBackground = AppColors.softPrimary,
   });
 
   final String title;
   final IconData icon;
   final Widget child;
+  final Color accentColor;
+  final Color accentBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -505,8 +570,16 @@ class _SectionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, color: AppColors.primary),
-              const SizedBox(width: 10),
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: accentBackground,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: accentColor, size: 22),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   title,
@@ -556,6 +629,29 @@ class _KeyValueRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ResultNavigation extends StatelessWidget {
+  const _ResultNavigation();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        FilledButton.icon(
+          onPressed: () => context.go('/history'),
+          icon: const Icon(Icons.history_outlined),
+          label: const Text('Retour à l’historique'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => context.go('/home'),
+          icon: const Icon(Icons.home_outlined),
+          label: const Text('Retour à l’accueil'),
+        ),
+      ],
     );
   }
 }
