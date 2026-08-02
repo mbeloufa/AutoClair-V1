@@ -6,12 +6,14 @@ import 'selected_document_file.dart';
 class DocumentFilePreview extends StatelessWidget {
   const DocumentFilePreview({
     required this.file,
-    required this.onRemove,
+    this.onRemove,
+    this.onReplace,
     super.key,
   });
 
   final SelectedDocumentFile file;
-  final VoidCallback onRemove;
+  final VoidCallback? onRemove;
+  final VoidCallback? onReplace;
 
   @override
   Widget build(BuildContext context) {
@@ -73,11 +75,18 @@ class DocumentFilePreview extends StatelessWidget {
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: onRemove,
-                  icon: const Icon(Icons.close),
-                  tooltip: 'Retirer le fichier',
-                ),
+                if (onReplace != null)
+                  TextButton.icon(
+                    onPressed: onReplace,
+                    icon: const Icon(Icons.swap_horiz, size: 19),
+                    label: const Text('Remplacer'),
+                  )
+                else if (onRemove != null)
+                  IconButton(
+                    onPressed: onRemove,
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Retirer le fichier',
+                  ),
               ],
             ),
           ),
