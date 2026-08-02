@@ -9,6 +9,7 @@ import '../vehicles/vehicle_service.dart';
 import 'document_analysis_journey.dart';
 import 'document_analysis_service.dart';
 import 'document_file_preview.dart';
+import 'document_scanner_service.dart';
 import 'document_upload_service.dart';
 import 'selected_document_file.dart';
 
@@ -33,6 +34,7 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
   final _vehicleService = VehicleService();
   final _uploadService = DocumentUploadService();
   final _analysisService = DocumentAnalysisService();
+  final _scannerService = DocumentScannerService();
 
   late final DocumentAnalysisJourney _journey;
 
@@ -42,6 +44,7 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
   SelectedDocumentFile? _selectedFile;
   bool _loadingVehicles = true;
   bool _pickingFile = false;
+  bool _scanningDocument = false;
   bool _processing = false;
   String? _loadError;
   String? _journeyError;
@@ -49,6 +52,8 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
   _AnalysisStage _stage = _AnalysisStage.idle;
 
   bool get _documentAlreadyUploaded => _journey.hasUploadedDocument;
+
+  bool get _selectingDocument => _pickingFile || _scanningDocument;
 
   @override
   void initState() {
@@ -85,8 +90,48 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
     }
   }
 
+  Future<void> _scanDocument() async {
+    if (_selectingDocument || _processing || _documentAlreadyUploaded) return;
+
+    setState(() => _scanningDocument = true);
+
+    try {
+      final scannedDocument = await _scannerService.scanDocument();
+      if (scannedDocument == null) return;
+
+      final selectedFile = SelectedDocumentFile.fromPlatformFile(
+        scannedDocument.file,
+      );
+
+      _acceptSelectedFile(selectedFile);
+
+      if (!mounted) return;
+      final pageLabel = scannedDocument.pageCount > 1
+          ? '${scannedDocument.pageCount} pages'
+          : '1 page';
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Document numérisé : $pageLabel. Vérifiez la prévisualisation.',
+          ),
+        ),
+      );
+    } on DocumentFileValidationException catch (error) {
+      if (mounted) _showError(error.message);
+    } on DocumentScannerException catch (error) {
+      if (mounted) _showError(error.message);
+    } catch (_) {
+      if (mounted) {
+        _showError("Le document n'a pas pu être numérisé.");
+      }
+    } finally {
+      if (mounted) setState(() => _scanningDocument = false);
+    }
+  }
+
   Future<void> _pickFile() async {
-    if (_pickingFile || _processing || _documentAlreadyUploaded) return;
+    if (_selectingDocument || _processing || _documentAlreadyUploaded) return;
     setState(() => _pickingFile = true);
 
     try {
@@ -343,7 +388,10 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
           const SizedBox(height: 14),
           if (_selectedFile == null)
             _DocumentSourcePicker(
+              scannerAvailable: _scannerService.isAvailable,
               pickingFile: _pickingFile,
+              scanningDocument: _scanningDocument,
+              onScan: _scanDocument,
               onBrowse: _pickFile,
             )
           else
@@ -423,8 +471,8 @@ class _JourneyHeader extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            'Choisissez un fichier, contrôlez sa prévisualisation, puis '
-            'confirmez. Le bon résultat s’ouvrira automatiquement.',
+            'Scannez ou choisissez un fichier, contrôlez sa prévisualisation, '
+            'puis confirmez. Le bon résultat s’ouvrira automatiquement.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.white.withValues(alpha: 0.82),
             ),
@@ -437,12 +485,20 @@ class _JourneyHeader extends StatelessWidget {
 
 class _DocumentSourcePicker extends StatelessWidget {
   const _DocumentSourcePicker({
+    required this.scannerAvailable,
     required this.pickingFile,
+    required this.scanningDocument,
+    required this.onScan,
     required this.onBrowse,
   });
 
+  final bool scannerAvailable;
   final bool pickingFile;
+  final bool scanningDocument;
+  final VoidCallback onScan;
   final VoidCallback onBrowse;
+
+  bool get _selectingDocument => pickingFile || scanningDocument;
 
   @override
   Widget build(BuildContext context) {
@@ -462,26 +518,67 @@ class _DocumentSourcePicker extends StatelessWidget {
               color: AppColors.softPrimary,
               borderRadius: BorderRadius.circular(19),
             ),
-            child: const Icon(
-              Icons.upload_file_outlined,
+            child: Icon(
+              scannerAvailable
+                  ? Icons.document_scanner_outlined
+                  : Icons.upload_file_outlined,
               color: AppColors.primary,
               size: 32,
             ),
           ),
           const SizedBox(height: 14),
           Text(
-            'Sélectionnez votre document',
+            scannerAvailable
+                ? 'Scannez ou sélectionnez votre document'
+                : 'Sélectionnez votre document',
+            textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 5),
           Text(
-            'PDF, JPEG ou PNG • 15 Mo maximum',
+            scannerAvailable
+                ? 'Jusqu’à 10 pages • PDF généré automatiquement'
+                : 'PDF, JPEG ou PNG • 15 Mo maximum',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 16),
+          if (scannerAvailable) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _selectingDocument ? null : onScan,
+              icon: scanningDocument
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.document_scanner_outlined),
+              label: Text(
+                scanningDocument
+                    ? 'Préparation du scanner…'
+                    : "Scanner avec l’appareil photo",
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'ou',
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
+          ],
+          const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: pickingFile ? null : onBrowse,
+            onPressed: _selectingDocument ? null : onBrowse,
             icon: pickingFile
                 ? const SizedBox.square(
                     dimension: 18,
@@ -489,9 +586,19 @@ class _DocumentSourcePicker extends StatelessWidget {
                   )
                 : const Icon(Icons.folder_open_outlined),
             label: Text(
-              pickingFile ? 'Ouverture des fichiers…' : 'Choisir un fichier',
+              pickingFile
+                  ? 'Ouverture des fichiers…'
+                  : 'Choisir un fichier existant',
             ),
           ),
+          if (scannerAvailable) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Le fichier numérisé sera vérifié avant tout envoi.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
         ],
       ),
     );

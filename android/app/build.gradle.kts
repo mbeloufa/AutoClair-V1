@@ -34,6 +34,12 @@ android {
     }
 }
 
+dependencies {
+    implementation(
+        "com.google.android.gms:play-services-mlkit-document-scanner:16.0.0",
+    )
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
