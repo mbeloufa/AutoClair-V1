@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>AutoClair utilise votre position uniquement pour rechercher les centres de contrôle technique proches et calculer leur distance.</string>
 </dict>
 </plist>

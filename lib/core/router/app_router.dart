@@ -13,6 +13,7 @@ import '../../features/home/home_page.dart';
 import '../../features/home/vehicles_page.dart';
 import '../../features/onboarding/onboarding_page.dart';
 import '../../features/start/start_page.dart';
+import '../../features/technical_control/technical_control_compare_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
@@ -94,6 +95,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/documents/new',
         builder: (context, state) => const DocumentUploadPage(),
+      ),
+      GoRoute(
+        path: '/technical-controls',
+        builder: (context, state) => const TechnicalControlComparePage(),
       ),
       GoRoute(
         path: '/history',

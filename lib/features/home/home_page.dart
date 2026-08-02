@@ -121,6 +121,10 @@ class _HomePageState extends State<HomePage> {
               hasVehicle: _primaryVehicle != null,
               onPressed: _loading ? null : _openPrimaryAction,
             ),
+            const SizedBox(height: 14),
+            _TechnicalControlPromoCard(
+              onPressed: () => context.push('/technical-controls'),
+            ),
             if (_dashboardError != null) ...[
               const SizedBox(height: 14),
               _DashboardWarning(
@@ -581,6 +585,64 @@ class _DashboardWarning extends StatelessWidget {
             tooltip: 'Réessayer',
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TechnicalControlPromoCard extends StatelessWidget {
+  const _TechnicalControlPromoCard({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(22),
+      child: Ink(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.infoSoft,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.info.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.price_check_rounded,
+                color: AppColors.info,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Comparer les contrôles techniques',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Trouvez les centres proches et comparez leurs tarifs.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.info),
+          ],
+        ),
       ),
     );
   }
