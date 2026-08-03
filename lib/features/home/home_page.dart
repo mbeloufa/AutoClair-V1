@@ -125,6 +125,8 @@ class _HomePageState extends State<HomePage> {
             _TechnicalControlPromoCard(
               onPressed: () => context.push('/technical-controls'),
             ),
+            const SizedBox(height: 14),
+            _FuelPricePromoCard(onPressed: () => context.push('/fuel-prices')),
             if (_dashboardError != null) ...[
               const SizedBox(height: 14),
               _DashboardWarning(
@@ -641,6 +643,64 @@ class _TechnicalControlPromoCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             const Icon(Icons.chevron_right_rounded, color: AppColors.info),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FuelPricePromoCard extends StatelessWidget {
+  const _FuelPricePromoCard({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(22),
+      child: Ink(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.successSoft,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.success.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.local_gas_station_rounded,
+                color: AppColors.success,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Comparer les prix des carburants',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Trouvez les stations proches et le meilleur prix au litre.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.success),
           ],
         ),
       ),
