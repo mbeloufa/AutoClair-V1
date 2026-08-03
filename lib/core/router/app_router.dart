@@ -10,6 +10,7 @@ import '../../features/documents/document_upload_page.dart';
 import '../../features/home/account_page.dart';
 import '../../features/home/history_page.dart';
 import '../../features/home/home_page.dart';
+import '../../features/home/nearby_page.dart';
 import '../../features/home/vehicles_page.dart';
 import '../../features/onboarding/onboarding_page.dart';
 import '../../features/start/start_page.dart';
@@ -99,8 +100,10 @@ GoRouter createAppRouter(AppController controller) {
       ),
       GoRoute(
         path: '/vehicles/:vehicleId/care',
-        builder: (context, state) =>
-            VehicleCarePage(vehicleId: state.pathParameters['vehicleId'] ?? ''),
+        builder: (context, state) => VehicleCarePage(
+          vehicleId: state.pathParameters['vehicleId'] ?? '',
+          initialSection: state.uri.queryParameters['section'],
+        ),
       ),
       GoRoute(
         path: '/vehicles/:vehicleId/care/events/new',
@@ -122,6 +125,7 @@ GoRouter createAppRouter(AppController controller) {
         path: '/documents/new',
         builder: (context, state) => const DocumentUploadPage(),
       ),
+      GoRoute(path: '/nearby', builder: (context, state) => const NearbyPage()),
       GoRoute(
         path: '/technical-controls',
         builder: (context, state) => const TechnicalControlComparePage(),

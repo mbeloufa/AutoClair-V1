@@ -9,6 +9,7 @@ class AppBottomNav extends StatelessWidget {
   static const _locations = <String>[
     '/home',
     '/vehicles',
+    '/nearby',
     '/history',
     '/account',
   ];
@@ -34,9 +35,14 @@ class AppBottomNav extends StatelessWidget {
           label: 'Véhicules',
         ),
         NavigationDestination(
-          icon: Icon(Icons.history_outlined),
-          selectedIcon: Icon(Icons.history),
-          label: 'Historique',
+          icon: Icon(Icons.near_me_outlined),
+          selectedIcon: Icon(Icons.near_me),
+          label: 'Autour',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.description_outlined),
+          selectedIcon: Icon(Icons.description),
+          label: 'Documents',
         ),
         NavigationDestination(
           icon: Icon(Icons.person_outline),

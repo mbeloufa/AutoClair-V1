@@ -162,12 +162,29 @@ class VehicleRecallAlert {
   }
 
   String get statusLabel => switch (status) {
-    'POSSIBLE' => 'Potentiellement concerné',
+    'POSSIBLE' => 'Compatibilité probable',
     'SCHEDULED' => 'Intervention programmée',
     'COMPLETED' => 'Rappel effectué',
-    'NOT_CONCERNED' => 'Non concerné',
-    _ => 'À vérifier',
+    'NOT_CONCERNED' => 'Véhicule non concerné',
+    _ => 'À vérifier avec le VIN',
   };
+
+  bool get requiresAttention =>
+      status == 'TO_CHECK' || status == 'POSSIBLE' || status == 'SCHEDULED';
+
+  String get confidenceLabel {
+    if (matchScore >= 0.90) return 'Compatibilité forte';
+    if (matchScore >= 0.80) return 'Compatibilité probable';
+    return 'Compatibilité insuffisante';
+  }
+
+  bool isPlausibleFor(String vehicleModel) {
+    return matchScore >= 0.80 &&
+        recallReferencesContainVehicleModel(
+          vehicleModel: vehicleModel,
+          recallReferences: modelsReferences,
+        );
+  }
 }
 
 class VehicleRiskAlert {
@@ -442,6 +459,181 @@ String eventTypeLabel(String value) => switch (value) {
   'ADMINISTRATIVE' => 'Administratif',
   _ => 'Autre',
 };
+
+bool recallReferencesContainVehicleModel({
+  required String vehicleModel,
+  required String recallReferences,
+}) {
+  final anchor = vehicleModelAnchor(vehicleModel);
+  if (anchor == null) return false;
+
+  final normalizedReferences = _normalizeRecallText(recallReferences);
+  if (normalizedReferences.isEmpty) return false;
+
+  return ' $normalizedReferences '.contains(' $anchor ');
+}
+
+String? vehicleModelAnchor(String value) {
+  final normalized = _normalizeRecallText(value);
+  if (normalized.isEmpty) return null;
+
+  final tokens = normalized
+      .split(' ')
+      .where((token) => token.isNotEmpty)
+      .toList(growable: false);
+  const ignored = <String>{
+    'diesel',
+    'essence',
+    'hybride',
+    'hybrid',
+    'electrique',
+    'electric',
+    'tdi',
+    'tsi',
+    'tce',
+    'dci',
+    'hdi',
+    'bluehdi',
+    'puretech',
+    'multijet',
+    'ecoboost',
+    'phev',
+    'gti',
+    'gtd',
+    'break',
+    'berline',
+    'suv',
+    'sport',
+    'line',
+    'phase',
+    'generation',
+    'automatique',
+    'manuelle',
+  };
+
+  const compoundPrefixes = <String>{
+    'id',
+    'ds',
+    'model',
+    'classe',
+    'class',
+    'serie',
+    'series',
+    'c',
+    'cx',
+    'mx',
+    't',
+    'e',
+  };
+
+  for (var index = 0; index < tokens.length; index++) {
+    final token = tokens[index];
+    if (ignored.contains(token)) continue;
+
+    if (compoundPrefixes.contains(token) && index + 1 < tokens.length) {
+      final next = tokens[index + 1];
+      if (next.isNotEmpty && !ignored.contains(next)) {
+        return '$token $next';
+      }
+    }
+
+    final containsLetter = RegExp(r'[a-z]').hasMatch(token);
+    final containsDigit = RegExp(r'\d').hasMatch(token);
+    if (containsLetter && token.length >= 2) return token;
+    if (!containsLetter && containsDigit && token.length >= 3) return token;
+  }
+
+  return null;
+}
+
+List<VehicleMaintenanceSchedule> orderedMaintenanceSchedules(
+  Iterable<VehicleMaintenanceSchedule> values, {
+  required int? currentMileage,
+  DateTime? now,
+}) {
+  final reference = now ?? DateTime.now();
+  final result = values.toList(growable: true);
+
+  int rank(VehicleMaintenanceSchedule schedule) {
+    if (schedule.isOverdue(currentMileage: currentMileage, now: reference)) {
+      return 0;
+    }
+    if (schedule.isDueSoon(currentMileage: currentMileage, now: reference)) {
+      return 1;
+    }
+    return 2;
+  }
+
+  result.sort((left, right) {
+    final rankComparison = rank(left).compareTo(rank(right));
+    if (rankComparison != 0) return rankComparison;
+
+    final leftDate = left.dueDate;
+    final rightDate = right.dueDate;
+    if (leftDate != null && rightDate != null) {
+      final dateComparison = leftDate.compareTo(rightDate);
+      if (dateComparison != 0) return dateComparison;
+    } else if (leftDate != null) {
+      return -1;
+    } else if (rightDate != null) {
+      return 1;
+    }
+
+    final leftMileage = left.dueMileage;
+    final rightMileage = right.dueMileage;
+    if (leftMileage != null && rightMileage != null) {
+      final mileageComparison = leftMileage.compareTo(rightMileage);
+      if (mileageComparison != 0) return mileageComparison;
+    } else if (leftMileage != null) {
+      return -1;
+    } else if (rightMileage != null) {
+      return 1;
+    }
+
+    return left.title.compareTo(right.title);
+  });
+
+  return List.unmodifiable(result);
+}
+
+String _normalizeRecallText(String value) {
+  var normalized = value.toLowerCase();
+  const replacements = <String, String>{
+    'à': 'a',
+    'â': 'a',
+    'ä': 'a',
+    'á': 'a',
+    'ã': 'a',
+    'ç': 'c',
+    'é': 'e',
+    'è': 'e',
+    'ê': 'e',
+    'ë': 'e',
+    'í': 'i',
+    'ì': 'i',
+    'î': 'i',
+    'ï': 'i',
+    'ñ': 'n',
+    'ó': 'o',
+    'ò': 'o',
+    'ô': 'o',
+    'ö': 'o',
+    'õ': 'o',
+    'ú': 'u',
+    'ù': 'u',
+    'û': 'u',
+    'ü': 'u',
+    'ý': 'y',
+    'ÿ': 'y',
+  };
+  for (final entry in replacements.entries) {
+    normalized = normalized.replaceAll(entry.key, entry.value);
+  }
+  return normalized
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+}
 
 Map<String, dynamic> _map(dynamic value) {
   if (value is Map<String, dynamic>) return value;

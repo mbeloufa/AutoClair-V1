@@ -72,9 +72,9 @@ class _AccountPageState extends State<AccountPage> {
                 onTap: () => context.go('/vehicles'),
               ),
               _SettingsTile(
-                icon: Icons.history_outlined,
+                icon: Icons.description_outlined,
                 title: 'Mes documents et analyses',
-                subtitle: 'Retrouver mon historique AutoClair',
+                subtitle: 'Retrouver mes fichiers et leurs analyses',
                 onTap: () => context.go('/history'),
               ),
             ],
@@ -134,7 +134,7 @@ class _AccountPageState extends State<AccountPage> {
           ),
         ],
       ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 3),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 4),
     );
   }
 

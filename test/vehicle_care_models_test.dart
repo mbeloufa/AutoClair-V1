@@ -90,4 +90,93 @@ void main() {
     expect(eventTypeLabel('RECALL'), 'Rappel constructeur');
     expect(eventTypeLabel('UNKNOWN'), 'Autre');
   });
+
+  test('recall matching rejects unrelated Volkswagen utility models', () {
+    expect(vehicleModelAnchor('Golf 7 2.0 TDI'), 'golf');
+    expect(
+      recallReferencesContainVehicleModel(
+        vehicleModel: 'Golf 7 2.0 TDI',
+        recallReferences: 'Transporter T5, Caravelle et Multivan',
+      ),
+      isFalse,
+    );
+    expect(
+      recallReferencesContainVehicleModel(
+        vehicleModel: 'Golf 7 2.0 TDI',
+        recallReferences: 'Golf VII et Golf VIII',
+      ),
+      isTrue,
+    );
+  });
+
+  test('recall matching keeps compound model families distinct', () {
+    expect(vehicleModelAnchor('ID.3 Pro'), 'id 3');
+    expect(
+      recallReferencesContainVehicleModel(
+        vehicleModel: 'ID.3 Pro',
+        recallReferences: 'ID.4 et ID.5',
+      ),
+      isFalse,
+    );
+    expect(
+      recallReferencesContainVehicleModel(
+        vehicleModel: 'ID.3 Pro',
+        recallReferences: 'Volkswagen ID.3',
+      ),
+      isTrue,
+    );
+  });
+
+  test('recall matching distinguishes other compound model names', () {
+    expect(vehicleModelAnchor('Model 3 Long Range'), 'model 3');
+    expect(vehicleModelAnchor('C-HR Hybride'), 'c hr');
+    expect(vehicleModelAnchor('T-Roc 1.5 TSI'), 't roc');
+    expect(
+      recallReferencesContainVehicleModel(
+        vehicleModel: 'Model 3 Long Range',
+        recallReferences: 'Tesla Model Y',
+      ),
+      isFalse,
+    );
+    expect(
+      recallReferencesContainVehicleModel(
+        vehicleModel: 'C-HR Hybride',
+        recallReferences: 'Toyota C-HR',
+      ),
+      isTrue,
+    );
+  });
+
+  test('maintenance ordering puts overdue operations first', () {
+    final schedules = [
+      VehicleMaintenanceSchedule.fromMap({
+        'id': 'future',
+        'title': 'Future',
+        'schedule_type': 'MAINTENANCE',
+        'due_date': '2027-05-01',
+        'status': 'ACTIVE',
+        'priority': 'LOW',
+        'source_type': 'AUTOCLAIR_RULE',
+        'reason': '',
+      }),
+      VehicleMaintenanceSchedule.fromMap({
+        'id': 'overdue',
+        'title': 'Overdue',
+        'schedule_type': 'MAINTENANCE',
+        'due_mileage': 80000,
+        'status': 'ACTIVE',
+        'priority': 'HIGH',
+        'source_type': 'AUTOCLAIR_RULE',
+        'reason': '',
+      }),
+    ];
+
+    final ordered = orderedMaintenanceSchedules(
+      schedules,
+      currentMileage: 82000,
+      now: DateTime(2026, 8, 3),
+    );
+
+    expect(ordered.first.id, 'overdue');
+  });
 }

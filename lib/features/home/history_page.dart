@@ -173,7 +173,7 @@ class _HistoryPageState extends State<HistoryPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Historique'),
+        title: const Text('Mes documents'),
         actions: [
           IconButton(
             onPressed: _operationInProgress
@@ -193,7 +193,7 @@ class _HistoryPageState extends State<HistoryPage> {
         onRefresh: _loadDocuments,
         child: _buildBody(context),
       ),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
+      bottomNavigationBar: const AppBottomNav(currentIndex: 3),
     );
   }
 
@@ -255,13 +255,13 @@ class _HistoryPageState extends State<HistoryPage> {
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Votre historique est prêt',
+                  'Votre espace documents est prêt',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: 9),
                 Text(
-                  'Vos documents et leurs analyses apparaîtront ici, '
+                  'Vos devis, factures et autres documents apparaîtront ici, '
                   'dans l’ordre du plus récent au plus ancien.',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge,
@@ -333,7 +333,10 @@ class _HistoryHeader extends StatelessWidget {
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(15),
             ),
-            child: const Icon(Icons.history_rounded, color: AppColors.primary),
+            child: const Icon(
+              Icons.folder_copy_outlined,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -346,7 +349,7 @@ class _HistoryHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Retrouvez chaque document une seule fois avec son état.',
+                  'Retrouvez chaque fichier, son analyse et son état au même endroit.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

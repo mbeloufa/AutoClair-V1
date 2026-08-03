@@ -11,9 +11,14 @@ import 'vehicle_care_service.dart';
 enum _CareSection { overview, timeline, maintenance, alerts }
 
 class VehicleCarePage extends StatefulWidget {
-  const VehicleCarePage({required this.vehicleId, super.key});
+  const VehicleCarePage({
+    required this.vehicleId,
+    this.initialSection,
+    super.key,
+  });
 
   final String vehicleId;
+  final String? initialSection;
 
   @override
   State<VehicleCarePage> createState() => _VehicleCarePageState();
@@ -25,7 +30,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
 
   Vehicle? _vehicle;
   VehicleCareBundle? _bundle;
-  _CareSection _section = _CareSection.overview;
+  late _CareSection _section;
   bool _loading = true;
   bool _actionInProgress = false;
   String? _errorMessage;
@@ -33,6 +38,12 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   @override
   void initState() {
     super.initState();
+    _section = switch (widget.initialSection) {
+      'timeline' => _CareSection.timeline,
+      'maintenance' => _CareSection.maintenance,
+      'alerts' => _CareSection.alerts,
+      _ => _CareSection.overview,
+    };
     _load();
   }
 
@@ -252,7 +263,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     final vehicle = _vehicle;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Carnet intelligent'),
+        title: const Text('Suivi du véhicule'),
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
@@ -277,7 +288,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
           ? FloatingActionButton.extended(
               onPressed: _actionInProgress ? null : _openEventForm,
               icon: const Icon(Icons.add),
-              label: const Text('Événement'),
+              label: const Text('Ajouter'),
             )
           : null,
     );
@@ -315,6 +326,12 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
 
     final vehicle = _vehicle!;
     final bundle = _bundle!;
+    final visibleRecalls = bundle.dashboard.recalls
+        .where(
+          (recall) =>
+              recall.requiresAttention && recall.isPlausibleFor(vehicle.model),
+        )
+        .toList(growable: false);
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -336,8 +353,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
           const SizedBox(height: 18),
           _SectionPicker(
             selected: _section,
-            badgeCount:
-                bundle.dashboard.recalls.length + bundle.dashboard.risks.length,
+            badgeCount: visibleRecalls.length + bundle.dashboard.risks.length,
             onSelected: (value) => setState(() => _section = value),
           ),
           const SizedBox(height: 18),
@@ -362,11 +378,12 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
             _CareSection.maintenance => _MaintenanceSection(
               vehicle: vehicle,
               schedules: bundle.schedules,
+              events: bundle.dashboard.recentEvents,
               onApplyPlan: _applyPlan,
               onComplete: _completeSchedule,
             ),
             _CareSection.alerts => _AlertsSection(
-              recalls: bundle.dashboard.recalls,
+              recalls: visibleRecalls,
               risks: bundle.dashboard.risks,
               onRecallStatus: _updateRecall,
               onOpenRecall: _openRecallUrl,
@@ -566,7 +583,7 @@ class _QuickActions extends StatelessWidget {
             _QuickActionTile(
               width: width,
               icon: Icons.add_task_outlined,
-              label: 'Événement',
+              label: 'Ajouter au carnet',
               onTap: disabled ? null : onEvent,
             ),
             _QuickActionTile(
@@ -584,7 +601,7 @@ class _QuickActions extends StatelessWidget {
             _QuickActionTile(
               width: width,
               icon: Icons.auto_awesome_outlined,
-              label: 'Mes documents',
+              label: 'Lire mes documents',
               onTap: disabled ? null : onDocuments,
             ),
           ],
@@ -669,7 +686,7 @@ class _SectionPicker extends StatelessWidget {
         children: [
           _chip(_CareSection.overview, 'Synthèse', Icons.dashboard_outlined),
           const SizedBox(width: 8),
-          _chip(_CareSection.timeline, 'Chronologie', Icons.timeline_outlined),
+          _chip(_CareSection.timeline, 'Carnet', Icons.timeline_outlined),
           const SizedBox(width: 8),
           _chip(
             _CareSection.maintenance,
@@ -679,7 +696,7 @@ class _SectionPicker extends StatelessWidget {
           const SizedBox(width: 8),
           _chip(
             _CareSection.alerts,
-            badgeCount > 0 ? 'Alertes ($badgeCount)' : 'Alertes',
+            badgeCount > 0 ? 'Sécurité ($badgeCount)' : 'Sécurité',
             Icons.notifications_active_outlined,
           ),
         ],
@@ -718,6 +735,9 @@ class _OverviewSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dashboard = bundle.dashboard;
+    final upcomingActions = dashboard.upcomingActions
+        .where((reminder) => reminder.sourceType != 'RECALL')
+        .toList(growable: false);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -734,7 +754,7 @@ class _OverviewSection extends StatelessWidget {
           subtitle: 'Échéances et actions calculées pour ce véhicule',
         ),
         const SizedBox(height: 10),
-        if (dashboard.upcomingActions.isEmpty)
+        if (upcomingActions.isEmpty)
           const _EmptyPanel(
             icon: Icons.task_alt_outlined,
             title: 'Aucune action urgente',
@@ -743,7 +763,7 @@ class _OverviewSection extends StatelessWidget {
                 'pour obtenir des échéances plus précises.',
           )
         else
-          ...dashboard.upcomingActions
+          ...upcomingActions
               .take(5)
               .map(
                 (reminder) => Padding(
@@ -982,82 +1002,277 @@ class _MaintenanceSection extends StatelessWidget {
   const _MaintenanceSection({
     required this.vehicle,
     required this.schedules,
+    required this.events,
     required this.onApplyPlan,
     required this.onComplete,
   });
 
   final Vehicle vehicle;
   final List<VehicleMaintenanceSchedule> schedules;
+  final List<VehicleTimelineEvent> events;
   final VoidCallback onApplyPlan;
   final ValueChanged<VehicleMaintenanceSchedule> onComplete;
 
   @override
   Widget build(BuildContext context) {
-    if (schedules.isEmpty) {
-      return _EmptyPanel(
-        icon: Icons.event_repeat_outlined,
-        title: "Aucun échéancier d'entretien",
-        message:
-            "Créez un plan générique gratuit adapté au type d'énergie. "
-            'Vous pourrez ensuite valider chaque opération réalisée.',
-        actionLabel: 'Créer mon échéancier',
-        onAction: onApplyPlan,
-      );
-    }
+    const maintenanceTypes = <String>{
+      'MAINTENANCE',
+      'REPAIR',
+      'INSPECTION',
+      'REINSPECTION',
+      'TYRES',
+    };
+    final maintenanceEvents = events
+        .where((event) => maintenanceTypes.contains(event.eventType))
+        .take(8)
+        .toList(growable: false);
+    final orderedSchedules = orderedMaintenanceSchedules(
+      schedules,
+      currentMileage: vehicle.mileage,
+    );
+    final overdueCount = orderedSchedules
+        .where(
+          (schedule) => schedule.isOverdue(currentMileage: vehicle.mileage),
+        )
+        .length;
+    final dueSoonCount = orderedSchedules
+        .where(
+          (schedule) => schedule.isDueSoon(currentMileage: vehicle.mileage),
+        )
+        .length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            color: AppColors.warningSoft,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, color: AppColors.warning),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Échéances indicatives : vérifiez toujours le carnet ou le '
-                  'manuel du constructeur de votre véhicule.',
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        for (final schedule in schedules) ...[
-          _ScheduleCard(
-            schedule: schedule,
+        if (orderedSchedules.isEmpty)
+          _EmptyPanel(
+            icon: Icons.event_repeat_outlined,
+            title: "Créez votre timeline d'entretien",
+            message:
+                "AutoClair préparera gratuitement des repères adaptés à l'énergie "
+                'du véhicule. Vous gardez toujours la décision finale.',
+            actionLabel: 'Créer mon échéancier',
+            onAction: onApplyPlan,
+          )
+        else ...[
+          _MaintenanceSummary(
+            scheduleCount: orderedSchedules.length,
+            overdueCount: overdueCount,
+            dueSoonCount: dueSoonCount,
+            nextSchedule: orderedSchedules.first,
             currentMileage: vehicle.mileage,
-            onComplete: () => onComplete(schedule),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: AppColors.infoSoft,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, color: AppColors.info),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Les échéances sont des repères. Le carnet constructeur et '
+                    'les préconisations du garage restent prioritaires.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          _SectionTitle(
+            title: 'À venir',
+            subtitle: overdueCount > 0
+                ? '$overdueCount opération(s) à régulariser en priorité'
+                : 'Vos prochaines opérations, dans l’ordre',
+          ),
+          const SizedBox(height: 12),
+          for (var index = 0; index < orderedSchedules.length; index++)
+            _MaintenanceTimelineRow(
+              schedule: orderedSchedules[index],
+              currentMileage: vehicle.mileage,
+              isLast: index == orderedSchedules.length - 1,
+              onComplete: () => onComplete(orderedSchedules[index]),
+            ),
+        ],
+        if (maintenanceEvents.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          const _SectionTitle(
+            title: 'Déjà réalisé',
+            subtitle: 'L’historique utile de l’entretien et des réparations',
+          ),
+          const SizedBox(height: 12),
+          for (var index = 0; index < maintenanceEvents.length; index++)
+            _TimelineRow(
+              event: maintenanceEvents[index],
+              isLast: index == maintenanceEvents.length - 1,
+            ),
+        ] else if (orderedSchedules.isNotEmpty) ...[
+          const SizedBox(height: 22),
+          const _EmptyPanel(
+            icon: Icons.history_toggle_off_outlined,
+            title: 'Aucun entretien confirmé',
+            message:
+                'Les opérations validées apparaîtront ici pour former '
+                'progressivement l’historique du véhicule.',
+          ),
         ],
       ],
     );
   }
 }
 
-class _ScheduleCard extends StatelessWidget {
-  const _ScheduleCard({
+class _MaintenanceSummary extends StatelessWidget {
+  const _MaintenanceSummary({
+    required this.scheduleCount,
+    required this.overdueCount,
+    required this.dueSoonCount,
+    required this.nextSchedule,
+    required this.currentMileage,
+  });
+
+  final int scheduleCount;
+  final int overdueCount;
+  final int dueSoonCount;
+  final VehicleMaintenanceSchedule nextSchedule;
+  final int? currentMileage;
+
+  @override
+  Widget build(BuildContext context) {
+    final nextState = nextSchedule.isOverdue(currentMileage: currentMileage)
+        ? 'À régulariser'
+        : nextSchedule.isDueSoon(currentMileage: currentMileage)
+        ? 'À prévoir bientôt'
+        : 'À anticiper';
+
+    return Container(
+      padding: const EdgeInsets.all(19),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryDark, AppColors.primary],
+        ),
+        borderRadius: BorderRadius.circular(23),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Votre entretien en un coup d’œil',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _MaintenanceMetric(
+                  value: '$scheduleCount',
+                  label: 'à venir',
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _MaintenanceMetric(
+                  value: '$dueSoonCount',
+                  label: 'bientôt',
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: _MaintenanceMetric(
+                  value: '$overdueCount',
+                  label: 'en retard',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Text(
+            nextState,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.68),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            nextSchedule.title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MaintenanceMetric extends StatelessWidget {
+  const _MaintenanceMetric({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: Colors.white),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.72),
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MaintenanceTimelineRow extends StatelessWidget {
+  const _MaintenanceTimelineRow({
     required this.schedule,
     required this.currentMileage,
+    required this.isLast,
     required this.onComplete,
   });
 
   final VehicleMaintenanceSchedule schedule;
   final int? currentMileage;
+  final bool isLast;
   final VoidCallback onComplete;
 
   @override
   Widget build(BuildContext context) {
     final overdue = schedule.isOverdue(currentMileage: currentMileage);
     final dueSoon = schedule.isDueSoon(currentMileage: currentMileage);
-    final color = overdue
+    final foreground = overdue
         ? AppColors.error
         : dueSoon
         ? AppColors.warning
@@ -1067,14 +1282,93 @@ class _ScheduleCard extends StatelessWidget {
         : dueSoon
         ? AppColors.warningSoft
         : AppColors.successSoft;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 42,
+            child: Column(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: background,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: foreground.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Icon(
+                    overdue
+                        ? Icons.priority_high
+                        : dueSoon
+                        ? Icons.schedule_outlined
+                        : Icons.build_outlined,
+                    size: 18,
+                    color: foreground,
+                  ),
+                ),
+                if (!isLast)
+                  Expanded(child: Container(width: 2, color: AppColors.border)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
+              child: _ScheduleTimelineCard(
+                schedule: schedule,
+                overdue: overdue,
+                dueSoon: dueSoon,
+                foreground: foreground,
+                background: background,
+                onComplete: onComplete,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScheduleTimelineCard extends StatelessWidget {
+  const _ScheduleTimelineCard({
+    required this.schedule,
+    required this.overdue,
+    required this.dueSoon,
+    required this.foreground,
+    required this.background,
+    required this.onComplete,
+  });
+
+  final VehicleMaintenanceSchedule schedule;
+  final bool overdue;
+  final bool dueSoon;
+  final Color foreground;
+  final Color background;
+  final VoidCallback onComplete;
+
+  @override
+  Widget build(BuildContext context) {
     final dueParts = <String>[
       if (schedule.dueDate != null)
         'avant le ${_formatDate(schedule.dueDate!)}',
       if (schedule.dueMileage != null)
         'vers ${_formatInteger(schedule.dueMileage!)} km',
     ];
+    final status = overdue
+        ? 'En retard'
+        : dueSoon
+        ? 'À prévoir bientôt'
+        : 'À venir';
 
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -1087,48 +1381,37 @@ class _ScheduleCard extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: background,
-                  borderRadius: BorderRadius.circular(13),
-                ),
-                child: Icon(
-                  overdue
-                      ? Icons.priority_high
-                      : dueSoon
-                      ? Icons.schedule_outlined
-                      : Icons.build_outlined,
-                  color: color,
+              Expanded(
+                child: Text(
+                  schedule.title,
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      schedule.title,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      dueParts.isEmpty
-                          ? 'Échéance à préciser'
-                          : dueParts.join(' ou '),
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: background,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
             ],
           ),
+          const SizedBox(height: 7),
+          Text(
+            dueParts.isEmpty ? 'Échéance à préciser' : dueParts.join(' ou '),
+            style: TextStyle(color: foreground, fontWeight: FontWeight.w700),
+          ),
           if (schedule.reason.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
             Text(schedule.reason, style: Theme.of(context).textTheme.bodySmall),
           ],
           const SizedBox(height: 12),
@@ -1137,7 +1420,7 @@ class _ScheduleCard extends StatelessWidget {
             child: FilledButton.tonalIcon(
               onPressed: onComplete,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Marquer comme fait'),
+              label: const Text('C’est fait'),
             ),
           ),
         ],
@@ -1164,10 +1447,10 @@ class _AlertsSection extends StatelessWidget {
     if (recalls.isEmpty && risks.isEmpty) {
       return const _EmptyPanel(
         icon: Icons.verified_user_outlined,
-        title: 'Aucune alerte détectée',
+        title: 'Aucune alerte pertinente',
         message:
-            'AutoClair continuera de vérifier les rappels officiels et les '
-            'points de vigilance documentés.',
+            'Aucun rappel mentionnant explicitement ce modèle n’est à vérifier. '
+            'AutoClair continuera de contrôler les nouvelles publications.',
       );
     }
 
@@ -1175,10 +1458,13 @@ class _AlertsSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (recalls.isNotEmpty) ...[
+          const _RecallExplanationCard(),
+          const SizedBox(height: 18),
           _SectionTitle(
-            title: 'Rappels officiels possibles',
-            subtitle:
-                'Une correspondance marque/modèle ne confirme pas que le VIN est concerné',
+            title: 'Rappels à confirmer',
+            subtitle: recalls.length == 1
+                ? 'Un rapprochement suffisamment précis a été trouvé'
+                : '${recalls.length} rapprochements suffisamment précis ont été trouvés',
           ),
           const SizedBox(height: 10),
           for (final recall in recalls) ...[
@@ -1194,7 +1480,8 @@ class _AlertsSection extends StatelessWidget {
           if (recalls.isNotEmpty) const SizedBox(height: 18),
           _SectionTitle(
             title: 'Points de vigilance',
-            subtitle: 'Informations indicatives, sourcées et non prédictives',
+            subtitle:
+                'Conseils documentés, à distinguer d’un défaut certain du véhicule',
           ),
           const SizedBox(height: 10),
           for (final risk in risks) ...[
@@ -1203,6 +1490,36 @@ class _AlertsSection extends StatelessWidget {
           ],
         ],
       ],
+    );
+  }
+}
+
+class _RecallExplanationCard extends StatelessWidget {
+  const _RecallExplanationCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: AppColors.infoSoft,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.16)),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.shield_outlined, color: AppColors.info),
+          SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              'AutoClair n’affiche un rappel que lorsque le modèle est '
+              'explicitement cité. Cela reste une présélection : seul le '
+              'constructeur peut confirmer le véhicule avec son VIN.',
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1551,38 +1868,70 @@ class _RecallCard extends StatelessWidget {
           child: Icon(Icons.campaign_outlined, color: AppColors.error),
         ),
         title: Text(recall.title),
-        subtitle: Text(recall.statusLabel),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              _SmallTag(label: recall.statusLabel),
+              _SmallTag(label: recall.confidenceLabel),
+            ],
+          ),
+        ),
         childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
         children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.infoSoft,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Text(
+              'Ce rappel est proposé parce que le modèle est explicitement '
+              'mentionné dans la publication officielle. Vérifiez ensuite le '
+              'VIN auprès du constructeur ou du réseau de la marque.',
+            ),
+          ),
           if (recall.modelsReferences.isNotEmpty)
-            _DetailLine(label: 'Modèles', value: recall.modelsReferences),
+            _DetailLine(
+              label: 'Modèles mentionnés',
+              value: recall.modelsReferences,
+            ),
           if (recall.risks.isNotEmpty)
-            _DetailLine(label: 'Risques', value: recall.risks),
+            _DetailLine(label: 'Risque décrit', value: recall.risks),
           if (recall.consumerActions.isNotEmpty)
-            _DetailLine(label: 'À faire', value: recall.consumerActions),
-          if (recall.matchReason.isNotEmpty)
-            _DetailLine(label: 'Correspondance', value: recall.matchReason),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            _DetailLine(
+              label: 'Action recommandée',
+              value: recall.consumerActions,
+            ),
+          const SizedBox(height: 14),
+          Row(
             children: [
-              OutlinedButton.icon(
-                onPressed: onOpenSource,
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: const Text('Source'),
-              ),
+              if (recall.recallUrl != null) ...[
+                TextButton.icon(
+                  onPressed: onOpenSource,
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: const Text('Voir la source'),
+                ),
+                const Spacer(),
+              ] else
+                const Spacer(),
               PopupMenuButton<String>(
                 onSelected: onStatus,
                 itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'TO_CHECK', child: Text('À vérifier')),
+                  PopupMenuItem(
+                    value: 'TO_CHECK',
+                    child: Text('À vérifier avec le VIN'),
+                  ),
                   PopupMenuItem(
                     value: 'POSSIBLE',
-                    child: Text('Potentiellement concerné'),
+                    child: Text('Compatibilité confirmée par la marque'),
                   ),
                   PopupMenuItem(
                     value: 'NOT_CONCERNED',
-                    child: Text('Véhicule non concerné'),
+                    child: Text('Mon véhicule n’est pas concerné'),
                   ),
                   PopupMenuItem(
                     value: 'SCHEDULED',
@@ -1594,7 +1943,7 @@ class _RecallCard extends StatelessWidget {
                   ),
                 ],
                 child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1605,7 +1954,7 @@ class _RecallCard extends StatelessWidget {
                       ),
                       SizedBox(width: 7),
                       Text(
-                        'Modifier le statut',
+                        'Mettre à jour',
                         style: TextStyle(
                           color: AppColors.primary,
                           fontWeight: FontWeight.w700,
