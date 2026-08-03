@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/comparison_map.dart';
 import '../technical_control/technical_control_location_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
@@ -29,6 +30,8 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
   String? _selectedVehicleId;
   String _connector = 'any';
   String _sortBy = 'price';
+  String _viewMode = 'map';
+  String? _selectedStationId;
   double _minimumPowerKw = 0;
   double _energyKwh = 40;
   double _radiusKm = 20;
@@ -113,6 +116,7 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
 
   void _resetResults() {
     _offers = const [];
+    _selectedStationId = null;
     _lastPosition = null;
     _sourceFetchedAt = null;
     _sourceName = 'Base nationale IRVE';
@@ -156,10 +160,17 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
         sortBy: sortBy,
       );
 
+      final previousSelection = _selectedStationId;
+      final selectedStationId =
+          result.offers.any((offer) => offer.stationId == previousSelection)
+          ? previousSelection
+          : (result.offers.isEmpty ? null : result.offers.first.stationId);
+
       if (!mounted) return;
       setState(() {
         _lastPosition = position;
         _offers = result.offers;
+        _selectedStationId = selectedStationId;
         _sourceFetchedAt = result.sourceFetchedAt;
         _sourceName = result.sourceName;
         _pricingDisclaimer = result.pricingDisclaimer;
@@ -374,12 +385,12 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
           ),
           const SizedBox(height: 20),
           Text(
-            'Énergie à ajouter',
+            'Quantité à recharger',
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 5),
           Text(
-            'Utilisée uniquement pour estimer les tarifs simples en €/kWh.',
+            'Quantité d’électricité que vous prévoyez d’ajouter à la batterie. Elle sert uniquement à estimer le coût.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 10),
@@ -512,6 +523,31 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
               ? null
               : (selection) => _changeSort(selection.first),
         ),
+        const SizedBox(height: 10),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: 'list',
+              icon: Icon(Icons.view_list_rounded),
+              label: Text('Liste'),
+            ),
+            ButtonSegment(
+              value: 'map',
+              icon: Icon(Icons.map_rounded),
+              label: Text('Carte'),
+            ),
+          ],
+          selected: {_viewMode},
+          onSelectionChanged: (selection) {
+            setState(() {
+              _viewMode = selection.first;
+              if (_selectedStationId == null && _offers.isNotEmpty) {
+                _selectedStationId = _offers.first.stationId;
+              }
+            });
+          },
+        ),
         if (_sourceFetchedAt != null) ...[
           const SizedBox(height: 10),
           Text(
@@ -537,6 +573,8 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
             message:
                 'Aucune station correspondant à ${ChargingCatalog.connectorLabel(_connector).toLowerCase()} et ${ChargingCatalog.powerLabel(_minimumPowerKw).toLowerCase()} n’a été trouvée dans un rayon de ${_radiusKm.toInt()} km.',
           )
+        else if (_viewMode == 'map')
+          _buildMapResults(context)
         else
           for (var index = 0; index < _offers.length; index++) ...[
             _OfferCard(
@@ -559,6 +597,80 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
     );
   }
 
+  Widget _buildMapResults(BuildContext context) {
+    final position = _lastPosition;
+    if (position == null || _offers.isEmpty) return const SizedBox.shrink();
+
+    ChargingStationOffer selectedOffer = _offers.first;
+    for (final offer in _offers) {
+      if (offer.stationId == _selectedStationId) {
+        selectedOffer = offer;
+        break;
+      }
+    }
+
+    final selectedRank =
+        _offers.indexWhere(
+          (offer) => offer.stationId == selectedOffer.stationId,
+        ) +
+        1;
+    final mapHeight = (MediaQuery.sizeOf(context).height * 0.72)
+        .clamp(560.0, 760.0)
+        .toDouble();
+
+    return SizedBox(
+      height: mapHeight,
+      child: ComparisonMapView(
+        key: ValueKey(
+          'charging-map-$_connector-${_energyKwh.toInt()}-${_sourceFetchedAt?.millisecondsSinceEpoch ?? 0}',
+        ),
+        userLatitude: position.latitude,
+        userLongitude: position.longitude,
+        markers: _offers
+            .map(
+              (offer) => ComparisonMapMarkerData(
+                id: offer.stationId,
+                latitude: offer.latitude,
+                longitude: offer.longitude,
+                label: _chargingMarkerLabel(offer),
+                icon: Icons.ev_station_rounded,
+                color: _chargingMarkerColor(offer),
+              ),
+            )
+            .toList(growable: false),
+        selectedMarkerId: selectedOffer.stationId,
+        onMarkerSelected: (stationId) {
+          setState(() => _selectedStationId = stationId);
+        },
+        sheetBuilder: (context, controller) => _ChargingMapSheet(
+          controller: controller,
+          offer: selectedOffer,
+          rank: selectedRank,
+          energyKwh: _energyKwh,
+          sourceName: _sourceName,
+          onDirections: () => _openDirections(selectedOffer),
+          onCall: selectedOffer.hasPhone
+              ? () => _callOperator(selectedOffer)
+              : null,
+        ),
+      ),
+    );
+  }
+
+  String _chargingMarkerLabel(ChargingStationOffer offer) {
+    if (offer.isFree || offer.pricingKind == 'free') return 'Gratuit';
+    if (offer.pricingComparable && offer.estimatedCost != null) {
+      return '≈ ${offer.estimatedCost!.toStringAsFixed(2).replaceAll('.', ',')} €';
+    }
+    return '${offer.maxPowerKw.toStringAsFixed(0)} kW';
+  }
+
+  static Color _chargingMarkerColor(ChargingStationOffer offer) {
+    if (offer.isFree || offer.pricingKind == 'free') return AppColors.success;
+    if (offer.pricingComparable) return AppColors.accent;
+    return AppColors.primary;
+  }
+
   static String _dateTime(DateTime value) {
     final local = value.toLocal();
     final day = local.day.toString().padLeft(2, '0');
@@ -566,6 +678,111 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$day/$month/${local.year} à $hour:$minute';
+  }
+}
+
+class _ChargingMapSheet extends StatelessWidget {
+  const _ChargingMapSheet({
+    required this.controller,
+    required this.offer,
+    required this.rank,
+    required this.energyKwh,
+    required this.sourceName,
+    required this.onDirections,
+    required this.onCall,
+  });
+
+  final ScrollController controller;
+  final ChargingStationOffer offer;
+  final int rank;
+  final double energyKwh;
+  final String sourceName;
+  final VoidCallback onDirections;
+  final VoidCallback? onCall;
+
+  @override
+  Widget build(BuildContext context) {
+    final comparable = offer.isFree || offer.pricingComparable;
+    return ListView(
+      controller: controller,
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.infoSoft,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.ev_station_rounded,
+                color: AppColors.info,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    offer.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    offer.address,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  offer.pricingLabel(energyKwh),
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: comparable ? AppColors.success : AppColors.text,
+                  ),
+                ),
+                Text(
+                  '${offer.distanceKm.toStringAsFixed(1).replaceAll('.', ',')} km • ${offer.maxPowerKw.toStringAsFixed(0)} kW',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'Faites glisser ce panneau vers le haut pour afficher tous les détails.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 14),
+        const Divider(),
+        const SizedBox(height: 14),
+        _OfferCard(
+          offer: offer,
+          rank: rank,
+          energyKwh: energyKwh,
+          onDirections: onDirections,
+          onCall: onCall,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Source : $sourceName. Le tarif publié par l’opérateur reste la référence.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
   }
 }
 

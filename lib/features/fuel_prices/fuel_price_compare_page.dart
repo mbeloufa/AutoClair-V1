@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/widgets/comparison_map.dart';
 import '../technical_control/technical_control_location_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
@@ -31,6 +32,8 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
   String? _selectedVehicleId;
   String? _selectedFuelType;
   String _sortBy = 'price';
+  String _viewMode = 'map';
+  String? _selectedStationId;
   double _radiusKm = 20;
   Position? _lastPosition;
   DateTime? _sourceFetchedAt;
@@ -97,6 +100,7 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
 
   void _resetResults() {
     _offers = const [];
+    _selectedStationId = null;
     _lastPosition = null;
     _sourceFetchedAt = null;
     _cacheHit = false;
@@ -146,10 +150,17 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
         sortBy: sortBy,
       );
 
+      final previousSelection = _selectedStationId;
+      final selectedStationId =
+          result.offers.any((offer) => offer.stationId == previousSelection)
+          ? previousSelection
+          : (result.offers.isEmpty ? null : result.offers.first.stationId);
+
       if (!mounted) return;
       setState(() {
         _lastPosition = position;
         _offers = result.offers;
+        _selectedStationId = selectedStationId;
         _sourceFetchedAt = result.sourceFetchedAt;
         _cacheHit = result.cacheHit;
         _truncated = result.truncated;
@@ -440,6 +451,31 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
               ? null
               : (selection) => _changeSort(selection.first),
         ),
+        const SizedBox(height: 10),
+        SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: 'list',
+              icon: Icon(Icons.view_list_rounded),
+              label: Text('Liste'),
+            ),
+            ButtonSegment(
+              value: 'map',
+              icon: Icon(Icons.map_rounded),
+              label: Text('Carte'),
+            ),
+          ],
+          selected: {_viewMode},
+          onSelectionChanged: (selection) {
+            setState(() {
+              _viewMode = selection.first;
+              if (_selectedStationId == null && _offers.isNotEmpty) {
+                _selectedStationId = _offers.first.stationId;
+              }
+            });
+          },
+        ),
         if (_sourceFetchedAt != null) ...[
           const SizedBox(height: 10),
           Text(
@@ -463,6 +499,8 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
             message:
                 'Aucune station proposant ${_selectedFuelType ?? 'ce carburant'} n’a été trouvée dans un rayon de ${_radiusKm.toInt()} km.',
           )
+        else if (_viewMode == 'map')
+          _buildMapResults(context)
         else
           for (var index = 0; index < _offers.length; index++) ...[
             _OfferCard(
@@ -481,6 +519,77 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
     );
   }
 
+  Widget _buildMapResults(BuildContext context) {
+    final position = _lastPosition;
+    if (position == null || _offers.isEmpty) return const SizedBox.shrink();
+
+    FuelStationOffer selectedOffer = _offers.first;
+    for (final offer in _offers) {
+      if (offer.stationId == _selectedStationId) {
+        selectedOffer = offer;
+        break;
+      }
+    }
+
+    final selectedRank =
+        _offers.indexWhere(
+          (offer) => offer.stationId == selectedOffer.stationId,
+        ) +
+        1;
+    final mapHeight = (MediaQuery.sizeOf(context).height * 0.72)
+        .clamp(560.0, 760.0)
+        .toDouble();
+
+    return SizedBox(
+      height: mapHeight,
+      child: ComparisonMapView(
+        key: ValueKey(
+          'fuel-map-${_selectedFuelType ?? 'fuel'}-${_sourceFetchedAt?.millisecondsSinceEpoch ?? 0}',
+        ),
+        userLatitude: position.latitude,
+        userLongitude: position.longitude,
+        markers: _offers
+            .map(
+              (offer) => ComparisonMapMarkerData(
+                id: offer.stationId,
+                latitude: offer.latitude,
+                longitude: offer.longitude,
+                label: _fuelMarkerLabel(offer),
+                icon: Icons.local_gas_station_rounded,
+                color: _fuelMarkerColor(offer),
+              ),
+            )
+            .toList(growable: false),
+        selectedMarkerId: selectedOffer.stationId,
+        onMarkerSelected: (stationId) {
+          setState(() => _selectedStationId = stationId);
+        },
+        sheetBuilder: (context, controller) => _FuelMapSheet(
+          controller: controller,
+          offer: selectedOffer,
+          rank: selectedRank,
+          sourceFetchedAt: _sourceFetchedAt,
+          cacheHit: _cacheHit,
+          onDirections: () => _openDirections(selectedOffer),
+        ),
+      ),
+    );
+  }
+
+  static String _fuelMarkerLabel(FuelStationOffer offer) {
+    final price = offer.price;
+    if (offer.isTemporaryOutage) return 'Rupture';
+    if (offer.isDefinitiveOutage) return 'Indispo.';
+    if (price == null) return 'Prix N/D';
+    return '${price.toStringAsFixed(3).replaceAll('.', ',')} €';
+  }
+
+  static Color _fuelMarkerColor(FuelStationOffer offer) {
+    if (offer.isDefinitiveOutage) return AppColors.error;
+    if (offer.isTemporaryOutage) return AppColors.warning;
+    return AppColors.primary;
+  }
+
   static String _dateTime(DateTime value) {
     final local = value.toLocal();
     final day = local.day.toString().padLeft(2, '0');
@@ -488,6 +597,106 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$day/$month/${local.year} à $hour:$minute';
+  }
+}
+
+class _FuelMapSheet extends StatelessWidget {
+  const _FuelMapSheet({
+    required this.controller,
+    required this.offer,
+    required this.rank,
+    required this.sourceFetchedAt,
+    required this.cacheHit,
+    required this.onDirections,
+  });
+
+  final ScrollController controller;
+  final FuelStationOffer offer;
+  final int rank;
+  final DateTime? sourceFetchedAt;
+  final bool cacheHit;
+  final VoidCallback onDirections;
+
+  @override
+  Widget build(BuildContext context) {
+    final price = offer.price;
+    return ListView(
+      controller: controller,
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.softPrimary,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.local_gas_station_rounded,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    offer.stationLabel,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    offer.fullAddress,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  price == null
+                      ? 'Prix N/D'
+                      : '${price.toStringAsFixed(3).replaceAll('.', ',')} €',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(color: AppColors.primary),
+                ),
+                Text(
+                  '${offer.distanceKm.toStringAsFixed(1).replaceAll('.', ',')} km',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'Faites glisser ce panneau vers le haut pour afficher tous les détails.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 14),
+        const Divider(),
+        const SizedBox(height: 14),
+        _OfferCard(offer: offer, rank: rank, onDirections: onDirections),
+        if (sourceFetchedAt != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Données récupérées le ${_FuelPriceComparePageState._dateTime(sourceFetchedAt!)}'
+            '${cacheHit ? ' • cache récent' : ''}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ],
+    );
   }
 }
 
