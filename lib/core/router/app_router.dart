@@ -16,6 +16,9 @@ import '../../features/start/start_page.dart';
 import '../../features/charging_prices/charging_compare_page.dart';
 import '../../features/fuel_prices/fuel_price_compare_page.dart';
 import '../../features/technical_control/technical_control_compare_page.dart';
+import '../../features/vehicle_care/vehicle_care_page.dart';
+import '../../features/vehicle_care/vehicle_event_form_page.dart';
+import '../../features/vehicle_care/vehicle_odometer_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
@@ -93,6 +96,27 @@ GoRouter createAppRouter(AppController controller) {
         path: '/vehicles/:vehicleId/edit',
         builder: (context, state) =>
             VehicleFormPage(vehicleId: state.pathParameters['vehicleId']),
+      ),
+      GoRoute(
+        path: '/vehicles/:vehicleId/care',
+        builder: (context, state) =>
+            VehicleCarePage(vehicleId: state.pathParameters['vehicleId'] ?? ''),
+      ),
+      GoRoute(
+        path: '/vehicles/:vehicleId/care/events/new',
+        builder: (context, state) => VehicleEventFormPage(
+          vehicleId: state.pathParameters['vehicleId'] ?? '',
+          initialEventType: state.extra is String
+              ? state.extra as String
+              : null,
+        ),
+      ),
+      GoRoute(
+        path: '/vehicles/:vehicleId/care/odometer/new',
+        builder: (context, state) => VehicleOdometerPage(
+          vehicleId: state.pathParameters['vehicleId'] ?? '',
+          currentMileage: state.extra is int ? state.extra as int : null,
+        ),
       ),
       GoRoute(
         path: '/documents/new',

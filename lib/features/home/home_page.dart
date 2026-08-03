@@ -188,10 +188,8 @@ class _HomePageState extends State<HomePage> {
 
     return InkWell(
       onTap: () async {
-        final changed = await context.push<bool>(
-          '/vehicles/${vehicle.id}/edit',
-        );
-        if (changed == true) await _loadDashboard();
+        await context.push<void>('/vehicles/${vehicle.id}/care');
+        await _loadDashboard();
       },
       borderRadius: BorderRadius.circular(22),
       child: Ink(

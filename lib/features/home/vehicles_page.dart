@@ -56,6 +56,11 @@ class _VehiclesPageState extends State<VehiclesPage> {
     }
   }
 
+  Future<void> _openCare(Vehicle vehicle) async {
+    await context.push<void>('/vehicles/${vehicle.id}/care');
+    await _loadVehicles();
+  }
+
   Future<void> _openEdit(Vehicle vehicle) async {
     final changed = await context.push<bool>('/vehicles/${vehicle.id}/edit');
     if (changed == true) {
@@ -231,7 +236,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
           final vehicle = _vehicles[index];
           return VehicleCard(
             vehicle: vehicle,
-            onTap: () => _openEdit(vehicle),
+            onTap: () => _openCare(vehicle),
             onAction: (action) => _handleAction(vehicle, action),
           );
         },
