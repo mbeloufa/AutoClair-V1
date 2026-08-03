@@ -13,6 +13,7 @@ import '../../features/home/home_page.dart';
 import '../../features/home/vehicles_page.dart';
 import '../../features/onboarding/onboarding_page.dart';
 import '../../features/start/start_page.dart';
+import '../../features/charging_prices/charging_compare_page.dart';
 import '../../features/fuel_prices/fuel_price_compare_page.dart';
 import '../../features/technical_control/technical_control_compare_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
@@ -104,6 +105,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/fuel-prices',
         builder: (context, state) => const FuelPriceComparePage(),
+      ),
+      GoRoute(
+        path: '/charging-prices',
+        builder: (context, state) => const ChargingComparePage(),
       ),
       GoRoute(
         path: '/history',

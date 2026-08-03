@@ -127,6 +127,10 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 14),
             _FuelPricePromoCard(onPressed: () => context.push('/fuel-prices')),
+            const SizedBox(height: 14),
+            _ChargingPricePromoCard(
+              onPressed: () => context.push('/charging-prices'),
+            ),
             if (_dashboardError != null) ...[
               const SizedBox(height: 14),
               _DashboardWarning(
@@ -701,6 +705,64 @@ class _FuelPricePromoCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             const Icon(Icons.chevron_right_rounded, color: AppColors.success),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChargingPricePromoCard extends StatelessWidget {
+  const _ChargingPricePromoCard({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(22),
+      child: Ink(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.infoSoft,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: AppColors.info.withValues(alpha: 0.18)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Icon(
+                Icons.ev_station_rounded,
+                color: AppColors.info,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Comparer les tarifs de recharge',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Bornes compatibles, puissance, distance et estimation du cout.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.info),
           ],
         ),
       ),
