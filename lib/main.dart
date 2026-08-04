@@ -67,9 +67,10 @@ class _ConfigurationErrorApp extends StatelessWidget {
                     ),
                     SizedBox(height: 12),
                     Text(
-                      'Lance l’application avec les variables '
-                      'SUPABASE_URL et SUPABASE_PUBLISHABLE_KEY. '
-                      'Le fichier README.md contient la commande exacte.',
+                      'La configuration Supabase embarquée est absente ou '
+                      'invalide. Relancez l’installateur de configuration '
+                      'AutoClair. Seule une clé publique Supabase doit être '
+                      'utilisée dans l’application.',
                       textAlign: TextAlign.center,
                     ),
                   ],
