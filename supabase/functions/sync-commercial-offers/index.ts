@@ -18,6 +18,29 @@ type SourceRow = {
   status: string;
   content_hash: string | null;
   failure_count: number;
+  metadata: JsonMap;
+  search_enabled: boolean;
+  search_priority: number;
+  check_frequency_hours: number;
+  next_check_at: string | null;
+  monitoring_mode:
+    | "HTML_RULES"
+    | "HTML_DISCOVERY"
+    | "LINK_DISCOVERY_ONLY"
+    | "ADAPTER_REQUIRED"
+    | "REFERENCE_ONLY"
+    | "DISABLED_BY_POLICY";
+  publication_policy:
+    | "VALIDATED_RULES_ONLY"
+    | "QUARANTINE_ONLY"
+    | "REFERENCE_ONLY";
+  source_purpose:
+    | "CURRENT_VEHICLE"
+    | "VEHICLE_PURCHASE"
+    | "FINANCE_INSURANCE"
+    | "REFERENCE_ONLY"
+    | "DISCOVERY_ONLY"
+    | "OTHER";
 };
 
 type OfferRow = {
@@ -45,7 +68,19 @@ type SourceOutcome = {
   verifiedOffers: number;
   reviewOffers: number;
   candidates: number;
+  discoveredUrls: number;
   errorCode?: string;
+};
+
+type SourceLoadResult = {
+  sources: SourceRow[];
+  catalogV2: boolean;
+};
+
+type DiscoveredLink = {
+  url: string;
+  title: string;
+  score: number;
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -79,7 +114,9 @@ const SERVICE_ROLE_KEY = readAdminKey();
 
 const MAX_HTML_BYTES = 2_000_000;
 const MAX_CANDIDATES_PER_SOURCE = 25;
-const FETCH_TIMEOUT_MS = 20_000;
+const MAX_DISCOVERED_URLS_PER_SOURCE = 30;
+const MAX_BATCH_SIZE = 5;
+const FETCH_TIMEOUT_MS = 12_000;
 const BOT_NAME = "AutoClairOffersBot";
 const USER_AGENT =
   "AutoClairOffersBot/1.0 (+official-offer-verification; contact: AutoClair)";
@@ -231,9 +268,10 @@ function extractCandidateBlocks(html: string): string[] {
       /\b\d{1,3}\s*%\b/.test(normalized) ||
       /\b\d{1,5}(?:[,.]\d{1,2})?\s*(?:€|eur)\b/.test(normalized);
 
+    const currentYear = new Date().getUTCFullYear();
     const hasCurrentDate =
-      /\b2026\b/.test(normalized) ||
-      /\b2027\b/.test(normalized) ||
+      normalized.includes(String(currentYear)) ||
+      normalized.includes(String(currentYear + 1)) ||
       /\b(31|30|29|28)\s+(?:aout|decembre|septembre|octobre|novembre)\b/
         .test(normalized);
 
@@ -268,10 +306,169 @@ function candidateLabels(value: string): string[] {
   if (/\b(accessoire|barres de toit)\b/.test(normalized)) {
     labels.add("ACCESSORIES");
   }
-  if (/\b2026\b/.test(normalized)) labels.add("YEAR_2026");
-  if (/\b2027\b/.test(normalized)) labels.add("YEAR_2027");
+  const currentYear = new Date().getUTCFullYear();
+
+  if (normalized.includes(String(currentYear))) {
+    labels.add(`YEAR_${currentYear}`);
+  }
+  if (normalized.includes(String(currentYear + 1))) {
+    labels.add(`YEAR_${currentYear + 1}`);
+  }
 
   return Array.from(labels);
+}
+
+function integerInRange(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = typeof value === "number"
+    ? value
+    : Number.parseInt(String(value ?? ""), 10);
+
+  if (!Number.isFinite(parsed)) return fallback;
+
+  return Math.max(minimum, Math.min(maximum, Math.trunc(parsed)));
+}
+
+function cleanDiscoveredUrl(
+  rawHref: string,
+  baseUrl: URL,
+  allowedHostnames: string[],
+): URL | null {
+  const trimmed = rawHref.trim();
+
+  if (
+    !trimmed ||
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("mailto:") ||
+    trimmed.startsWith("tel:") ||
+    trimmed.startsWith("javascript:")
+  ) {
+    return null;
+  }
+
+  let url: URL;
+
+  try {
+    url = new URL(trimmed, baseUrl);
+  } catch {
+    return null;
+  }
+
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    !hostnameAllowed(url.hostname, allowedHostnames)
+  ) {
+    return null;
+  }
+
+  url.hash = "";
+
+  const trackingKeys = [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "gclid",
+    "fbclid",
+    "msclkid",
+  ];
+
+  for (const key of trackingKeys) {
+    url.searchParams.delete(key);
+  }
+
+  if (url.toString().length > 1_000) return null;
+
+  return url;
+}
+
+function discoveredLinkScore(
+  url: URL,
+  title: string,
+): number {
+  const value = normalizeText(
+    `${url.pathname} ${url.search} ${title}`,
+  );
+
+  let score = 0;
+
+  const weightedSignals: Array<[RegExp, number]> = [
+    [/\b(offre|offres|promotion|promotions|promo)\b/, 45],
+    [/\b(entretien|revision|service|atelier|apres vente)\b/, 30],
+    [/\b(forfait|remise|reduction|avantage|bon plan)\b/, 25],
+    [/\b(financement|leasing|loa|lld|reprise)\b/, 20],
+    [/\b(stock|disponible|vehicule neuf|occasion)\b/, 12],
+    [/\b(pneu|batterie|climatisation|frein|pare brise)\b/, 20],
+  ];
+
+  for (const [pattern, weight] of weightedSignals) {
+    if (pattern.test(value)) score += weight;
+  }
+
+  const currentYear = new Date().getUTCFullYear();
+  if (
+    value.includes(String(currentYear)) ||
+    value.includes(String(currentYear + 1))
+  ) {
+    score += 8;
+  }
+
+  if (url.pathname === "/" || url.pathname.length < 3) {
+    score -= 20;
+  }
+
+  return Math.max(0, Math.min(100, score));
+}
+
+function extractOfferLinks(
+  html: string,
+  finalUrl: URL,
+  allowedHostnames: string[],
+): DiscoveredLink[] {
+  const candidates = new Map<string, DiscoveredLink>();
+  const linkPattern =
+    /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+
+  for (const match of html.matchAll(linkPattern)) {
+    const url = cleanDiscoveredUrl(
+      match[1] ?? "",
+      finalUrl,
+      allowedHostnames,
+    );
+
+    if (!url) continue;
+
+    const title = stripHtml(match[2] ?? "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 220);
+
+    const score = discoveredLinkScore(url, title);
+
+    if (score < 35) continue;
+
+    const key = url.toString();
+    const current = candidates.get(key);
+
+    if (!current || score > current.score) {
+      candidates.set(key, {
+        url: key,
+        title,
+        score,
+      });
+    }
+  }
+
+  return Array.from(candidates.values())
+    .sort((a, b) => b.score - a.score || a.url.localeCompare(b.url))
+    .slice(0, MAX_DISCOVERED_URLS_PER_SOURCE);
 }
 
 type RobotsRule = {
@@ -600,9 +797,102 @@ async function insertCandidates(
   return inserted;
 }
 
+async function insertDiscoveredUrls(
+  client: ReturnType<typeof adminClient>,
+  source: SourceRow,
+  links: DiscoveredLink[],
+  catalogV2: boolean,
+): Promise<number> {
+  if (!catalogV2 || links.length === 0) return 0;
+
+  let stored = 0;
+
+  for (const link of links) {
+    const urlHash = await sha256Hex({
+      source: source.source_key,
+      url: link.url,
+    });
+
+    const now = new Date().toISOString();
+    const payload = {
+      discovered_url: link.url,
+      link_title: link.title,
+      discovery_score: link.score,
+      last_seen_at: now,
+      metadata: {
+        source_url: source.source_url,
+        automatic_publication: false,
+        monitoring_mode: source.monitoring_mode,
+      },
+    };
+
+    const { data: existing, error: readError } = await client
+      .from("commercial_offer_discovered_urls")
+      .select("id,status")
+      .eq("source_id", source.id)
+      .eq("url_hash", urlHash)
+      .maybeSingle();
+
+    if (readError) {
+      const message = readError.message.toLowerCase();
+
+      if (
+        message.includes("commercial_offer_discovered_urls") &&
+        message.includes("does not exist")
+      ) {
+        return 0;
+      }
+
+      continue;
+    }
+
+    if (existing?.id) {
+      const { error } = await client
+        .from("commercial_offer_discovered_urls")
+        .update(payload)
+        .eq("id", existing.id);
+
+      if (!error) stored += 1;
+      continue;
+    }
+
+    const { error } = await client
+      .from("commercial_offer_discovered_urls")
+      .insert({
+        source_id: source.id,
+        url_hash: urlHash,
+        status: "PENDING_REVIEW",
+        ...payload,
+      });
+
+    if (!error) stored += 1;
+  }
+
+  return stored;
+}
+
+function nextCheckIso(
+  source: SourceRow,
+  success: boolean,
+): string {
+  const baseHours = integerInRange(
+    source.check_frequency_hours,
+    72,
+    6,
+    720,
+  );
+
+  const hours = success
+    ? baseHours
+    : Math.max(12, Math.min(168, Math.round(baseHours / 2)));
+
+  return new Date(Date.now() + hours * 3_600_000).toISOString();
+}
+
 async function processSource(
   client: ReturnType<typeof adminClient>,
   source: SourceRow,
+  catalogV2: boolean,
 ): Promise<SourceOutcome> {
   try {
     const fetched = await fetchOfficialPage(source);
@@ -694,31 +984,59 @@ async function processSource(
       if (nextStatus === "REVIEW_REQUIRED") reviewOffers += 1;
     }
 
-    const candidates = await insertCandidates(
+    const candidates = source.monitoring_mode ===
+          "LINK_DISCOVERY_ONLY" ||
+        source.publication_policy === "REFERENCE_ONLY"
+      ? 0
+      : await insertCandidates(
+          client,
+          source,
+          fetched.html,
+          offers,
+        );
+
+    const discoveredUrls = await insertDiscoveredUrls(
       client,
       source,
-      fetched.html,
-      offers,
+      extractOfferLinks(
+        fetched.html,
+        fetched.finalUrl,
+        source.allowed_hostnames,
+      ),
+      catalogV2,
     );
+
+    const sourceUpdatePayload: JsonMap = {
+      status: source.source_purpose === "CURRENT_VEHICLE"
+        ? "ACTIVE"
+        : "PAUSED",
+      robots_status: fetched.robotsStatus,
+      last_http_status: fetched.status,
+      last_checked_at: new Date().toISOString(),
+      last_success_at: new Date().toISOString(),
+      failure_count: 0,
+      content_hash: fetched.contentHash,
+      last_error_code: null,
+      metadata: {
+        ...source.metadata,
+        final_url: fetched.finalUrl.toString(),
+        content_changed: source.content_hash !== fetched.contentHash,
+        fetched_by: BOT_NAME,
+        catalog_version: catalogV2 ? 2 : 1,
+      },
+      updated_at: new Date().toISOString(),
+    };
+
+    if (catalogV2) {
+      sourceUpdatePayload.next_check_at = nextCheckIso(
+        source,
+        true,
+      );
+    }
 
     const { error: sourceUpdateError } = await client
       .from("commercial_offer_sources")
-      .update({
-        status: "ACTIVE",
-        robots_status: fetched.robotsStatus,
-        last_http_status: fetched.status,
-        last_checked_at: new Date().toISOString(),
-        last_success_at: new Date().toISOString(),
-        failure_count: 0,
-        content_hash: fetched.contentHash,
-        last_error_code: null,
-        metadata: {
-          final_url: fetched.finalUrl.toString(),
-          content_changed: source.content_hash !== fetched.contentHash,
-          fetched_by: BOT_NAME,
-        },
-        updated_at: new Date().toISOString(),
-      })
+      .update(sourceUpdatePayload)
       .eq("id", source.id);
 
     if (sourceUpdateError) {
@@ -733,26 +1051,37 @@ async function processSource(
       verifiedOffers,
       reviewOffers,
       candidates,
+      discoveredUrls,
     };
   } catch (error) {
     const errorCode = safeError(error).split(":")[0].slice(0, 160);
     const nextFailureCount = Math.max(0, source.failure_count ?? 0) + 1;
     const nextStatus = errorCode === "ROBOTS_DISALLOWED"
       ? "BLOCKED"
-      : "ERROR";
+      : source.source_purpose === "CURRENT_VEHICLE"
+      ? "ERROR"
+      : "PAUSED";
+
+    const failurePayload: JsonMap = {
+      status: nextStatus,
+      robots_status: errorCode === "ROBOTS_DISALLOWED"
+        ? "DISALLOWED"
+        : "UNAVAILABLE",
+      last_checked_at: new Date().toISOString(),
+      failure_count: nextFailureCount,
+      last_error_code: errorCode,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (catalogV2) {
+      failurePayload.next_check_at = errorCode === "ROBOTS_DISALLOWED"
+        ? null
+        : nextCheckIso(source, false);
+    }
 
     await client
       .from("commercial_offer_sources")
-      .update({
-        status: nextStatus,
-        robots_status: errorCode === "ROBOTS_DISALLOWED"
-          ? "DISALLOWED"
-          : "UNAVAILABLE",
-        last_checked_at: new Date().toISOString(),
-        failure_count: nextFailureCount,
-        last_error_code: errorCode,
-        updated_at: new Date().toISOString(),
-      })
+      .update(failurePayload)
       .eq("id", source.id);
 
     return {
@@ -761,9 +1090,179 @@ async function processSource(
       verifiedOffers: 0,
       reviewOffers: 0,
       candidates: 0,
+      discoveredUrls: 0,
       errorCode,
     };
   }
+}
+
+async function loadDueSources(
+  client: ReturnType<typeof adminClient>,
+  batchSize: number,
+): Promise<SourceLoadResult> {
+  const currentSelect =
+    "id,source_key,source_name,source_url,allowed_hostnames,status," +
+    "content_hash,failure_count,metadata,search_enabled," +
+    "search_priority,check_frequency_hours,next_check_at," +
+    "monitoring_mode,publication_policy,source_purpose";
+
+  const currentQuery = await client
+    .from("commercial_offer_sources")
+    .select(currentSelect)
+    .eq("search_enabled", true)
+    .in("status", ["ACTIVE", "ERROR", "PAUSED"])
+    .limit(500);
+
+  if (!currentQuery.error) {
+    const now = Date.now();
+    const supportedModes = new Set([
+      "HTML_RULES",
+      "HTML_DISCOVERY",
+      "LINK_DISCOVERY_ONLY",
+    ]);
+
+    const sources = ((currentQuery.data ?? []) as Array<
+      Record<string, unknown>
+    >)
+      .map((row): SourceRow => ({
+        id: String(row.id ?? ""),
+        source_key: String(row.source_key ?? ""),
+        source_name: String(row.source_name ?? ""),
+        source_url: String(row.source_url ?? ""),
+        allowed_hostnames: Array.isArray(row.allowed_hostnames)
+          ? row.allowed_hostnames.map(String)
+          : [],
+        status: String(row.status ?? "PAUSED"),
+        content_hash: typeof row.content_hash === "string"
+          ? row.content_hash
+          : null,
+        failure_count: integerInRange(
+          row.failure_count,
+          0,
+          0,
+          10_000,
+        ),
+        metadata: isRecord(row.metadata)
+          ? row.metadata as JsonMap
+          : {},
+        search_enabled: row.search_enabled === true,
+        search_priority: integerInRange(
+          row.search_priority,
+          50,
+          1,
+          100,
+        ),
+        check_frequency_hours: integerInRange(
+          row.check_frequency_hours,
+          72,
+          6,
+          720,
+        ),
+        next_check_at: typeof row.next_check_at === "string"
+          ? row.next_check_at
+          : null,
+        monitoring_mode: String(
+          row.monitoring_mode ?? "HTML_RULES",
+        ) as SourceRow["monitoring_mode"],
+        publication_policy: String(
+          row.publication_policy ?? "VALIDATED_RULES_ONLY",
+        ) as SourceRow["publication_policy"],
+        source_purpose: String(
+          row.source_purpose ?? "CURRENT_VEHICLE",
+        ) as SourceRow["source_purpose"],
+      }))
+      .filter((source) =>
+        source.id &&
+        source.source_key &&
+        source.search_enabled &&
+        supportedModes.has(source.monitoring_mode) &&
+        (
+          !source.next_check_at ||
+          new Date(source.next_check_at).getTime() <= now
+        )
+      )
+      .sort((a, b) => {
+        const priority = a.search_priority - b.search_priority;
+        if (priority !== 0) return priority;
+
+        const aDue = a.next_check_at
+          ? new Date(a.next_check_at).getTime()
+          : 0;
+        const bDue = b.next_check_at
+          ? new Date(b.next_check_at).getTime()
+          : 0;
+
+        return aDue - bDue || a.source_key.localeCompare(b.source_key);
+      })
+      .slice(0, batchSize);
+
+    return {
+      sources,
+      catalogV2: true,
+    };
+  }
+
+  const currentError = currentQuery.error.message.toLowerCase();
+  const catalogMissing =
+    currentError.includes("search_enabled") ||
+    currentError.includes("monitoring_mode") ||
+    currentError.includes("next_check_at");
+
+  if (!catalogMissing) {
+    throw new Error(
+      `SOURCES_READ_FAILED:${currentQuery.error.message}`,
+    );
+  }
+
+  // Backward-compatible fallback: keeps the four V1 sources operational
+  // if the V2 function is deployed before the catalog migration.
+  const legacyQuery = await client
+    .from("commercial_offer_sources")
+    .select(
+      "id,source_key,source_name,source_url,allowed_hostnames,status," +
+        "content_hash,failure_count,metadata",
+    )
+    .in("status", ["ACTIVE", "ERROR"])
+    .limit(batchSize);
+
+  if (legacyQuery.error) {
+    throw new Error(`SOURCES_READ_FAILED:${legacyQuery.error.message}`);
+  }
+
+  return {
+    catalogV2: false,
+    sources: ((legacyQuery.data ?? []) as Array<
+      Record<string, unknown>
+    >).map((row): SourceRow => ({
+      id: String(row.id ?? ""),
+      source_key: String(row.source_key ?? ""),
+      source_name: String(row.source_name ?? ""),
+      source_url: String(row.source_url ?? ""),
+      allowed_hostnames: Array.isArray(row.allowed_hostnames)
+        ? row.allowed_hostnames.map(String)
+        : [],
+      status: String(row.status ?? "ACTIVE"),
+      content_hash: typeof row.content_hash === "string"
+        ? row.content_hash
+        : null,
+      failure_count: integerInRange(
+        row.failure_count,
+        0,
+        0,
+        10_000,
+      ),
+      metadata: isRecord(row.metadata)
+        ? row.metadata as JsonMap
+        : {},
+      search_enabled: true,
+      search_priority: 1,
+      check_frequency_hours: 24,
+      next_check_at: null,
+      monitoring_mode: "HTML_RULES",
+      publication_policy: "VALIDATED_RULES_ONLY",
+      source_purpose: "CURRENT_VEHICLE",
+    })),
+  };
 }
 
 Deno.serve(async (req: Request) => {
@@ -808,6 +1307,12 @@ Deno.serve(async (req: Request) => {
     const trigger =
       asString(body.trigger)?.toUpperCase() ?? "SCHEDULED";
     const force = asBoolean(body.force);
+    const batchSize = integerInRange(
+      body.batch_size,
+      MAX_BATCH_SIZE,
+      1,
+      MAX_BATCH_SIZE,
+    );
 
     const { data: acquired, error: lockError } = await client.rpc(
       "acquire_commercial_offer_sync_lock",
@@ -853,25 +1358,24 @@ Deno.serve(async (req: Request) => {
 
     runId = asString(run.id);
 
-    const { data: rawSources, error: sourcesError } = await client
-      .from("commercial_offer_sources")
-      .select(
-        "id,source_key,source_name,source_url,allowed_hostnames,status," +
-          "content_hash,failure_count",
-      )
-      .in("status", ["ACTIVE", "ERROR"]);
-
-    if (sourcesError) {
-      throw new Error(`SOURCES_READ_FAILED:${sourcesError.message}`);
-    }
-
-    const sources = (rawSources ?? []) as SourceRow[];
+    const sourceLoad = await loadDueSources(
+      client,
+      batchSize,
+    );
+    const sources = sourceLoad.sources;
     const outcomes: SourceOutcome[] = [];
 
-    // Sequential retrieval is deliberate: four small official sources,
-    // predictable load, simple rate control, and no burst against publishers.
+    // Sequential retrieval avoids bursts against publishers. The batch is
+    // deliberately capped at five sources to remain inside hosted runtime
+    // limits even when every source reaches its network timeout.
     for (const source of sources) {
-      outcomes.push(await processSource(client, source));
+      outcomes.push(
+        await processSource(
+          client,
+          source,
+          sourceLoad.catalogV2,
+        ),
+      );
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
 
@@ -889,8 +1393,14 @@ Deno.serve(async (req: Request) => {
       (total, item) => total + item.candidates,
       0,
     );
+    const discoveredUrlCount = outcomes.reduce(
+      (total, item) => total + item.discoveredUrls,
+      0,
+    );
 
-    const status = outcomes.length === 0 || successCount === 0
+    const status = outcomes.length === 0
+      ? "SKIPPED"
+      : successCount === 0
       ? "FAILED"
       : failureCount === 0
       ? "SUCCESS"
@@ -903,19 +1413,25 @@ Deno.serve(async (req: Request) => {
       .slice(0, 1500);
 
     if (runId) {
+      const runPayload: JsonMap = {
+        status,
+        source_count: outcomes.length,
+        success_count: successCount,
+        failure_count: failureCount,
+        verified_offer_count: verifiedOfferCount,
+        review_offer_count: reviewOfferCount,
+        candidate_count: candidateCount,
+        error_summary: errors || null,
+        finished_at: new Date().toISOString(),
+      };
+
+      if (sourceLoad.catalogV2) {
+        runPayload.discovered_url_count = discoveredUrlCount;
+      }
+
       await client
         .from("commercial_offer_sync_runs")
-        .update({
-          status,
-          source_count: outcomes.length,
-          success_count: successCount,
-          failure_count: failureCount,
-          verified_offer_count: verifiedOfferCount,
-          review_offer_count: reviewOfferCount,
-          candidate_count: candidateCount,
-          error_summary: errors || null,
-          finished_at: new Date().toISOString(),
-        })
+        .update(runPayload)
         .eq("id", runId);
     }
 
@@ -928,9 +1444,13 @@ Deno.serve(async (req: Request) => {
       verified_offer_count: verifiedOfferCount,
       review_offer_count: reviewOfferCount,
       candidate_count: candidateCount,
+      discovered_url_count: discoveredUrlCount,
+      catalog_version: sourceLoad.catalogV2 ? 2 : 1,
       sources: outcomes.map((item) => ({
         source_key: item.sourceKey,
         success: item.success,
+        candidate_count: item.candidates,
+        discovered_url_count: item.discoveredUrls,
         error_code: item.errorCode,
       })),
     }, status === "FAILED" ? 503 : 200);
