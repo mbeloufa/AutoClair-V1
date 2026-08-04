@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../commercial_offers/commercial_offer_models.dart';
+import '../commercial_offers/commercial_offers_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
 import 'vehicle_care_models.dart';
@@ -27,9 +31,13 @@ class VehicleCarePage extends StatefulWidget {
 class _VehicleCarePageState extends State<VehicleCarePage> {
   final _vehicleService = VehicleService();
   final _careService = VehicleCareService();
+  final _offersService = CommercialOffersService();
 
   Vehicle? _vehicle;
   VehicleCareBundle? _bundle;
+  CommercialOfferBundle? _offerBundle;
+  String? _offerError;
+  bool _offersLoading = true;
   late _CareSection _section;
   bool _loading = true;
   bool _actionInProgress = false;
@@ -58,17 +66,49 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     try {
       final vehicle = await _vehicleService.fetchVehicle(widget.vehicleId);
       final bundle = await _careService.loadBundle(widget.vehicleId);
+
       if (!mounted) return;
       setState(() {
         _vehicle = vehicle;
         _bundle = bundle;
+        _loading = false;
       });
+
+      // Les offres enrichissent le carnet sans retarder son affichage.
+      unawaited(_loadOfferPreview());
     } on VehicleServiceException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } on VehicleCareException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadOfferPreview() async {
+    if (!mounted) return;
+
+    setState(() {
+      _offersLoading = true;
+      _offerError = null;
+    });
+
+    try {
+      final bundle = await _offersService.fetchVehicleOffers(
+        widget.vehicleId,
+        limit: 6,
+      );
+
+      if (!mounted) return;
+      setState(() => _offerBundle = bundle);
+    } on CommercialOffersException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _offerBundle = null;
+        _offerError = error.message;
+      });
+    } finally {
+      if (mounted) setState(() => _offersLoading = false);
     }
   }
 
@@ -86,6 +126,12 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
       extra: _vehicle?.mileage,
     );
     if (changed == true) await _load();
+  }
+
+  Future<void> _openCommercialOffers() async {
+    await context.push<void>('/vehicles/${widget.vehicleId}/offers');
+
+    if (mounted) await _loadOfferPreview();
   }
 
   Future<void> _openVehicle360() async {
@@ -367,7 +413,12 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
           ],
           switch (_section) {
             _CareSection.overview => _OverviewSection(
+              vehicle: vehicle,
               bundle: bundle,
+              offerBundle: _offerBundle,
+              offerError: _offerError,
+              offersLoading: _offersLoading,
+              onOpenOffers: _openCommercialOffers,
               onAddEvent: _openEventForm,
               onExtractSuggestions: _extractSuggestions,
               onConfirmSuggestion: _confirmSuggestion,
@@ -722,7 +773,12 @@ class _SectionPicker extends StatelessWidget {
 
 class _OverviewSection extends StatelessWidget {
   const _OverviewSection({
+    required this.vehicle,
     required this.bundle,
+    required this.offerBundle,
+    required this.offerError,
+    required this.offersLoading,
+    required this.onOpenOffers,
     required this.onAddEvent,
     required this.onExtractSuggestions,
     required this.onConfirmSuggestion,
@@ -731,7 +787,12 @@ class _OverviewSection extends StatelessWidget {
     required this.onOpenTimeline,
   });
 
+  final Vehicle vehicle;
   final VehicleCareBundle bundle;
+  final CommercialOfferBundle? offerBundle;
+  final String? offerError;
+  final bool offersLoading;
+  final VoidCallback onOpenOffers;
   final VoidCallback onAddEvent;
   final VoidCallback onExtractSuggestions;
   final ValueChanged<VehicleDocumentSuggestion> onConfirmSuggestion;
@@ -759,6 +820,14 @@ class _OverviewSection extends StatelessWidget {
         _Vehicle360EntryCard(
           saleReadinessScore: dashboard.health.saleReadinessScore,
           onOpen: onOpenVehicle360,
+        ),
+        const SizedBox(height: 14),
+        _CommercialOffersEntryCard(
+          vehicle: vehicle,
+          bundle: offerBundle,
+          errorMessage: offerError,
+          loading: offersLoading,
+          onOpen: onOpenOffers,
         ),
         const SizedBox(height: 18),
         _SectionTitle(
@@ -854,6 +923,139 @@ class _OverviewSection extends StatelessWidget {
                 ),
               ),
       ],
+    );
+  }
+}
+
+class _CommercialOffersEntryCard extends StatelessWidget {
+  const _CommercialOffersEntryCard({
+    required this.vehicle,
+    required this.bundle,
+    required this.errorMessage,
+    required this.loading,
+    required this.onOpen,
+  });
+
+  final Vehicle vehicle;
+  final CommercialOfferBundle? bundle;
+  final String? errorMessage;
+  final bool loading;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final top = bundle?.topOffer;
+    final count = bundle?.offers.length ?? 0;
+    final relevantCount = bundle?.relevantNowCount ?? 0;
+
+    final title = loading
+        ? 'Recherche des offres officielles…'
+        : errorMessage != null
+        ? 'Offres temporairement indisponibles'
+        : count == 0
+        ? 'Aucune offre utile vérifiée'
+        : relevantCount > 0
+        ? '$relevantCount offre(s) utile(s) maintenant'
+        : '$count offre(s) compatible(s)';
+
+    final subtitle = loading
+        ? 'Le carnet est déjà utilisable pendant cette vérification.'
+        : errorMessage != null
+        ? 'Le carnet reste disponible. Vous pourrez réessayer sans perdre '
+              'aucune information.'
+        : top == null
+        ? 'AutoClair préfère ne rien afficher plutôt qu’une promotion '
+              'expirée ou mal adaptée.'
+        : '${top.title}\n${top.benefitLabel}';
+
+    return Material(
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(21),
+        side: BorderSide(
+          color: relevantCount > 0
+              ? AppColors.success.withValues(alpha: 0.45)
+              : AppColors.border,
+          width: relevantCount > 0 ? 1.5 : 1,
+        ),
+      ),
+      child: InkWell(
+        onTap: onOpen,
+        borderRadius: BorderRadius.circular(21),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 47,
+                height: 47,
+                decoration: BoxDecoration(
+                  color: relevantCount > 0
+                      ? AppColors.successSoft
+                      : AppColors.softPrimary,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Icon(
+                  Icons.local_offer_outlined,
+                  color: relevantCount > 0
+                      ? AppColors.success
+                      : AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Offres utiles pour ${vehicle.displayName}',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: relevantCount > 0
+                            ? AppColors.success
+                            : AppColors.text,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 9),
+                    const Text(
+                      'Sources officielles • aucun VIN transmis',
+                      style: TextStyle(
+                        color: AppColors.textMuted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              if (loading)
+                const SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

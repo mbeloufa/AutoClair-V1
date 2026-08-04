@@ -1,0 +1,238 @@
+class CommercialOfferBundle {
+  const CommercialOfferBundle({
+    required this.vehicleId,
+    required this.vehicleName,
+    required this.offers,
+    required this.generatedAt,
+    required this.activeSourceCount,
+    required this.activeOfferCount,
+    this.lastSuccessfulSyncAt,
+  });
+
+  final String vehicleId;
+  final String vehicleName;
+  final List<CommercialOffer> offers;
+  final DateTime generatedAt;
+  final int activeSourceCount;
+  final int activeOfferCount;
+  final DateTime? lastSuccessfulSyncAt;
+
+  CommercialOffer? get topOffer => offers.isEmpty ? null : offers.first;
+
+  int get relevantNowCount => offers.where((offer) => offer.relevantNow).length;
+
+  int get savedCount => offers.where((offer) => offer.isSaved).length;
+
+  factory CommercialOfferBundle.fromMap(Map<String, dynamic> map) {
+    final rawOffers = map['offers'];
+
+    return CommercialOfferBundle(
+      vehicleId: map['vehicle_id']?.toString() ?? '',
+      vehicleName: map['vehicle_name']?.toString() ?? 'Mon véhicule',
+      offers: rawOffers is List
+          ? rawOffers
+                .whereType<Map>()
+                .map(
+                  (row) =>
+                      CommercialOffer.fromMap(Map<String, dynamic>.from(row)),
+                )
+                .toList(growable: false)
+          : const [],
+      generatedAt:
+          DateTime.tryParse(map['generated_at']?.toString() ?? '') ??
+          DateTime.now(),
+      activeSourceCount: _integer(map['active_source_count']),
+      activeOfferCount: _integer(map['active_offer_count']),
+      lastSuccessfulSyncAt: DateTime.tryParse(
+        map['last_successful_sync_at']?.toString() ?? '',
+      ),
+    );
+  }
+}
+
+class CommercialOffer {
+  const CommercialOffer({
+    required this.id,
+    required this.offerKey,
+    required this.title,
+    required this.summary,
+    required this.category,
+    required this.benefitKind,
+    required this.benefitLabel,
+    required this.currency,
+    required this.sourceName,
+    required this.officialUrl,
+    required this.conditionsSummary,
+    required this.eligibilityNotes,
+    required this.compatibility,
+    required this.relevanceLabel,
+    required this.relevanceScore,
+    required this.relevantNow,
+    required this.expiresSoon,
+    required this.isSaved,
+    required this.why,
+    required this.requiresManualEligibility,
+    required this.requiresNetworkParticipation,
+    required this.requiresExistingContract,
+    required this.lastVerifiedAt,
+    this.benefitValue,
+    this.priceAmount,
+    this.originalPriceAmount,
+    this.startsAt,
+    this.endsAt,
+  });
+
+  final String id;
+  final String offerKey;
+  final String title;
+  final String summary;
+  final String category;
+  final String benefitKind;
+  final String benefitLabel;
+  final double? benefitValue;
+  final double? priceAmount;
+  final double? originalPriceAmount;
+  final String currency;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final String sourceName;
+  final String officialUrl;
+  final String conditionsSummary;
+  final String eligibilityNotes;
+  final String compatibility;
+  final String relevanceLabel;
+  final int relevanceScore;
+  final bool relevantNow;
+  final bool expiresSoon;
+  final bool isSaved;
+  final List<String> why;
+  final bool requiresManualEligibility;
+  final bool requiresNetworkParticipation;
+  final bool requiresExistingContract;
+  final DateTime lastVerifiedAt;
+
+  String get categoryLabel => switch (category) {
+    'MAINTENANCE' => 'Entretien',
+    'TYRES' => 'Pneumatiques',
+    'BATTERY' => 'Batterie',
+    'CLIMATE' => 'Climatisation',
+    'ACCESSORIES' => 'Accessoires',
+    'INSPECTION' => 'Contrôle technique',
+    'WINDSCREEN' => 'Pare-brise',
+    'CONTRACT' => 'Contrat d’entretien',
+    'BODYWORK' => 'Carrosserie',
+    _ => 'Service automobile',
+  };
+
+  String get compatibilityLabel => switch (compatibility) {
+    'COMPATIBLE' => 'Compatible avec votre véhicule',
+    'LIKELY' => 'Probablement compatible',
+    _ => 'Conditions à vérifier',
+  };
+
+  String get validityLabel {
+    final end = endsAt;
+    if (end == null) return 'Offre suivie sans date de fin publiée';
+    return 'Valable jusqu’au ${_date(end)}';
+  }
+
+  String get verificationLabel {
+    final now = DateTime.now();
+    final local = lastVerifiedAt.toLocal();
+    final days = now.difference(local).inDays;
+
+    if (days <= 0) return 'Source officielle vérifiée aujourd’hui';
+    if (days == 1) return 'Source officielle vérifiée hier';
+    return 'Source officielle vérifiée il y a $days jours';
+  }
+
+  String get priceLabel {
+    final price = priceAmount;
+    if (price != null) {
+      return '${_money(price)} $currency';
+    }
+    return benefitLabel;
+  }
+
+  double? get calculatedSavings {
+    final original = originalPriceAmount;
+    final current = priceAmount;
+    if (original == null || current == null || original <= current) {
+      return null;
+    }
+    return original - current;
+  }
+
+  factory CommercialOffer.fromMap(Map<String, dynamic> map) {
+    final rawWhy = map['why'];
+
+    return CommercialOffer(
+      id: map['id']?.toString() ?? '',
+      offerKey: map['offer_key']?.toString() ?? '',
+      title: map['title']?.toString() ?? 'Offre officielle',
+      summary: map['summary']?.toString() ?? '',
+      category: map['category']?.toString() ?? 'OTHER',
+      benefitKind: map['benefit_kind']?.toString() ?? 'INFO',
+      benefitLabel: map['benefit_label']?.toString() ?? 'Avantage à vérifier',
+      benefitValue: _nullableDecimal(map['benefit_value']),
+      priceAmount: _nullableDecimal(map['price_amount']),
+      originalPriceAmount: _nullableDecimal(map['original_price_amount']),
+      currency: map['currency']?.toString() ?? 'EUR',
+      startsAt: _dateTime(map['starts_at']),
+      endsAt: _dateTime(map['ends_at']),
+      sourceName: map['source_name']?.toString() ?? 'Source officielle',
+      officialUrl: map['official_url']?.toString() ?? '',
+      conditionsSummary: map['conditions_summary']?.toString() ?? '',
+      eligibilityNotes: map['eligibility_notes']?.toString() ?? '',
+      compatibility: map['compatibility']?.toString() ?? 'CHECK',
+      relevanceLabel: map['relevance_label']?.toString() ?? 'À vérifier',
+      relevanceScore: _integer(map['relevance_score']),
+      relevantNow: map['relevant_now'] == true,
+      expiresSoon: map['expires_soon'] == true,
+      isSaved: map['is_saved'] == true,
+      why: rawWhy is List
+          ? rawWhy
+                .map((value) => value?.toString().trim() ?? '')
+                .where((value) => value.isNotEmpty)
+                .toList(growable: false)
+          : const [],
+      requiresManualEligibility: map['requires_manual_eligibility'] == true,
+      requiresNetworkParticipation:
+          map['requires_network_participation'] == true,
+      requiresExistingContract: map['requires_existing_contract'] == true,
+      lastVerifiedAt:
+          DateTime.tryParse(map['last_verified_at']?.toString() ?? '') ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+}
+
+int _integer(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.round();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+double? _nullableDecimal(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '');
+}
+
+DateTime? _dateTime(Object? value) {
+  final text = value?.toString();
+  return text == null || text.isEmpty ? null : DateTime.tryParse(text);
+}
+
+String _date(DateTime value) {
+  final local = value.toLocal();
+  final day = local.day.toString().padLeft(2, '0');
+  final month = local.month.toString().padLeft(2, '0');
+  return '$day/$month/${local.year}';
+}
+
+String _money(double value) {
+  final fixed = value.truncateToDouble() == value
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+  return fixed.replaceAll('.', ',');
+}

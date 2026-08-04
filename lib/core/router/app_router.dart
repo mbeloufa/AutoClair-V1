@@ -16,6 +16,7 @@ import '../../features/onboarding/onboarding_page.dart';
 import '../../features/parking/parking_page.dart';
 import '../../features/start/start_page.dart';
 import '../../features/charging_prices/charging_compare_page.dart';
+import '../../features/commercial_offers/commercial_offers_page.dart';
 import '../../features/fuel_prices/fuel_price_compare_page.dart';
 import '../../features/technical_control/technical_control_compare_page.dart';
 import '../../features/vehicle_care/vehicle_care_page.dart';
@@ -105,6 +106,12 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => VehicleCarePage(
           vehicleId: state.pathParameters['vehicleId'] ?? '',
           initialSection: state.uri.queryParameters['section'],
+        ),
+      ),
+      GoRoute(
+        path: '/vehicles/:vehicleId/offers',
+        builder: (context, state) => CommercialOffersPage(
+          vehicleId: state.pathParameters['vehicleId'] ?? '',
         ),
       ),
       GoRoute(
