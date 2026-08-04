@@ -44,6 +44,17 @@ class NearbyPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _NearbyServiceCard(
+            icon: Icons.local_parking_rounded,
+            title: 'Un parking ou une place de stationnement',
+            description:
+                'Repérez les parkings publics, parcs relais et stationnements cartographiés.',
+            actionLabel: 'Trouver un stationnement',
+            foreground: AppColors.warning,
+            background: AppColors.warningSoft,
+            onTap: () => context.push('/parking'),
+          ),
+          const SizedBox(height: 12),
+          _NearbyServiceCard(
             icon: Icons.fact_check_outlined,
             title: 'Un contrôle technique',
             description:
@@ -106,7 +117,7 @@ class _NearbyIntro extends StatelessWidget {
                 ),
                 const SizedBox(height: 7),
                 Text(
-                  'Carburant, recharge et contrôle technique sont regroupés ici.',
+                  'Carburant, recharge, stationnement et contrôle technique sont regroupés ici.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.82),
                   ),
