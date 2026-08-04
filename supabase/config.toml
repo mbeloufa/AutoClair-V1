@@ -1,0 +1,9 @@
+# Ce fichier n'est copie que si le projet ne possede pas encore config.toml.
+# Les deux fonctions sont deployees avec --no-verify-jwt, puis valident
+# elles-memes le JWT utilisateur avec Supabase Auth.
+
+[functions.generate-vehicle-360-report]
+verify_jwt = false
+
+[functions.refresh-vehicle-valuation]
+verify_jwt = false

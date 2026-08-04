@@ -88,6 +88,10 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     if (changed == true) await _load();
   }
 
+  Future<void> _openVehicle360() async {
+    await context.push<void>('/vehicles/${widget.vehicleId}/insight-report');
+  }
+
   Future<void> _applyPlan() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -368,6 +372,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
               onExtractSuggestions: _extractSuggestions,
               onConfirmSuggestion: _confirmSuggestion,
               onDismissSuggestion: _dismissSuggestion,
+              onOpenVehicle360: _openVehicle360,
               onOpenTimeline: () =>
                   setState(() => _section = _CareSection.timeline),
             ),
@@ -722,6 +727,7 @@ class _OverviewSection extends StatelessWidget {
     required this.onExtractSuggestions,
     required this.onConfirmSuggestion,
     required this.onDismissSuggestion,
+    required this.onOpenVehicle360,
     required this.onOpenTimeline,
   });
 
@@ -730,6 +736,7 @@ class _OverviewSection extends StatelessWidget {
   final VoidCallback onExtractSuggestions;
   final ValueChanged<VehicleDocumentSuggestion> onConfirmSuggestion;
   final ValueChanged<VehicleDocumentSuggestion> onDismissSuggestion;
+  final VoidCallback onOpenVehicle360;
   final VoidCallback onOpenTimeline;
 
   @override
@@ -748,6 +755,11 @@ class _OverviewSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         _HealthDetailsCard(health: dashboard.health),
+        const SizedBox(height: 14),
+        _Vehicle360EntryCard(
+          saleReadinessScore: dashboard.health.saleReadinessScore,
+          onOpen: onOpenVehicle360,
+        ),
         const SizedBox(height: 18),
         _SectionTitle(
           title: 'À faire bientôt',
@@ -842,6 +854,113 @@ class _OverviewSection extends StatelessWidget {
                 ),
               ),
       ],
+    );
+  }
+}
+
+class _Vehicle360EntryCard extends StatelessWidget {
+  const _Vehicle360EntryCard({
+    required this.saleReadinessScore,
+    required this.onOpen,
+  });
+
+  final int saleReadinessScore;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryDark, AppColors.primary],
+        ),
+        borderRadius: BorderRadius.circular(21),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_outlined,
+                  color: Colors.white,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bilan AutoClair 360',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleLarge?.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Entretien, conseils personnalisés, valeur et décision de vente',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.80),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    'Préparation vente : $saleReadinessScore %',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              FilledButton.tonalIcon(
+                onPressed: onOpen,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('Analyser'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 46),
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppColors.primaryDark,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

@@ -20,6 +20,7 @@ import '../../features/technical_control/technical_control_compare_page.dart';
 import '../../features/vehicle_care/vehicle_care_page.dart';
 import '../../features/vehicle_care/vehicle_event_form_page.dart';
 import '../../features/vehicle_care/vehicle_odometer_page.dart';
+import '../../features/vehicle_insights/vehicle_360_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
@@ -103,6 +104,20 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => VehicleCarePage(
           vehicleId: state.pathParameters['vehicleId'] ?? '',
           initialSection: state.uri.queryParameters['section'],
+        ),
+      ),
+      GoRoute(
+        path: '/vehicles/:vehicleId/insight-report',
+        builder: (context, state) => Vehicle360Page(
+          vehicleId: state.pathParameters['vehicleId'] ?? '',
+          initialSection: state.uri.queryParameters['section'],
+        ),
+      ),
+      GoRoute(
+        path: '/vehicles/:vehicleId/sale',
+        builder: (context, state) => Vehicle360Page(
+          vehicleId: state.pathParameters['vehicleId'] ?? '',
+          initialSection: 'sale',
         ),
       ),
       GoRoute(
