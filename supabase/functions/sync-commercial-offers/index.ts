@@ -1,13 +1,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
-  asBoolean,
-  asString,
-  isRecord,
-  readJsonBody,
-  safeError,
-  sha256Hex,
-  type JsonMap,
-} from "../_shared/utils.ts";
+  extractOfferLinks,
+  extractOffers,
+  normalizeText,
+  type ExtractionSource,
+  type ExtractedOffer,
+  type KnownVehicle,
+} from "./extractor.ts";
+
+type JsonMap = Record<string, unknown>;
 
 type SourceRow = {
   id: string;
@@ -22,35 +23,30 @@ type SourceRow = {
   search_enabled: boolean;
   search_priority: number;
   check_frequency_hours: number;
-  next_check_at: string | null;
-  monitoring_mode:
-    | "HTML_RULES"
-    | "HTML_DISCOVERY"
-    | "LINK_DISCOVERY_ONLY"
-    | "ADAPTER_REQUIRED"
-    | "REFERENCE_ONLY"
-    | "DISABLED_BY_POLICY";
-  publication_policy:
-    | "VALIDATED_RULES_ONLY"
-    | "QUARANTINE_ONLY"
-    | "REFERENCE_ONLY";
-  source_purpose:
-    | "CURRENT_VEHICLE"
-    | "VEHICLE_PURCHASE"
-    | "FINANCE_INSURANCE"
-    | "REFERENCE_ONLY"
-    | "DISCOVERY_ONLY"
-    | "OTHER";
+  monitoring_mode: ExtractionSource["monitoringMode"];
+  publication_policy: ExtractionSource["publicationPolicy"];
+  source_purpose: ExtractionSource["sourcePurpose"];
+  endpoint_type: ExtractionSource["endpointType"];
+  trust_tier: ExtractionSource["trustTier"];
+  canonical_brand_code: string;
+  auto_publish_threshold: number;
+  crawl_depth: number;
+  max_pages_per_cycle: number;
 };
 
-type OfferRow = {
+type CrawlTargetRow = {
   id: string;
-  offer_key: string;
-  title: string;
+  source_id: string;
+  target_url: string;
+  url_hash: string;
+  target_kind: "ROOT" | "DISCOVERED";
+  depth: number;
   status: string;
-  ends_at: string | null;
-  validation_markers: string[];
-  verification_failure_count: number;
+  priority: number;
+  check_frequency_hours: number;
+  next_check_at: string | null;
+  failure_count: number;
+  content_hash: string | null;
 };
 
 type FetchResult = {
@@ -62,25 +58,18 @@ type FetchResult = {
   robotsStatus: "ALLOWED" | "DISALLOWED" | "UNAVAILABLE";
 };
 
-type SourceOutcome = {
+type TaskOutcome = {
   sourceKey: string;
+  targetUrl: string;
   success: boolean;
-  verifiedOffers: number;
-  reviewOffers: number;
+  published: number;
+  updated: number;
   candidates: number;
   discoveredUrls: number;
+  verifiedManualOffers: number;
+  reviewedManualOffers: number;
+  highConfidence: number;
   errorCode?: string;
-};
-
-type SourceLoadResult = {
-  sources: SourceRow[];
-  catalogV2: boolean;
-};
-
-type DiscoveredLink = {
-  url: string;
-  title: string;
-  score: number;
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -103,7 +92,7 @@ function readAdminKey(): string {
         }
       }
     } catch {
-      // The legacy variable below remains a supported fallback.
+      // The legacy service-role variable remains the fallback.
     }
   }
 
@@ -113,13 +102,11 @@ function readAdminKey(): string {
 const SERVICE_ROLE_KEY = readAdminKey();
 
 const MAX_HTML_BYTES = 2_000_000;
-const MAX_CANDIDATES_PER_SOURCE = 25;
-const MAX_DISCOVERED_URLS_PER_SOURCE = 30;
-const MAX_BATCH_SIZE = 5;
 const FETCH_TIMEOUT_MS = 12_000;
-const BOT_NAME = "AutoClairOffersBot";
+const MAX_BATCH_SIZE = 6;
 const USER_AGENT =
-  "AutoClairOffersBot/1.0 (+official-offer-verification; contact: AutoClair)";
+  "AutoClairOffersBot/3.0 (+deterministic-offer-extraction; France)";
+const BOT_NAME = "AutoClairOffersBot";
 
 const responseHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -137,7 +124,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function adminClient() {
+function adminClient(): any {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     throw new Error("SUPABASE_ADMIN_CONFIGURATION_MISSING");
   }
@@ -150,10 +137,69 @@ function adminClient() {
     },
     global: {
       headers: {
-        "X-Client-Info": "autoclair-commercial-offers-sync/1.0",
+        "X-Client-Info": "autoclair-commercial-offers-sync/3.0",
       },
     },
   });
+}
+
+function isRecord(value: unknown): value is JsonMap {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function safeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "UNKNOWN_ERROR";
+  }
+}
+
+function integerInRange(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = typeof value === "number"
+    ? value
+    : Number.parseInt(String(value ?? ""), 10);
+
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(minimum, Math.min(maximum, Math.trunc(parsed)));
+}
+
+function asBoolean(value: unknown): boolean {
+  if (value === true || value === 1 || value === "1") return true;
+  if (typeof value === "string") {
+    return ["true", "yes", "y", "oui"].includes(value.toLowerCase());
+  }
+  return false;
+}
+
+async function readJsonBody(request: Request): Promise<JsonMap> {
+  const text = await request.text();
+  if (!text.trim()) return {};
+
+  const value = JSON.parse(text);
+  if (!isRecord(value)) {
+    throw new Error("REQUEST_BODY_INVALID");
+  }
+  return value;
+}
+
+async function sha256Hex(value: unknown): Promise<string> {
+  const serialized = typeof value === "string"
+    ? value
+    : JSON.stringify(value);
+  const bytes = new TextEncoder().encode(serialized);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function normalizedHostname(value: string): string {
@@ -166,10 +212,9 @@ function hostnameAllowed(
 ): boolean {
   const normalized = normalizedHostname(hostname);
 
-  return allowedHostnames.some((allowed) => {
-    const expected = normalizedHostname(allowed);
-    return normalized === expected;
-  });
+  return allowedHostnames.some(
+    (allowed) => normalized === normalizedHostname(allowed),
+  );
 }
 
 function validatedHttpsUrl(
@@ -190,285 +235,25 @@ function validatedHttpsUrl(
   return url;
 }
 
-function decodeHtmlEntities(value: string): string {
-  const named: Record<string, string> = {
-    amp: "&",
-    apos: "'",
-    copy: "©",
-    euro: "€",
-    gt: ">",
-    laquo: "«",
-    lt: "<",
-    nbsp: " ",
-    ndash: "–",
-    mdash: "—",
-    quot: '"',
-    raquo: "»",
-    reg: "®",
-  };
-
-  return value
-    .replace(
-      /&#x([0-9a-f]+);/gi,
-      (_, hexadecimal: string) =>
-        String.fromCodePoint(Number.parseInt(hexadecimal, 16)),
-    )
-    .replace(
-      /&#([0-9]+);/g,
-      (_, decimal: string) =>
-        String.fromCodePoint(Number.parseInt(decimal, 10)),
-    )
-    .replace(
-      /&([a-z]+);/gi,
-      (entity, name: string) => named[name.toLowerCase()] ?? entity,
-    );
-}
-
-function stripHtml(html: string): string {
-  const withoutExecutableContent = html
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(
-      /<(script|style|noscript|svg|template)\b[^>]*>[\s\S]*?<\/\1>/gi,
-      " ",
-    )
-    .replace(/<(br|hr)\b[^>]*>/gi, "\n")
-    .replace(/<\/(p|li|div|section|article|h[1-6]|tr)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ");
-
-  return decodeHtmlEntities(withoutExecutableContent);
-}
-
-function normalizeText(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/[’‘`´]/g, "'")
-    .replace(/[^a-z0-9%€]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function extractCandidateBlocks(html: string): string[] {
-  const blocks: string[] = [];
-  const blockPattern =
-    /<(h[1-6]|p|li|article|section)\b[^>]*>([\s\S]*?)<\/\1>/gi;
-
-  for (const match of html.matchAll(blockPattern)) {
-    const plain = stripHtml(match[2] ?? "")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    if (plain.length < 45 || plain.length > 900) continue;
-
-    const normalized = normalizeText(plain);
-    const hasCommercialSignal =
-      /\b(offre|promotion|remise|reduction|gratuit|offert|forfait|a partir de|economisez)\b/
-        .test(normalized) ||
-      /\b\d{1,3}\s*%\b/.test(normalized) ||
-      /\b\d{1,5}(?:[,.]\d{1,2})?\s*(?:€|eur)\b/.test(normalized);
-
-    const currentYear = new Date().getUTCFullYear();
-    const hasCurrentDate =
-      normalized.includes(String(currentYear)) ||
-      normalized.includes(String(currentYear + 1)) ||
-      /\b(31|30|29|28)\s+(?:aout|decembre|septembre|octobre|novembre)\b/
-        .test(normalized);
-
-    if (hasCommercialSignal && hasCurrentDate) {
-      blocks.push(plain);
-    }
-  }
-
-  return Array.from(new Set(blocks)).slice(
-    0,
-    MAX_CANDIDATES_PER_SOURCE,
+async function fetchWithTimeout(
+  url: URL,
+  init: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    FETCH_TIMEOUT_MS,
   );
-}
-
-function candidateLabels(value: string): string[] {
-  const normalized = normalizeText(value);
-  const labels = new Set<string>();
-
-  if (/\b\d{1,3}\s*%\b/.test(normalized)) labels.add("PERCENT");
-  if (/\b(gratuit|offert)\b/.test(normalized)) labels.add("FREE");
-  if (/\ba partir de\b/.test(normalized)) labels.add("FROM_PRICE");
-  if (/\b(entretien|revision|vidange)\b/.test(normalized)) {
-    labels.add("MAINTENANCE");
-  }
-  if (/\b(pneu|pneumatique)\b/.test(normalized)) labels.add("TYRES");
-  if (/\b(climatisation|clim)\b/.test(normalized)) {
-    labels.add("CLIMATE");
-  }
-  if (/\b(controle technique|contre visite)\b/.test(normalized)) {
-    labels.add("INSPECTION");
-  }
-  if (/\b(accessoire|barres de toit)\b/.test(normalized)) {
-    labels.add("ACCESSORIES");
-  }
-  const currentYear = new Date().getUTCFullYear();
-
-  if (normalized.includes(String(currentYear))) {
-    labels.add(`YEAR_${currentYear}`);
-  }
-  if (normalized.includes(String(currentYear + 1))) {
-    labels.add(`YEAR_${currentYear + 1}`);
-  }
-
-  return Array.from(labels);
-}
-
-function integerInRange(
-  value: unknown,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-): number {
-  const parsed = typeof value === "number"
-    ? value
-    : Number.parseInt(String(value ?? ""), 10);
-
-  if (!Number.isFinite(parsed)) return fallback;
-
-  return Math.max(minimum, Math.min(maximum, Math.trunc(parsed)));
-}
-
-function cleanDiscoveredUrl(
-  rawHref: string,
-  baseUrl: URL,
-  allowedHostnames: string[],
-): URL | null {
-  const trimmed = rawHref.trim();
-
-  if (
-    !trimmed ||
-    trimmed.startsWith("#") ||
-    trimmed.startsWith("mailto:") ||
-    trimmed.startsWith("tel:") ||
-    trimmed.startsWith("javascript:")
-  ) {
-    return null;
-  }
-
-  let url: URL;
 
   try {
-    url = new URL(trimmed, baseUrl);
-  } catch {
-    return null;
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      redirect: "follow",
+    });
+  } finally {
+    clearTimeout(timeout);
   }
-
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    !hostnameAllowed(url.hostname, allowedHostnames)
-  ) {
-    return null;
-  }
-
-  url.hash = "";
-
-  const trackingKeys = [
-    "utm_source",
-    "utm_medium",
-    "utm_campaign",
-    "utm_term",
-    "utm_content",
-    "gclid",
-    "fbclid",
-    "msclkid",
-  ];
-
-  for (const key of trackingKeys) {
-    url.searchParams.delete(key);
-  }
-
-  if (url.toString().length > 1_000) return null;
-
-  return url;
-}
-
-function discoveredLinkScore(
-  url: URL,
-  title: string,
-): number {
-  const value = normalizeText(
-    `${url.pathname} ${url.search} ${title}`,
-  );
-
-  let score = 0;
-
-  const weightedSignals: Array<[RegExp, number]> = [
-    [/\b(offre|offres|promotion|promotions|promo)\b/, 45],
-    [/\b(entretien|revision|service|atelier|apres vente)\b/, 30],
-    [/\b(forfait|remise|reduction|avantage|bon plan)\b/, 25],
-    [/\b(financement|leasing|loa|lld|reprise)\b/, 20],
-    [/\b(stock|disponible|vehicule neuf|occasion)\b/, 12],
-    [/\b(pneu|batterie|climatisation|frein|pare brise)\b/, 20],
-  ];
-
-  for (const [pattern, weight] of weightedSignals) {
-    if (pattern.test(value)) score += weight;
-  }
-
-  const currentYear = new Date().getUTCFullYear();
-  if (
-    value.includes(String(currentYear)) ||
-    value.includes(String(currentYear + 1))
-  ) {
-    score += 8;
-  }
-
-  if (url.pathname === "/" || url.pathname.length < 3) {
-    score -= 20;
-  }
-
-  return Math.max(0, Math.min(100, score));
-}
-
-function extractOfferLinks(
-  html: string,
-  finalUrl: URL,
-  allowedHostnames: string[],
-): DiscoveredLink[] {
-  const candidates = new Map<string, DiscoveredLink>();
-  const linkPattern =
-    /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-
-  for (const match of html.matchAll(linkPattern)) {
-    const url = cleanDiscoveredUrl(
-      match[1] ?? "",
-      finalUrl,
-      allowedHostnames,
-    );
-
-    if (!url) continue;
-
-    const title = stripHtml(match[2] ?? "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 220);
-
-    const score = discoveredLinkScore(url, title);
-
-    if (score < 35) continue;
-
-    const key = url.toString();
-    const current = candidates.get(key);
-
-    if (!current || score > current.score) {
-      candidates.set(key, {
-        url: key,
-        title,
-        score,
-      });
-    }
-  }
-
-  return Array.from(candidates.values())
-    .sort((a, b) => b.score - a.score || a.url.localeCompare(b.url))
-    .slice(0, MAX_DISCOVERED_URLS_PER_SOURCE);
 }
 
 type RobotsRule = {
@@ -557,31 +342,19 @@ function robotsAllows(
   return matches.length === 0 ? true : matches[0].allow;
 }
 
-async function fetchWithTimeout(
-  url: URL,
-  init: RequestInit,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    FETCH_TIMEOUT_MS,
-  );
-
-  try {
-    return await fetch(url, {
-      ...init,
-      signal: controller.signal,
-      redirect: "follow",
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
+const robotsCache = new Map<
+  string,
+  "ALLOWED" | "DISALLOWED" | "UNAVAILABLE"
+>();
 
 async function checkRobots(
   sourceUrl: URL,
   allowedHostnames: string[],
 ): Promise<"ALLOWED" | "DISALLOWED" | "UNAVAILABLE"> {
+  const cacheKey = sourceUrl.origin;
+  const cached = robotsCache.get(cacheKey);
+  if (cached) return cached;
+
   const robotsUrl = new URL("/robots.txt", sourceUrl.origin);
 
   try {
@@ -593,38 +366,43 @@ async function checkRobots(
       },
     });
 
-    if (response.status === 404) return "ALLOWED";
-    if (!response.ok) return "UNAVAILABLE";
+    if (response.status === 404) {
+      robotsCache.set(cacheKey, "ALLOWED");
+      return "ALLOWED";
+    }
+
+    if (!response.ok) {
+      robotsCache.set(cacheKey, "UNAVAILABLE");
+      return "UNAVAILABLE";
+    }
 
     const finalUrl = new URL(response.url || robotsUrl.toString());
 
     if (!hostnameAllowed(finalUrl.hostname, allowedHostnames)) {
+      robotsCache.set(cacheKey, "DISALLOWED");
       return "DISALLOWED";
     }
 
     const robotsText = await response.text();
     const rules = parseRobotsRules(robotsText, BOT_NAME);
-
-    return robotsAllows(rules, sourceUrl)
+    const status = robotsAllows(rules, sourceUrl)
       ? "ALLOWED"
       : "DISALLOWED";
+
+    robotsCache.set(cacheKey, status);
+    return status;
   } catch {
+    robotsCache.set(cacheKey, "UNAVAILABLE");
     return "UNAVAILABLE";
   }
 }
 
-async function fetchOfficialPage(
-  source: SourceRow,
+async function fetchPage(
+  targetUrl: string,
+  allowedHostnames: string[],
 ): Promise<FetchResult> {
-  const url = validatedHttpsUrl(
-    source.source_url,
-    source.allowed_hostnames,
-  );
-
-  const robotsStatus = await checkRobots(
-    url,
-    source.allowed_hostnames,
-  );
+  const url = validatedHttpsUrl(targetUrl, allowedHostnames);
+  const robotsStatus = await checkRobots(url, allowedHostnames);
 
   if (robotsStatus === "DISALLOWED") {
     throw new Error("ROBOTS_DISALLOWED");
@@ -634,14 +412,14 @@ async function fetchOfficialPage(
     method: "GET",
     headers: {
       Accept: "text/html,application/xhtml+xml",
-      "Accept-Language": "fr-FR,fr;q=0.9",
+      "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.4",
       "User-Agent": USER_AGENT,
     },
   });
 
   const finalUrl = new URL(response.url || url.toString());
 
-  if (!hostnameAllowed(finalUrl.hostname, source.allowed_hostnames)) {
+  if (!hostnameAllowed(finalUrl.hostname, allowedHostnames)) {
     throw new Error("UNAPPROVED_REDIRECT_HOST");
   }
 
@@ -671,13 +449,11 @@ async function fetchOfficialPage(
   }
 
   const html = await response.text();
-
   if (new TextEncoder().encode(html).byteLength > MAX_HTML_BYTES) {
     throw new Error("SOURCE_CONTENT_TOO_LARGE");
   }
 
-  const normalizedText = normalizeText(stripHtml(html));
-
+  const normalizedText = normalizeText(html.replace(/<[^>]+>/g, " "));
   if (normalizedText.length < 200) {
     throw new Error("SOURCE_CONTENT_TOO_SHORT");
   }
@@ -692,351 +468,852 @@ async function fetchOfficialPage(
   };
 }
 
-function dateHasExpired(value: string | null): boolean {
-  if (!value) return false;
-
-  const end = new Date(`${value}T23:59:59Z`);
-  return !Number.isNaN(end.getTime()) && end.getTime() < Date.now();
+function sourceFromRow(row: JsonMap): SourceRow {
+  return {
+    id: String(row.id ?? ""),
+    source_key: String(row.source_key ?? ""),
+    source_name: String(row.source_name ?? ""),
+    source_url: String(row.source_url ?? ""),
+    allowed_hostnames: Array.isArray(row.allowed_hostnames)
+      ? row.allowed_hostnames.map(String)
+      : [],
+    status: String(row.status ?? "PAUSED"),
+    content_hash: typeof row.content_hash === "string"
+      ? row.content_hash
+      : null,
+    failure_count: integerInRange(row.failure_count, 0, 0, 10_000),
+    metadata: isRecord(row.metadata) ? row.metadata : {},
+    search_enabled: row.search_enabled === true,
+    search_priority: integerInRange(row.search_priority, 50, 1, 100),
+    check_frequency_hours: integerInRange(
+      row.check_frequency_hours,
+      72,
+      6,
+      720,
+    ),
+    monitoring_mode: String(
+      row.monitoring_mode ?? "HTML_DISCOVERY",
+    ) as SourceRow["monitoring_mode"],
+    publication_policy: String(
+      row.publication_policy ?? "QUARANTINE_ONLY",
+    ) as SourceRow["publication_policy"],
+    source_purpose: String(
+      row.source_purpose ?? "OTHER",
+    ) as SourceRow["source_purpose"],
+    endpoint_type: String(
+      row.endpoint_type ?? "HOME_OR_CATALOG",
+    ) as SourceRow["endpoint_type"],
+    trust_tier: String(
+      row.trust_tier ?? "PROFESSIONAL",
+    ) as SourceRow["trust_tier"],
+    canonical_brand_code: String(
+      row.canonical_brand_code ?? "*",
+    ),
+    auto_publish_threshold: integerInRange(
+      row.auto_publish_threshold,
+      86,
+      70,
+      100,
+    ),
+    crawl_depth: integerInRange(row.crawl_depth, 1, 0, 2),
+    max_pages_per_cycle: integerInRange(
+      row.max_pages_per_cycle,
+      4,
+      1,
+      10,
+    ),
+  };
 }
 
-function missingMarkers(
-  normalizedText: string,
-  markers: string[],
-): string[] {
-  return markers.filter((marker) => {
-    const normalizedMarker = normalizeText(marker);
-    return normalizedMarker && !normalizedText.includes(normalizedMarker);
-  });
+function taskFromRow(row: JsonMap): CrawlTargetRow {
+  return {
+    id: String(row.id ?? ""),
+    source_id: String(row.source_id ?? ""),
+    target_url: String(row.target_url ?? ""),
+    url_hash: String(row.url_hash ?? ""),
+    target_kind: String(
+      row.target_kind ?? "ROOT",
+    ) as CrawlTargetRow["target_kind"],
+    depth: integerInRange(row.depth, 0, 0, 2),
+    status: String(row.status ?? "ACTIVE"),
+    priority: integerInRange(row.priority, 50, 1, 100),
+    check_frequency_hours: integerInRange(
+      row.check_frequency_hours,
+      72,
+      6,
+      720,
+    ),
+    next_check_at: typeof row.next_check_at === "string"
+      ? row.next_check_at
+      : null,
+    failure_count: integerInRange(row.failure_count, 0, 0, 10_000),
+    content_hash: typeof row.content_hash === "string"
+      ? row.content_hash
+      : null,
+  };
 }
 
-async function insertCandidates(
-  client: ReturnType<typeof adminClient>,
+async function loadDueTasks(
+  client: any,
+  batchSize: number,
+): Promise<Array<{ task: CrawlTargetRow; source: SourceRow }>> {
+  const now = new Date().toISOString();
+
+  const { data: rawTasks, error: taskError } = await client
+    .from("commercial_offer_crawl_targets")
+    .select("*")
+    .in("status", ["ACTIVE", "ERROR"])
+    .or(`next_check_at.is.null,next_check_at.lte.${now}`)
+    .order("priority", { ascending: true })
+    .order("next_check_at", { ascending: true, nullsFirst: true })
+    .limit(80);
+
+  if (taskError) {
+    throw new Error(`CRAWL_TARGETS_READ_FAILED:${taskError.message}`);
+  }
+
+  const taskRows: unknown[] = Array.isArray(rawTasks)
+    ? rawTasks
+    : [];
+
+  const tasks: CrawlTargetRow[] = taskRows
+    .filter(isRecord)
+    .map(taskFromRow)
+    .filter(
+      (task: CrawlTargetRow) =>
+        Boolean(task.id && task.source_id && task.target_url),
+    );
+
+  if (tasks.length === 0) return [];
+
+  const sourceIds = Array.from(
+    new Set(tasks.map((task: CrawlTargetRow) => task.source_id)),
+  );
+
+  const { data: rawSources, error: sourceError } = await client
+    .from("commercial_offer_sources")
+    .select(
+      "id,source_key,source_name,source_url,allowed_hostnames,status," +
+        "content_hash,failure_count,metadata,search_enabled," +
+        "search_priority,check_frequency_hours,monitoring_mode," +
+        "publication_policy,source_purpose,endpoint_type,trust_tier," +
+        "canonical_brand_code,auto_publish_threshold,crawl_depth," +
+        "max_pages_per_cycle",
+    )
+    .in("id", sourceIds);
+
+  if (sourceError) {
+    throw new Error(`SOURCES_READ_FAILED:${sourceError.message}`);
+  }
+
+  const sources = new Map<string, SourceRow>();
+
+  const sourceRows: unknown[] = Array.isArray(rawSources)
+    ? rawSources
+    : [];
+
+  for (const rawSource of sourceRows) {
+    if (!isRecord(rawSource)) continue;
+    const source = sourceFromRow(rawSource);
+    if (source.id) sources.set(source.id, source);
+  }
+
+  return tasks
+    .map((task: CrawlTargetRow) => ({
+      task,
+      source: sources.get(task.source_id),
+    }))
+    .filter(
+      (
+        value: {
+          task: CrawlTargetRow;
+          source: SourceRow | undefined;
+        },
+      ): value is { task: CrawlTargetRow; source: SourceRow } =>
+        Boolean(value.source?.search_enabled),
+    )
+    .sort((
+      a: { task: CrawlTargetRow; source: SourceRow },
+      b: { task: CrawlTargetRow; source: SourceRow },
+    ) => {
+      const rootOrder =
+        Number(a.task.target_kind !== "ROOT") -
+        Number(b.task.target_kind !== "ROOT");
+      return rootOrder ||
+        a.task.priority - b.task.priority ||
+        a.task.target_url.localeCompare(b.task.target_url);
+    })
+    .slice(0, batchSize);
+}
+
+async function loadKnownVehicles(client: any): Promise<KnownVehicle[]> {
+  const { data, error } = await client
+    .from("vehicles")
+    .select("make,model")
+    .not("make", "is", null)
+    .not("model", "is", null)
+    .limit(2_000);
+
+  if (error) {
+    throw new Error(`VEHICLE_MODELS_READ_FAILED:${error.message}`);
+  }
+
+  const seen = new Set<string>();
+  const vehicles: KnownVehicle[] = [];
+
+  for (const row of data ?? []) {
+    if (!isRecord(row)) continue;
+
+    const make = String(row.make ?? "").trim();
+    const model = String(row.model ?? "").trim();
+    if (!make || !model) continue;
+
+    const key = `${normalizeText(make)}::${normalizeText(model)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    vehicles.push({
+      brand: normalizeText(make),
+      model,
+    });
+  }
+
+  return vehicles;
+}
+
+function extractionSource(source: SourceRow): ExtractionSource {
+  return {
+    sourceKey: source.source_key,
+    sourceName: source.source_name,
+    sourceUrl: source.source_url,
+    canonicalBrandCode: source.canonical_brand_code,
+    sourcePurpose: source.source_purpose,
+    endpointType: source.endpoint_type,
+    trustTier: source.trust_tier,
+    monitoringMode: source.monitoring_mode,
+    publicationPolicy: source.publication_policy,
+    autoPublishThreshold: source.auto_publish_threshold,
+  };
+}
+
+function nextCheckIso(
+  hours: number,
+  failureCount = 0,
+): string {
+  const backoff = failureCount <= 0
+    ? hours
+    : Math.min(168, Math.max(6, hours * Math.pow(2, failureCount - 1)));
+
+  return new Date(
+    Date.now() + backoff * 60 * 60 * 1_000,
+  ).toISOString();
+}
+
+function safeOfferKey(sourceKey: string, fingerprint: string): string {
+  const sourcePart = sourceKey
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 34);
+
+  return `auto_${sourcePart}_${fingerprint.slice(0, 20)}`;
+}
+
+async function publishOffer(
+  client: any,
   source: SourceRow,
-  html: string,
-  knownOffers: OfferRow[],
-): Promise<number> {
-  const blocks = extractCandidateBlocks(html);
-  let inserted = 0;
+  offer: ExtractedOffer,
+  pageUrl: string,
+): Promise<"PUBLISHED" | "UPDATED"> {
+  const now = new Date().toISOString();
 
-  for (const block of blocks) {
-    const normalized = normalizeText(block);
+  const { data: existing, error: existingError } = await client
+    .from("commercial_offers")
+    .select("id")
+    .eq("source_id", source.id)
+    .eq("source_fingerprint", offer.fingerprint)
+    .maybeSingle();
 
-    const alreadyCovered = knownOffers.some((offer) => {
-      const normalizedTitle = normalizeText(offer.title);
-      if (
-        normalizedTitle.length >= 10 &&
-        normalized.includes(normalizedTitle)
-      ) {
-        return true;
-      }
+  if (existingError) {
+    throw new Error(
+      `AUTO_OFFER_LOOKUP_FAILED:${existingError.message}`,
+    );
+  }
 
-      const markers = Array.isArray(offer.validation_markers)
-        ? offer.validation_markers
-            .map(normalizeText)
-            .filter((marker) => marker.length >= 8)
-        : [];
+  const payload = {
+    source_id: source.id,
+    offer_key: safeOfferKey(source.source_key, offer.fingerprint),
+    title: offer.title,
+    summary: offer.summary,
+    category: offer.category,
+    benefit_kind: offer.benefitKind,
+    benefit_label: offer.benefitLabel,
+    benefit_value: offer.benefitValue,
+    price_amount: offer.priceAmount,
+    original_price_amount: offer.originalPriceAmount,
+    currency: offer.currency,
+    starts_at: offer.startsAt,
+    ends_at: offer.endsAt,
+    status: offer.endsAt &&
+        new Date(`${offer.endsAt}T23:59:59Z`).getTime() < Date.now()
+      ? "EXPIRED"
+      : "ACTIVE",
+    official_url: offer.officialUrl,
+    brands: offer.brands,
+    model_patterns: offer.modelPatterns,
+    excluded_model_patterns: offer.excludedModelPatterns,
+    fuel_types: offer.fuelTypes,
+    excluded_fuel_types: offer.excludedFuelTypes,
+    year_min: offer.yearMin,
+    year_max: offer.yearMax,
+    age_min: offer.ageMin,
+    age_max: offer.ageMax,
+    mileage_min: offer.mileageMin,
+    mileage_max: offer.mileageMax,
+    schedule_keywords: offer.scheduleKeywords,
+    conditions_summary: offer.conditionsSummary,
+    eligibility_notes: offer.eligibilityNotes,
+    requires_existing_contract: offer.requiresExistingContract,
+    requires_network_participation:
+      offer.requiresNetworkParticipation,
+    requires_manual_eligibility: offer.requiresManualEligibility,
+    validation_markers: offer.validationMarkers,
+    verification_failure_count: 0,
+    last_verification_error: null,
+    last_verified_at: now,
+    offer_context: offer.offerContext,
+    targeting_scope: offer.targetingScope,
+    targeting_text: offer.targetingText,
+    auto_extracted: true,
+    extraction_confidence: offer.confidence,
+    extraction_method: offer.extractionMethod,
+    source_page_url: pageUrl,
+    source_fingerprint: offer.fingerprint,
+    evidence: offer.evidence,
+    last_seen_at: now,
+    miss_count: 0,
+    updated_at: now,
+  };
 
-      if (markers.length === 0) return false;
+  if (isRecord(existing) && existing.id) {
+    const { error } = await client
+      .from("commercial_offers")
+      .update(payload)
+      .eq("id", String(existing.id));
 
-      const matchCount = markers.filter((marker) =>
-        normalized.includes(marker)
-      ).length;
-
-      return matchCount >= Math.min(2, markers.length);
-    });
-
-    if (alreadyCovered) continue;
-
-    const hash = await sha256Hex({
-      source: source.source_key,
-      block: normalized,
-    });
-
-    const now = new Date().toISOString();
-    const candidatePayload = {
-      excerpt: block.slice(0, 400),
-      detected_labels: candidateLabels(block),
-      last_seen_at: now,
-      metadata: {
-        source_url: source.source_url,
-        automatic_publication: false,
-      },
-    };
-
-    const { data: existing, error: existingError } = await client
-      .from("commercial_offer_candidates")
-      .select("id,status")
-      .eq("source_id", source.id)
-      .eq("candidate_hash", hash)
-      .maybeSingle();
-
-    if (existingError) continue;
-
-    if (existing?.id) {
-      const { error } = await client
-        .from("commercial_offer_candidates")
-        .update(candidatePayload)
-        .eq("id", existing.id);
-
-      if (!error) inserted += 1;
-      continue;
+    if (error) {
+      throw new Error(`AUTO_OFFER_UPDATE_FAILED:${error.message}`);
     }
+
+    return "UPDATED";
+  }
+
+  const { error } = await client
+    .from("commercial_offers")
+    .insert({
+      ...payload,
+      first_seen_at: now,
+    });
+
+  if (error) {
+    throw new Error(`AUTO_OFFER_INSERT_FAILED:${error.message}`);
+  }
+
+  return "PUBLISHED";
+}
+
+async function quarantineOffer(
+  client: any,
+  source: SourceRow,
+  offer: ExtractedOffer,
+  pageUrl: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+
+  const { data: existing, error: lookupError } = await client
+    .from("commercial_offer_candidates")
+    .select("id,status")
+    .eq("source_id", source.id)
+    .eq("candidate_hash", offer.fingerprint)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw new Error(`CANDIDATE_LOOKUP_FAILED:${lookupError.message}`);
+  }
+
+  const payload = {
+    excerpt: `${offer.title} — ${offer.summary}`.slice(0, 400),
+    detected_labels: [
+      offer.category,
+      offer.benefitKind,
+      offer.offerContext,
+      offer.targetingScope,
+    ],
+    last_seen_at: now,
+    structured_payload: {
+      title: offer.title,
+      summary: offer.summary,
+      category: offer.category,
+      offer_context: offer.offerContext,
+      targeting_scope: offer.targetingScope,
+      benefit_kind: offer.benefitKind,
+      benefit_label: offer.benefitLabel,
+      price_amount: offer.priceAmount,
+      original_price_amount: offer.originalPriceAmount,
+      starts_at: offer.startsAt,
+      ends_at: offer.endsAt,
+      brands: offer.brands,
+      model_patterns: offer.modelPatterns,
+      confidence: offer.confidence,
+      official_url: offer.officialUrl,
+      evidence: offer.evidence,
+    },
+    extraction_confidence: offer.confidence,
+    extraction_method: offer.extractionMethod,
+    rejection_reasons: offer.rejectionReasons,
+    source_page_url: pageUrl,
+    metadata: {
+      automatic_publication: false,
+      generic_engine_version: 3,
+    },
+  };
+
+  if (isRecord(existing) && existing.id) {
+    const updatePayload = String(existing.status) === "PENDING_REVIEW"
+      ? payload
+      : {
+          ...payload,
+          status: existing.status,
+        };
 
     const { error } = await client
       .from("commercial_offer_candidates")
-      .insert({
-        source_id: source.id,
-        candidate_hash: hash,
-        status: "PENDING_REVIEW",
-        ...candidatePayload,
-      });
+      .update(updatePayload)
+      .eq("id", String(existing.id));
 
-    if (!error) inserted += 1;
+    if (error) {
+      throw new Error(`CANDIDATE_UPDATE_FAILED:${error.message}`);
+    }
+    return;
   }
 
-  return inserted;
-}
-
-async function insertDiscoveredUrls(
-  client: ReturnType<typeof adminClient>,
-  source: SourceRow,
-  links: DiscoveredLink[],
-  catalogV2: boolean,
-): Promise<number> {
-  if (!catalogV2 || links.length === 0) return 0;
-
-  let stored = 0;
-
-  for (const link of links) {
-    const urlHash = await sha256Hex({
-      source: source.source_key,
-      url: link.url,
+  const { error } = await client
+    .from("commercial_offer_candidates")
+    .insert({
+      source_id: source.id,
+      candidate_hash: offer.fingerprint,
+      status: "PENDING_REVIEW",
+      ...payload,
     });
 
-    const now = new Date().toISOString();
-    const payload = {
+  if (error) {
+    throw new Error(`CANDIDATE_INSERT_FAILED:${error.message}`);
+  }
+}
+
+async function markMissingAutomaticOffers(
+  client: any,
+  source: SourceRow,
+  pageUrl: string,
+  seenFingerprints: Set<string>,
+): Promise<void> {
+  const { data, error } = await client
+    .from("commercial_offers")
+    .select("id,source_fingerprint,miss_count,status")
+    .eq("source_id", source.id)
+    .eq("source_page_url", pageUrl)
+    .eq("auto_extracted", true);
+
+  if (error) {
+    throw new Error(`AUTO_OFFER_STALE_READ_FAILED:${error.message}`);
+  }
+
+  for (const row of data ?? []) {
+    if (!isRecord(row)) continue;
+
+    const fingerprint = String(row.source_fingerprint ?? "");
+    if (fingerprint && seenFingerprints.has(fingerprint)) continue;
+
+    const missCount = integerInRange(row.miss_count, 0, 0, 1_000) + 1;
+    const nextStatus = missCount >= 2 && row.status === "ACTIVE"
+      ? "REVIEW_REQUIRED"
+      : row.status;
+
+    const { error: updateError } = await client
+      .from("commercial_offers")
+      .update({
+        miss_count: missCount,
+        status: nextStatus,
+        last_verification_error: "AUTO_EXTRACTION_NOT_FOUND",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", String(row.id));
+
+    if (updateError) {
+      throw new Error(
+        `AUTO_OFFER_STALE_UPDATE_FAILED:${updateError.message}`,
+      );
+    }
+  }
+}
+
+async function verifyManualOffers(
+  client: any,
+  source: SourceRow,
+  pageUrl: string,
+  normalizedText: string,
+): Promise<{ verified: number; reviewed: number }> {
+  const { data, error } = await client
+    .from("commercial_offers")
+    .select(
+      "id,status,ends_at,official_url,source_page_url," +
+        "validation_markers,verification_failure_count",
+    )
+    .eq("source_id", source.id)
+    .eq("auto_extracted", false);
+
+  if (error) {
+    throw new Error(`MANUAL_OFFERS_READ_FAILED:${error.message}`);
+  }
+
+  let verified = 0;
+  let reviewed = 0;
+
+  for (const row of data ?? []) {
+    if (!isRecord(row)) continue;
+
+    const rowUrl = String(
+      row.source_page_url ?? row.official_url ?? "",
+    );
+
+    if (rowUrl && rowUrl !== pageUrl) continue;
+
+    const markers = Array.isArray(row.validation_markers)
+      ? row.validation_markers.map(String)
+      : [];
+
+    if (markers.length === 0) continue;
+
+    const missing = markers.filter((marker) => {
+      const normalized = normalizeText(marker);
+      return normalized && !normalizedText.includes(normalized);
+    });
+
+    if (missing.length === 0) {
+      const { error: updateError } = await client
+        .from("commercial_offers")
+        .update({
+          status: "ACTIVE",
+          last_verified_at: new Date().toISOString(),
+          verification_failure_count: 0,
+          last_verification_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", String(row.id));
+
+      if (updateError) {
+        throw new Error(
+          `MANUAL_OFFER_UPDATE_FAILED:${updateError.message}`,
+        );
+      }
+
+      verified += 1;
+      continue;
+    }
+
+    const failureCount = integerInRange(
+      row.verification_failure_count,
+      0,
+      0,
+      1_000,
+    ) + 1;
+    const status = failureCount >= 2
+      ? "REVIEW_REQUIRED"
+      : String(row.status ?? "ACTIVE");
+
+    const { error: updateError } = await client
+      .from("commercial_offers")
+      .update({
+        status,
+        verification_failure_count: failureCount,
+        last_verification_error:
+          `MISSING_MARKERS:${missing.slice(0, 4).join("|")}`.slice(
+            0,
+            500,
+          ),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", String(row.id));
+
+    if (updateError) {
+      throw new Error(
+        `MANUAL_OFFER_REVIEW_FAILED:${updateError.message}`,
+      );
+    }
+
+    if (status === "REVIEW_REQUIRED") reviewed += 1;
+  }
+
+  return { verified, reviewed };
+}
+
+async function storeDiscoveredLinks(
+  client: any,
+  source: SourceRow,
+  task: CrawlTargetRow,
+  links: ReturnType<typeof extractOfferLinks>,
+): Promise<number> {
+  let stored = 0;
+  const now = new Date().toISOString();
+
+  for (const link of links) {
+    const hash = await sha256Hex(link.url);
+
+    const { data: existing, error: lookupError } = await client
+      .from("commercial_offer_discovered_urls")
+      .select("id,status")
+      .eq("source_id", source.id)
+      .eq("url_hash", hash)
+      .maybeSingle();
+
+    if (lookupError) continue;
+
+    const discoveredPayload = {
       discovered_url: link.url,
       link_title: link.title,
       discovery_score: link.score,
       last_seen_at: now,
       metadata: {
-        source_url: source.source_url,
+        parent_url: task.target_url,
+        source_depth: task.depth,
+        generic_engine_version: 3,
         automatic_publication: false,
-        monitoring_mode: source.monitoring_mode,
       },
     };
 
-    const { data: existing, error: readError } = await client
-      .from("commercial_offer_discovered_urls")
-      .select("id,status")
-      .eq("source_id", source.id)
-      .eq("url_hash", urlHash)
-      .maybeSingle();
-
-    if (readError) {
-      const message = readError.message.toLowerCase();
-
-      if (
-        message.includes("commercial_offer_discovered_urls") &&
-        message.includes("does not exist")
-      ) {
-        return 0;
-      }
-
-      continue;
-    }
-
-    if (existing?.id) {
-      const { error } = await client
+    if (isRecord(existing) && existing.id) {
+      await client
         .from("commercial_offer_discovered_urls")
-        .update(payload)
-        .eq("id", existing.id);
-
-      if (!error) stored += 1;
-      continue;
+        .update(discoveredPayload)
+        .eq("id", String(existing.id));
+    } else {
+      await client
+        .from("commercial_offer_discovered_urls")
+        .insert({
+          source_id: source.id,
+          url_hash: hash,
+          status: "PENDING_REVIEW",
+          ...discoveredPayload,
+        });
     }
 
-    const { error } = await client
-      .from("commercial_offer_discovered_urls")
-      .insert({
-        source_id: source.id,
-        url_hash: urlHash,
-        status: "PENDING_REVIEW",
-        ...payload,
-      });
+    if (
+      task.depth < source.crawl_depth &&
+      link.score >= 55
+    ) {
+      const { data: targetExisting, error: targetLookupError } =
+        await client
+          .from("commercial_offer_crawl_targets")
+          .select("id,status")
+          .eq("source_id", source.id)
+          .eq("url_hash", hash)
+          .maybeSingle();
 
-    if (!error) stored += 1;
+      if (!targetLookupError) {
+        const targetPayload = {
+          target_url: link.url,
+          target_kind: "DISCOVERED",
+          depth: task.depth + 1,
+          priority: Math.max(1, 45 - Math.floor(link.score / 4)),
+          check_frequency_hours:
+            source.source_purpose === "CURRENT_VEHICLE" ? 24 : 48,
+          next_check_at: now,
+          parent_url: task.target_url,
+          metadata: {
+            discovery_score: link.score,
+            link_title: link.title,
+          },
+          updated_at: now,
+        };
+
+        if (isRecord(targetExisting) && targetExisting.id) {
+          if (String(targetExisting.status) !== "BLOCKED") {
+            await client
+              .from("commercial_offer_crawl_targets")
+              .update({
+                ...targetPayload,
+                status: "ACTIVE",
+              })
+              .eq("id", String(targetExisting.id));
+          }
+        } else {
+          await client
+            .from("commercial_offer_crawl_targets")
+            .insert({
+              source_id: source.id,
+              url_hash: hash,
+              status: "ACTIVE",
+              ...targetPayload,
+            });
+        }
+      }
+    }
+
+    stored += 1;
   }
 
   return stored;
 }
 
-function nextCheckIso(
+async function processTask(
+  client: any,
+  task: CrawlTargetRow,
   source: SourceRow,
-  success: boolean,
-): string {
-  const baseHours = integerInRange(
-    source.check_frequency_hours,
-    72,
-    6,
-    720,
-  );
-
-  const hours = success
-    ? baseHours
-    : Math.max(12, Math.min(168, Math.round(baseHours / 2)));
-
-  return new Date(Date.now() + hours * 3_600_000).toISOString();
-}
-
-async function processSource(
-  client: ReturnType<typeof adminClient>,
-  source: SourceRow,
-  catalogV2: boolean,
-): Promise<SourceOutcome> {
+  knownVehicles: KnownVehicle[],
+): Promise<TaskOutcome> {
   try {
-    const fetched = await fetchOfficialPage(source);
-
-    const { data: rawOffers, error: offerError } = await client
-      .from("commercial_offers")
-      .select(
-        "id,offer_key,title,status,ends_at,validation_markers," +
-          "verification_failure_count",
-      )
-      .eq("source_id", source.id);
-
-    if (offerError) throw new Error(`OFFERS_READ_FAILED:${offerError.message}`);
-
-    const offers = (rawOffers ?? []) as OfferRow[];
-    let verifiedOffers = 0;
-    let reviewOffers = 0;
-    for (const offer of offers) {
-      if (dateHasExpired(offer.ends_at)) {
-        const { error } = await client
-          .from("commercial_offers")
-          .update({
-            status: "EXPIRED",
-            last_verification_error: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", offer.id);
-
-        if (error) {
-          throw new Error(`OFFER_UPDATE_FAILED:${error.message}`);
-        }
-        continue;
-      }
-
-      const markers = Array.isArray(offer.validation_markers)
-        ? offer.validation_markers
-        : [];
-
-      const missing = missingMarkers(
-        fetched.normalizedText,
-        markers,
-      );
-
-      if (markers.length > 0 && missing.length === 0) {
-        const { error } = await client
-          .from("commercial_offers")
-          .update({
-            status: "ACTIVE",
-            last_verified_at: new Date().toISOString(),
-            verification_failure_count: 0,
-            last_verification_error: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", offer.id);
-
-        if (error) {
-          throw new Error(`OFFER_UPDATE_FAILED:${error.message}`);
-        }
-
-        verifiedOffers += 1;
-        continue;
-      }
-
-      const failureCount =
-        Math.max(0, offer.verification_failure_count ?? 0) + 1;
-
-      const nextStatus = failureCount >= 2
-        ? "REVIEW_REQUIRED"
-        : offer.status;
-
-      const { error } = await client
-        .from("commercial_offers")
-        .update({
-          status: nextStatus,
-          verification_failure_count: failureCount,
-          last_verification_error:
-            `MISSING_MARKERS:${missing.slice(0, 4).join("|")}`.slice(
-              0,
-              500,
-            ),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", offer.id);
-
-      if (error) {
-        throw new Error(`OFFER_UPDATE_FAILED:${error.message}`);
-      }
-
-      if (nextStatus === "REVIEW_REQUIRED") reviewOffers += 1;
-    }
-
-    const candidates = source.monitoring_mode ===
-          "LINK_DISCOVERY_ONLY" ||
-        source.publication_policy === "REFERENCE_ONLY"
-      ? 0
-      : await insertCandidates(
-          client,
-          source,
-          fetched.html,
-          offers,
-        );
-
-    const discoveredUrls = await insertDiscoveredUrls(
-      client,
-      source,
-      extractOfferLinks(
-        fetched.html,
-        fetched.finalUrl,
-        source.allowed_hostnames,
-      ),
-      catalogV2,
+    const fetched = await fetchPage(
+      task.target_url,
+      source.allowed_hostnames,
     );
 
-    const sourceUpdatePayload: JsonMap = {
-      status: source.source_purpose === "CURRENT_VEHICLE"
-        ? "ACTIVE"
-        : "PAUSED",
-      robots_status: fetched.robotsStatus,
-      last_http_status: fetched.status,
-      last_checked_at: new Date().toISOString(),
-      last_success_at: new Date().toISOString(),
-      failure_count: 0,
-      content_hash: fetched.contentHash,
-      last_error_code: null,
-      metadata: {
-        ...source.metadata,
-        final_url: fetched.finalUrl.toString(),
-        content_changed: source.content_hash !== fetched.contentHash,
-        fetched_by: BOT_NAME,
-        catalog_version: catalogV2 ? 2 : 1,
-      },
-      updated_at: new Date().toISOString(),
-    };
+    const sourceDefinition = extractionSource(source);
+    const shouldExtract = !(
+      task.target_kind === "ROOT" &&
+      source.monitoring_mode === "LINK_DISCOVERY_ONLY"
+    );
 
-    if (catalogV2) {
-      sourceUpdatePayload.next_check_at = nextCheckIso(
+    const extracted = shouldExtract
+      ? await extractOffers(
+          fetched.html,
+          fetched.finalUrl.toString(),
+          sourceDefinition,
+          knownVehicles,
+        )
+      : [];
+
+    let published = 0;
+    let updated = 0;
+    let candidates = 0;
+    let highConfidence = 0;
+    const seenFingerprints = new Set<string>();
+
+    for (const offer of extracted) {
+      seenFingerprints.add(offer.fingerprint);
+      if (offer.confidence >= source.auto_publish_threshold) {
+        highConfidence += 1;
+      }
+
+      if (offer.publishable) {
+        const result = await publishOffer(
+          client,
+          source,
+          offer,
+          fetched.finalUrl.toString(),
+        );
+
+        if (result === "PUBLISHED") published += 1;
+        else updated += 1;
+      } else {
+        await quarantineOffer(
+          client,
+          source,
+          offer,
+          fetched.finalUrl.toString(),
+        );
+        candidates += 1;
+      }
+    }
+
+    if (shouldExtract) {
+      await markMissingAutomaticOffers(
+        client,
         source,
-        true,
+        fetched.finalUrl.toString(),
+        seenFingerprints,
+      );
+    }
+
+    const manual = await verifyManualOffers(
+      client,
+      source,
+      fetched.finalUrl.toString(),
+      fetched.normalizedText,
+    );
+
+    const links = extractOfferLinks(
+      fetched.html,
+      fetched.finalUrl.toString(),
+      source.allowed_hostnames,
+    );
+
+    const discoveredUrls = await storeDiscoveredLinks(
+      client,
+      source,
+      task,
+      links,
+    );
+
+    const now = new Date().toISOString();
+
+    const { error: taskUpdateError } = await client
+      .from("commercial_offer_crawl_targets")
+      .update({
+        status: "ACTIVE",
+        robots_status: fetched.robotsStatus,
+        last_http_status: fetched.status,
+        last_checked_at: now,
+        last_success_at: now,
+        failure_count: 0,
+        last_error_code: null,
+        content_hash: fetched.contentHash,
+        next_check_at: nextCheckIso(task.check_frequency_hours),
+        metadata: {
+          target_kind: task.target_kind,
+          extraction_count: extracted.length,
+          published_count: published,
+          updated_count: updated,
+          candidate_count: candidates,
+          discovered_url_count: discoveredUrls,
+          final_url: fetched.finalUrl.toString(),
+        },
+        updated_at: now,
+      })
+      .eq("id", task.id);
+
+    if (taskUpdateError) {
+      throw new Error(
+        `CRAWL_TARGET_UPDATE_FAILED:${taskUpdateError.message}`,
       );
     }
 
     const { error: sourceUpdateError } = await client
       .from("commercial_offer_sources")
-      .update(sourceUpdatePayload)
+      .update({
+        status: "ACTIVE",
+        robots_status: fetched.robotsStatus,
+        last_http_status: fetched.status,
+        last_checked_at: now,
+        last_success_at: now,
+        failure_count: 0,
+        last_error_code: null,
+        content_hash: task.target_kind === "ROOT"
+          ? fetched.contentHash
+          : source.content_hash,
+        last_extraction_at: now,
+        extracted_offer_count:
+          published + updated + candidates,
+        metadata: {
+          ...source.metadata,
+          generic_engine_version: 3,
+          last_target_url: fetched.finalUrl.toString(),
+          last_published_count: published,
+          last_updated_count: updated,
+          last_candidate_count: candidates,
+          last_discovered_url_count: discoveredUrls,
+        },
+        updated_at: now,
+      })
       .eq("id", source.id);
 
     if (sourceUpdateError) {
@@ -1047,234 +1324,74 @@ async function processSource(
 
     return {
       sourceKey: source.source_key,
+      targetUrl: task.target_url,
       success: true,
-      verifiedOffers,
-      reviewOffers,
+      published,
+      updated,
       candidates,
       discoveredUrls,
+      verifiedManualOffers: manual.verified,
+      reviewedManualOffers: manual.reviewed,
+      highConfidence,
     };
   } catch (error) {
     const errorCode = safeError(error).split(":")[0].slice(0, 160);
-    const nextFailureCount = Math.max(0, source.failure_count ?? 0) + 1;
-    const nextStatus = errorCode === "ROBOTS_DISALLOWED"
-      ? "BLOCKED"
-      : source.source_purpose === "CURRENT_VEHICLE"
-      ? "ERROR"
-      : "PAUSED";
+    const failureCount = task.failure_count + 1;
+    const blocked = errorCode === "ROBOTS_DISALLOWED";
+    const now = new Date().toISOString();
 
-    const failurePayload: JsonMap = {
-      status: nextStatus,
-      robots_status: errorCode === "ROBOTS_DISALLOWED"
-        ? "DISALLOWED"
-        : "UNAVAILABLE",
-      last_checked_at: new Date().toISOString(),
-      failure_count: nextFailureCount,
-      last_error_code: errorCode,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (catalogV2) {
-      failurePayload.next_check_at = errorCode === "ROBOTS_DISALLOWED"
-        ? null
-        : nextCheckIso(source, false);
-    }
+    await client
+      .from("commercial_offer_crawl_targets")
+      .update({
+        status: blocked ? "BLOCKED" : "ERROR",
+        robots_status: blocked ? "DISALLOWED" : "UNAVAILABLE",
+        last_checked_at: now,
+        failure_count: failureCount,
+        last_error_code: errorCode,
+        next_check_at: blocked
+          ? null
+          : nextCheckIso(task.check_frequency_hours, failureCount),
+        updated_at: now,
+      })
+      .eq("id", task.id);
 
     await client
       .from("commercial_offer_sources")
-      .update(failurePayload)
+      .update({
+        status: blocked ? "BLOCKED" : "ERROR",
+        last_checked_at: now,
+        failure_count: source.failure_count + 1,
+        last_error_code: errorCode,
+        updated_at: now,
+      })
       .eq("id", source.id);
 
     return {
       sourceKey: source.source_key,
+      targetUrl: task.target_url,
       success: false,
-      verifiedOffers: 0,
-      reviewOffers: 0,
+      published: 0,
+      updated: 0,
       candidates: 0,
       discoveredUrls: 0,
+      verifiedManualOffers: 0,
+      reviewedManualOffers: 0,
+      highConfidence: 0,
       errorCode,
     };
   }
 }
 
-async function loadDueSources(
-  client: ReturnType<typeof adminClient>,
-  batchSize: number,
-): Promise<SourceLoadResult> {
-  const currentSelect =
-    "id,source_key,source_name,source_url,allowed_hostnames,status," +
-    "content_hash,failure_count,metadata,search_enabled," +
-    "search_priority,check_frequency_hours,next_check_at," +
-    "monitoring_mode,publication_policy,source_purpose";
-
-  const currentQuery = await client
-    .from("commercial_offer_sources")
-    .select(currentSelect)
-    .eq("search_enabled", true)
-    .in("status", ["ACTIVE", "ERROR", "PAUSED"])
-    .limit(500);
-
-  if (!currentQuery.error) {
-    const now = Date.now();
-    const supportedModes = new Set([
-      "HTML_RULES",
-      "HTML_DISCOVERY",
-      "LINK_DISCOVERY_ONLY",
-    ]);
-
-    const sources = ((currentQuery.data ?? []) as Array<
-      Record<string, unknown>
-    >)
-      .map((row): SourceRow => ({
-        id: String(row.id ?? ""),
-        source_key: String(row.source_key ?? ""),
-        source_name: String(row.source_name ?? ""),
-        source_url: String(row.source_url ?? ""),
-        allowed_hostnames: Array.isArray(row.allowed_hostnames)
-          ? row.allowed_hostnames.map(String)
-          : [],
-        status: String(row.status ?? "PAUSED"),
-        content_hash: typeof row.content_hash === "string"
-          ? row.content_hash
-          : null,
-        failure_count: integerInRange(
-          row.failure_count,
-          0,
-          0,
-          10_000,
-        ),
-        metadata: isRecord(row.metadata)
-          ? row.metadata as JsonMap
-          : {},
-        search_enabled: row.search_enabled === true,
-        search_priority: integerInRange(
-          row.search_priority,
-          50,
-          1,
-          100,
-        ),
-        check_frequency_hours: integerInRange(
-          row.check_frequency_hours,
-          72,
-          6,
-          720,
-        ),
-        next_check_at: typeof row.next_check_at === "string"
-          ? row.next_check_at
-          : null,
-        monitoring_mode: String(
-          row.monitoring_mode ?? "HTML_RULES",
-        ) as SourceRow["monitoring_mode"],
-        publication_policy: String(
-          row.publication_policy ?? "VALIDATED_RULES_ONLY",
-        ) as SourceRow["publication_policy"],
-        source_purpose: String(
-          row.source_purpose ?? "CURRENT_VEHICLE",
-        ) as SourceRow["source_purpose"],
-      }))
-      .filter((source) =>
-        source.id &&
-        source.source_key &&
-        source.search_enabled &&
-        supportedModes.has(source.monitoring_mode) &&
-        (
-          !source.next_check_at ||
-          new Date(source.next_check_at).getTime() <= now
-        )
-      )
-      .sort((a, b) => {
-        const priority = a.search_priority - b.search_priority;
-        if (priority !== 0) return priority;
-
-        const aDue = a.next_check_at
-          ? new Date(a.next_check_at).getTime()
-          : 0;
-        const bDue = b.next_check_at
-          ? new Date(b.next_check_at).getTime()
-          : 0;
-
-        return aDue - bDue || a.source_key.localeCompare(b.source_key);
-      })
-      .slice(0, batchSize);
-
-    return {
-      sources,
-      catalogV2: true,
-    };
-  }
-
-  const currentError = currentQuery.error.message.toLowerCase();
-  const catalogMissing =
-    currentError.includes("search_enabled") ||
-    currentError.includes("monitoring_mode") ||
-    currentError.includes("next_check_at");
-
-  if (!catalogMissing) {
-    throw new Error(
-      `SOURCES_READ_FAILED:${currentQuery.error.message}`,
-    );
-  }
-
-  // Backward-compatible fallback: keeps the four V1 sources operational
-  // if the V2 function is deployed before the catalog migration.
-  const legacyQuery = await client
-    .from("commercial_offer_sources")
-    .select(
-      "id,source_key,source_name,source_url,allowed_hostnames,status," +
-        "content_hash,failure_count,metadata",
-    )
-    .in("status", ["ACTIVE", "ERROR"])
-    .limit(batchSize);
-
-  if (legacyQuery.error) {
-    throw new Error(`SOURCES_READ_FAILED:${legacyQuery.error.message}`);
-  }
-
-  return {
-    catalogV2: false,
-    sources: ((legacyQuery.data ?? []) as Array<
-      Record<string, unknown>
-    >).map((row): SourceRow => ({
-      id: String(row.id ?? ""),
-      source_key: String(row.source_key ?? ""),
-      source_name: String(row.source_name ?? ""),
-      source_url: String(row.source_url ?? ""),
-      allowed_hostnames: Array.isArray(row.allowed_hostnames)
-        ? row.allowed_hostnames.map(String)
-        : [],
-      status: String(row.status ?? "ACTIVE"),
-      content_hash: typeof row.content_hash === "string"
-        ? row.content_hash
-        : null,
-      failure_count: integerInRange(
-        row.failure_count,
-        0,
-        0,
-        10_000,
-      ),
-      metadata: isRecord(row.metadata)
-        ? row.metadata as JsonMap
-        : {},
-      search_enabled: true,
-      search_priority: 1,
-      check_frequency_hours: 24,
-      next_check_at: null,
-      monitoring_mode: "HTML_RULES",
-      publication_policy: "VALIDATED_RULES_ONLY",
-      source_purpose: "CURRENT_VEHICLE",
-    })),
-  };
-}
-
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
+Deno.serve(async (request: Request) => {
+  if (request.method === "OPTIONS") {
     return new Response("ok", { headers: responseHeaders });
   }
 
-  if (req.method !== "POST") {
+  if (request.method !== "POST") {
     return jsonResponse({ error: "METHOD_NOT_ALLOWED" }, 405);
   }
 
-  let client: ReturnType<typeof adminClient> | null = null;
+  let client: any = null;
   let lockAcquired = false;
   let runId: string | null = null;
 
@@ -1282,7 +1399,7 @@ Deno.serve(async (req: Request) => {
     client = adminClient();
 
     const suppliedSecret =
-      req.headers.get("x-sync-secret")?.trim() ?? "";
+      request.headers.get("x-sync-secret")?.trim() ?? "";
 
     if (!suppliedSecret || suppliedSecret.length < 32) {
       return jsonResponse({ error: "UNAUTHORIZED" }, 401);
@@ -1299,20 +1416,22 @@ Deno.serve(async (req: Request) => {
 
     let body: JsonMap = {};
     try {
-      body = await readJsonBody(req);
+      body = await readJsonBody(request);
     } catch {
       body = {};
     }
 
-    const trigger =
-      asString(body.trigger)?.toUpperCase() ?? "SCHEDULED";
-    const force = asBoolean(body.force);
+    const trigger = String(body.trigger ?? "scheduled-v3")
+      .trim()
+      .toUpperCase()
+      .slice(0, 80);
     const batchSize = integerInRange(
       body.batch_size,
-      MAX_BATCH_SIZE,
+      4,
       1,
       MAX_BATCH_SIZE,
     );
+    const force = asBoolean(body.force);
 
     const { data: acquired, error: lockError } = await client.rpc(
       "acquire_commercial_offer_sync_lock",
@@ -1353,54 +1472,87 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (runError || !isRecord(run)) {
-      throw new Error(`SYNC_RUN_CREATE_FAILED:${runError?.message ?? ""}`);
+      throw new Error(
+        `SYNC_RUN_CREATE_FAILED:${runError?.message ?? ""}`,
+      );
     }
 
-    runId = asString(run.id);
+    runId = String(run.id ?? "") || null;
 
-    const sourceLoad = await loadDueSources(
-      client,
-      batchSize,
-    );
-    const sources = sourceLoad.sources;
-    const outcomes: SourceOutcome[] = [];
+    const [tasks, knownVehicles] = await Promise.all([
+      loadDueTasks(client, batchSize),
+      loadKnownVehicles(client),
+    ]);
 
-    // Sequential retrieval avoids bursts against publishers. The batch is
-    // deliberately capped at five sources to remain inside hosted runtime
-    // limits even when every source reaches its network timeout.
-    for (const source of sources) {
+    if (tasks.length === 0) {
+      if (runId) {
+        await client
+          .from("commercial_offer_sync_runs")
+          .update({
+            status: "SUCCESS",
+            source_count: 0,
+            success_count: 0,
+            failure_count: 0,
+            crawl_target_count: 0,
+            finished_at: new Date().toISOString(),
+          })
+          .eq("id", runId);
+      }
+
+      return jsonResponse({
+        success: true,
+        status: "SUCCESS",
+        reason: "NO_DUE_TARGETS",
+      });
+    }
+
+    const outcomes: TaskOutcome[] = [];
+
+    for (const item of tasks) {
       outcomes.push(
-        await processSource(
+        await processTask(
           client,
-          source,
-          sourceLoad.catalogV2,
+          item.task,
+          item.source,
+          knownVehicles,
         ),
       );
-      await new Promise((resolve) => setTimeout(resolve, 700));
+
+      await new Promise((resolve) => setTimeout(resolve, 350));
     }
 
     const successCount = outcomes.filter((item) => item.success).length;
     const failureCount = outcomes.length - successCount;
-    const verifiedOfferCount = outcomes.reduce(
-      (total, item) => total + item.verifiedOffers,
+    const publishedCount = outcomes.reduce(
+      (sum, item) => sum + item.published,
       0,
     );
-    const reviewOfferCount = outcomes.reduce(
-      (total, item) => total + item.reviewOffers,
+    const updatedCount = outcomes.reduce(
+      (sum, item) => sum + item.updated,
       0,
     );
     const candidateCount = outcomes.reduce(
-      (total, item) => total + item.candidates,
+      (sum, item) => sum + item.candidates,
       0,
     );
     const discoveredUrlCount = outcomes.reduce(
-      (total, item) => total + item.discoveredUrls,
+      (sum, item) => sum + item.discoveredUrls,
+      0,
+    );
+    const verifiedOfferCount = outcomes.reduce(
+      (sum, item) => sum + item.verifiedManualOffers,
+      0,
+    );
+    const reviewOfferCount = outcomes.reduce(
+      (sum, item) => sum + item.reviewedManualOffers,
+      0,
+    );
+    const highConfidenceCount = outcomes.reduce(
+      (sum, item) => sum + item.highConfidence,
       0,
     );
 
-    const status = outcomes.length === 0
-      ? "SKIPPED"
-      : successCount === 0
+    const status = successCount === 0
       ? "FAILED"
       : failureCount === 0
       ? "SUCCESS"
@@ -1408,54 +1560,63 @@ Deno.serve(async (req: Request) => {
 
     const errors = outcomes
       .filter((item) => !item.success)
-      .map((item) => `${item.sourceKey}:${item.errorCode ?? "UNKNOWN"}`)
+      .map((item) =>
+        `${item.sourceKey}:${item.errorCode ?? "UNKNOWN"}`
+      )
       .join("; ")
-      .slice(0, 1500);
+      .slice(0, 1_500);
 
     if (runId) {
-      const runPayload: JsonMap = {
-        status,
-        source_count: outcomes.length,
-        success_count: successCount,
-        failure_count: failureCount,
-        verified_offer_count: verifiedOfferCount,
-        review_offer_count: reviewOfferCount,
-        candidate_count: candidateCount,
-        error_summary: errors || null,
-        finished_at: new Date().toISOString(),
-      };
-
-      if (sourceLoad.catalogV2) {
-        runPayload.discovered_url_count = discoveredUrlCount;
-      }
-
       await client
         .from("commercial_offer_sync_runs")
-        .update(runPayload)
+        .update({
+          status,
+          source_count: new Set(
+            outcomes.map((item) => item.sourceKey),
+          ).size,
+          success_count: successCount,
+          failure_count: failureCount,
+          verified_offer_count: verifiedOfferCount,
+          review_offer_count: reviewOfferCount,
+          candidate_count: candidateCount,
+          discovered_url_count: discoveredUrlCount,
+          crawl_target_count: outcomes.length,
+          auto_published_count: publishedCount,
+          auto_updated_count: updatedCount,
+          high_confidence_count: highConfidenceCount,
+          error_summary: errors || null,
+          finished_at: new Date().toISOString(),
+        })
         .eq("id", runId);
     }
 
     return jsonResponse({
       success: status !== "FAILED",
       status,
-      source_count: outcomes.length,
+      target_count: outcomes.length,
       success_count: successCount,
       failure_count: failureCount,
-      verified_offer_count: verifiedOfferCount,
-      review_offer_count: reviewOfferCount,
+      auto_published_count: publishedCount,
+      auto_updated_count: updatedCount,
       candidate_count: candidateCount,
       discovered_url_count: discoveredUrlCount,
-      catalog_version: sourceLoad.catalogV2 ? 2 : 1,
-      sources: outcomes.map((item) => ({
+      verified_manual_offer_count: verifiedOfferCount,
+      reviewed_manual_offer_count: reviewOfferCount,
+      high_confidence_count: highConfidenceCount,
+      known_vehicle_model_count: knownVehicles.length,
+      targets: outcomes.map((item) => ({
         source_key: item.sourceKey,
+        target_url: item.targetUrl,
         success: item.success,
-        candidate_count: item.candidates,
-        discovered_url_count: item.discoveredUrls,
+        published: item.published,
+        updated: item.updated,
+        candidates: item.candidates,
+        discovered_urls: item.discoveredUrls,
         error_code: item.errorCode,
       })),
     }, status === "FAILED" ? 503 : 200);
   } catch (error) {
-    const message = safeError(error).slice(0, 1500);
+    const message = safeError(error).slice(0, 1_500);
 
     if (client && runId) {
       await client

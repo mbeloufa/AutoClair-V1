@@ -7,6 +7,8 @@ import 'commercial_offer_actions.dart';
 import 'commercial_offer_models.dart';
 import 'commercial_offers_service.dart';
 
+enum _OfferScope { currentVehicle, purchase }
+
 enum _OfferView { relevant, all, saved }
 
 class CommercialOffersPage extends StatefulWidget {
@@ -26,7 +28,9 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
   CommercialOfferBundle? _bundle;
   bool _loading = true;
   bool _actionInProgress = false;
+  bool _initialSelectionResolved = false;
   String? _errorMessage;
+  _OfferScope _scope = _OfferScope.currentVehicle;
   _OfferView _view = _OfferView.relevant;
   String _category = 'ALL';
 
@@ -50,15 +54,27 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
 
       if (!mounted) return;
 
-      final availableCategories = {
-        for (final offer in bundle.offers) offer.category,
-      };
-
       setState(() {
         _vehicle = vehicle;
         _bundle = bundle;
 
-        if (_category != 'ALL' && !availableCategories.contains(_category)) {
+        if (!_initialSelectionResolved) {
+          if (bundle.currentVehicleCount > 0) {
+            _scope = _OfferScope.currentVehicle;
+            _view = bundle.relevantNowCount > 0
+                ? _OfferView.relevant
+                : _OfferView.all;
+          } else if (bundle.purchaseCount > 0) {
+            _scope = _OfferScope.purchase;
+            _view = _OfferView.all;
+          }
+          _initialSelectionResolved = true;
+        }
+
+        final categories = {
+          for (final offer in _offersForScope(bundle)) offer.category,
+        };
+        if (_category != 'ALL' && !categories.contains(_category)) {
           _category = 'ALL';
         }
       });
@@ -71,26 +87,55 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
     }
   }
 
-  List<CommercialOffer> get _visibleOffers {
-    final offers = _bundle?.offers ?? const <CommercialOffer>[];
+  List<CommercialOffer> _offersForScope(CommercialOfferBundle bundle) {
+    return bundle.offers
+        .where((offer) {
+          if (_scope == _OfferScope.purchase) {
+            return offer.isPurchaseOffer;
+          }
+          return !offer.isPurchaseOffer;
+        })
+        .toList(growable: false);
+  }
 
-    return offers
+  List<CommercialOffer> get _visibleOffers {
+    final bundle = _bundle;
+    if (bundle == null) return const [];
+
+    return _offersForScope(bundle)
         .where((offer) {
           if (_view == _OfferView.relevant && !offer.relevantNow) {
             return false;
           }
-
           if (_view == _OfferView.saved && !offer.isSaved) {
             return false;
           }
-
           if (_category != 'ALL' && offer.category != _category) {
             return false;
           }
-
           return true;
         })
         .toList(growable: false);
+  }
+
+  void _selectScope(_OfferScope scope) {
+    if (_scope == scope) return;
+
+    setState(() {
+      _scope = scope;
+      _category = 'ALL';
+
+      if (scope == _OfferScope.purchase && _view == _OfferView.relevant) {
+        _view = _OfferView.all;
+      }
+
+      if (scope == _OfferScope.currentVehicle) {
+        final bundle = _bundle;
+        if (bundle != null && bundle.relevantNowCount > 0) {
+          _view = _OfferView.relevant;
+        }
+      }
+    });
   }
 
   Future<void> _toggleSaved(CommercialOffer offer) async {
@@ -277,7 +322,12 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
 
     final vehicle = _vehicle!;
     final bundle = _bundle!;
+    final scopeOffers = _offersForScope(bundle);
     final visibleOffers = _visibleOffers;
+    final relevantCount = scopeOffers
+        .where((offer) => offer.relevantNow)
+        .length;
+    final savedCount = scopeOffers.where((offer) => offer.isSaved).length;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -285,21 +335,30 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
         children: [
-          _OffersHero(vehicle: vehicle, bundle: bundle),
+          _OffersHero(vehicle: vehicle, scope: _scope, offers: scopeOffers),
           const SizedBox(height: 16),
-          const _GoodSensePanel(),
+          _ScopeSelector(
+            selected: _scope,
+            currentVehicleCount: bundle.currentVehicleCount,
+            purchaseCount: bundle.purchaseCount,
+            onSelected: _selectScope,
+          ),
+          const SizedBox(height: 14),
+          _GoodSensePanel(scope: _scope),
           const SizedBox(height: 18),
           _ViewSelector(
             selected: _view,
-            relevantCount: bundle.relevantNowCount,
-            totalCount: bundle.offers.length,
-            savedCount: bundle.savedCount,
+            showRelevant: _scope == _OfferScope.currentVehicle,
+            relevantCount: relevantCount,
+            totalCount: scopeOffers.length,
+            savedCount: savedCount,
             onSelected: (value) => setState(() => _view = value),
           ),
           const SizedBox(height: 12),
           _CategorySelector(
+            key: ValueKey('${_scope.name}-$_category'),
             selected: _category,
-            offers: bundle.offers,
+            offers: scopeOffers,
             onSelected: (value) => setState(() => _category = value),
           ),
           if (_actionInProgress) ...[
@@ -309,9 +368,10 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
           const SizedBox(height: 18),
           if (visibleOffers.isEmpty)
             _EmptyOffersState(
+              scope: _scope,
               view: _view,
               category: _category,
-              hasAnyOffers: bundle.offers.isNotEmpty,
+              hasAnyOffers: scopeOffers.isNotEmpty,
             )
           else
             for (var index = 0; index < visibleOffers.length; index++) ...[
@@ -335,14 +395,20 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
 }
 
 class _OffersHero extends StatelessWidget {
-  const _OffersHero({required this.vehicle, required this.bundle});
+  const _OffersHero({
+    required this.vehicle,
+    required this.scope,
+    required this.offers,
+  });
 
   final Vehicle vehicle;
-  final CommercialOfferBundle bundle;
+  final _OfferScope scope;
+  final List<CommercialOffer> offers;
 
   @override
   Widget build(BuildContext context) {
-    final top = bundle.topOffer;
+    final top = offers.isEmpty ? null : offers.first;
+    final isPurchase = scope == _OfferScope.purchase;
 
     return Container(
       padding: const EdgeInsets.all(21),
@@ -367,8 +433,10 @@ class _OffersHero extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(
-                  Icons.local_offer_outlined,
+                child: Icon(
+                  isPurchase
+                      ? Icons.directions_car_filled_outlined
+                      : Icons.local_offer_outlined,
                   color: Colors.white,
                   size: 28,
                 ),
@@ -379,15 +447,20 @@ class _OffersHero extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Offres pour ${vehicle.displayName}',
+                      isPurchase
+                          ? 'Offres pour changer de ${vehicle.model}'
+                          : 'Offres pour ${vehicle.displayName}',
                       style: Theme.of(
                         context,
                       ).textTheme.titleLarge?.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${bundle.offers.length} offre(s) officielle(s) '
-                      'correspondent aux informations connues du véhicule.',
+                      isPurchase
+                          ? '${offers.length} offre(s) identifient le même '
+                                'modèle dans une source surveillée.'
+                          : '${offers.length} offre(s) correspondent aux '
+                                'informations connues du véhicule.',
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.80),
                         height: 1.4,
@@ -445,27 +518,70 @@ class _OffersHero extends StatelessWidget {
   }
 }
 
-class _GoodSensePanel extends StatelessWidget {
-  const _GoodSensePanel();
+class _ScopeSelector extends StatelessWidget {
+  const _ScopeSelector({
+    required this.selected,
+    required this.currentVehicleCount,
+    required this.purchaseCount,
+    required this.onSelected,
+  });
+
+  final _OfferScope selected;
+  final int currentVehicleCount;
+  final int purchaseCount;
+  final ValueChanged<_OfferScope> onSelected;
 
   @override
   Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ChoiceChip(
+          selected: selected == _OfferScope.currentVehicle,
+          onSelected: (_) => onSelected(_OfferScope.currentVehicle),
+          avatar: const Icon(Icons.build_circle_outlined, size: 18),
+          label: Text('Ma voiture ($currentVehicleCount)'),
+        ),
+        ChoiceChip(
+          selected: selected == _OfferScope.purchase,
+          onSelected: (_) => onSelected(_OfferScope.purchase),
+          avatar: const Icon(Icons.swap_horiz_rounded, size: 18),
+          label: Text('Changer ($purchaseCount)'),
+        ),
+      ],
+    );
+  }
+}
+
+class _GoodSensePanel extends StatelessWidget {
+  const _GoodSensePanel({required this.scope});
+
+  final _OfferScope scope;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPurchase = scope == _OfferScope.purchase;
+
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
         color: AppColors.successSoft,
         borderRadius: BorderRadius.circular(18),
       ),
-      child: const Row(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.lightbulb_outline_rounded, color: AppColors.success),
-          SizedBox(width: 10),
+          const Icon(Icons.lightbulb_outline_rounded, color: AppColors.success),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'AutoClair ne vous montre pas un catalogue publicitaire. '
-              'Les offres sont filtrées selon le véhicule et remontent en '
-              'priorité lorsqu’une échéance du carnet semble correspondre.',
+              isPurchase
+                  ? 'AutoClair ne montre ici que les campagnes dans '
+                        'lesquelles le même modèle est réellement identifié. '
+                        'Le coût total et les conditions restent à confirmer.'
+                  : 'Les offres sont filtrées selon le véhicule et remontent '
+                        'en priorité lorsqu’une échéance du carnet correspond.',
             ),
           ),
         ],
@@ -477,6 +593,7 @@ class _GoodSensePanel extends StatelessWidget {
 class _ViewSelector extends StatelessWidget {
   const _ViewSelector({
     required this.selected,
+    required this.showRelevant,
     required this.relevantCount,
     required this.totalCount,
     required this.savedCount,
@@ -484,6 +601,7 @@ class _ViewSelector extends StatelessWidget {
   });
 
   final _OfferView selected;
+  final bool showRelevant;
   final int relevantCount;
   final int totalCount;
   final int savedCount;
@@ -495,12 +613,13 @@ class _ViewSelector extends StatelessWidget {
       spacing: 8,
       runSpacing: 8,
       children: [
-        ChoiceChip(
-          selected: selected == _OfferView.relevant,
-          onSelected: (_) => onSelected(_OfferView.relevant),
-          avatar: const Icon(Icons.bolt_outlined, size: 18),
-          label: Text('Maintenant ($relevantCount)'),
-        ),
+        if (showRelevant)
+          ChoiceChip(
+            selected: selected == _OfferView.relevant,
+            onSelected: (_) => onSelected(_OfferView.relevant),
+            avatar: const Icon(Icons.bolt_outlined, size: 18),
+            label: Text('Maintenant ($relevantCount)'),
+          ),
         ChoiceChip(
           selected: selected == _OfferView.all,
           onSelected: (_) => onSelected(_OfferView.all),
@@ -523,6 +642,7 @@ class _CategorySelector extends StatelessWidget {
     required this.selected,
     required this.offers,
     required this.onSelected,
+    super.key,
   });
 
   final String selected;
@@ -635,6 +755,15 @@ class _CommercialOfferCard extends StatelessWidget {
                           label: offer.categoryLabel,
                           foreground: AppColors.primary,
                           background: AppColors.softPrimary,
+                        ),
+                        _SmallBadge(
+                          label: offer.contextLabel,
+                          foreground: offer.isPurchaseOffer
+                              ? AppColors.info
+                              : AppColors.success,
+                          background: offer.isPurchaseOffer
+                              ? AppColors.infoSoft
+                              : AppColors.successSoft,
                         ),
                         if (offer.relevantNow)
                           const _SmallBadge(
@@ -779,7 +908,7 @@ class _CommercialOfferCard extends StatelessWidget {
               if (offer.requiresExistingContract)
                 const _InfoLine(
                   title: 'Condition',
-                  value: 'Un contrat d’entretien valide est nécessaire.',
+                  value: 'Un contrat existant doit être confirmé.',
                 ),
               if (offer.requiresNetworkParticipation)
                 const _InfoLine(
@@ -787,6 +916,14 @@ class _CommercialOfferCard extends StatelessWidget {
                   value:
                       'La participation du réparateur ou du point de vente '
                       'doit être confirmée.',
+                ),
+              if (offer.autoExtracted)
+                _InfoLine(
+                  title: 'Extraction',
+                  value: offer.extractionConfidence == null
+                      ? 'Offre structurée automatiquement puis contrôlée.'
+                      : 'Offre structurée automatiquement avec un niveau de '
+                            'confiance de ${offer.extractionConfidence}/100.',
                 ),
               _InfoLine(
                 title: 'Source',
@@ -798,7 +935,7 @@ class _CommercialOfferCard extends StatelessWidget {
           FilledButton.icon(
             onPressed: disabled ? null : onOpen,
             icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('Voir l’offre officielle'),
+            label: const Text('Voir l’offre à la source'),
           ),
           const SizedBox(height: 8),
           Align(
@@ -877,36 +1014,45 @@ class _InfoLine extends StatelessWidget {
 
 class _EmptyOffersState extends StatelessWidget {
   const _EmptyOffersState({
+    required this.scope,
     required this.view,
     required this.category,
     required this.hasAnyOffers,
   });
 
+  final _OfferScope scope;
   final _OfferView view;
   final String category;
   final bool hasAnyOffers;
 
   @override
   Widget build(BuildContext context) {
+    final purchase = scope == _OfferScope.purchase;
+
     final title = switch (view) {
       _OfferView.relevant => 'Aucune offre prioritaire maintenant',
       _OfferView.saved => 'Aucune offre enregistrée',
       _ =>
         hasAnyOffers
             ? 'Aucune offre dans cette catégorie'
-            : 'Aucune offre officielle vérifiée',
+            : purchase
+            ? 'Aucune offre du même modèle vérifiée'
+            : 'Aucune offre compatible vérifiée',
     };
 
     final message = switch (view) {
       _OfferView.relevant =>
-        'Consultez l’onglet Toutes pour voir les offres compatibles qui '
-            'ne correspondent pas encore à une échéance du carnet.',
+        'Consultez Toutes pour voir les offres compatibles qui ne '
+            'correspondent pas encore à une échéance du carnet.',
       _OfferView.saved =>
         'Utilisez le marque-page sur une offre pour la retrouver ici.',
       _ =>
         category == 'ALL'
-            ? 'AutoClair n’affiche rien plutôt que de vous présenter une '
-                  'promotion expirée, trop ancienne ou insuffisamment vérifiée.'
+            ? purchase
+                  ? 'Le moteur ne montre pas une campagne de la même marque '
+                        'si le modèle configuré n’est pas clairement identifié.'
+                  : 'AutoClair préfère ne rien afficher plutôt qu’une promotion '
+                        'expirée, ambiguë ou insuffisamment vérifiée.'
             : 'Choisissez une autre catégorie.',
     };
 
@@ -964,10 +1110,10 @@ class _SourceStatusPanel extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '${bundle.activeSourceCount} source(s) officielle(s) active(s). '
-              '${sync == null ? 'La première vérification automatique est en cours.' : 'Dernière synchronisation réussie : ${_dateTime(sync)}.'} '
-              'Les campagnes non reconnues sont mises en attente et ne sont '
-              'pas montrées aux utilisateurs.',
+              '${bundle.activeSourceCount} source(s) surveillée(s). '
+              '${sync == null ? 'La première exploration est en cours.' : 'Dernière synchronisation réussie : ${_dateTime(sync)}.'} '
+              'Les extractions sûres sont publiées ; les cas ambigus restent '
+              'en quarantaine.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -991,10 +1137,10 @@ class _DisclaimerPanel extends StatelessWidget {
       ),
       child: Text(
         'AutoClair n’est ni le vendeur ni l’organisateur de ces offres. '
-        'Le prix, l’éligibilité, la disponibilité des pièces et la '
-        'participation du garage doivent toujours être confirmés sur la '
-        'page officielle ou auprès du réseau concerné. Aucun VIN ni numéro '
-        'd’immatriculation n’est transmis aux constructeurs.',
+        'Le prix total, le premier loyer, la reprise, le kilométrage, '
+        'l’éligibilité, la disponibilité et la participation du réseau '
+        'doivent être confirmés à la source. Aucun VIN ni numéro '
+        'd’immatriculation n’est transmis aux sites surveillés.',
         style: Theme.of(context).textTheme.bodySmall,
       ),
     );
@@ -1046,6 +1192,12 @@ String _categoryLabel(String category) {
     'WINDSCREEN' => 'Pare-brise',
     'CONTRACT' => 'Contrat d’entretien',
     'BODYWORK' => 'Carrosserie',
+    'PARTS' => 'Pièces',
+    'NEW_VEHICLE' => 'Véhicule neuf',
+    'USED_VEHICLE' => 'Véhicule d’occasion',
+    'FINANCE' => 'Financement',
+    'INSURANCE' => 'Assurance',
+    'ASSISTANCE' => 'Assistance',
     _ => 'Autres services',
   };
 }
@@ -1061,6 +1213,12 @@ IconData _categoryIcon(String category) {
     'WINDSCREEN' => Icons.car_repair_outlined,
     'CONTRACT' => Icons.assignment_outlined,
     'BODYWORK' => Icons.format_paint_outlined,
+    'PARTS' => Icons.settings_outlined,
+    'NEW_VEHICLE' => Icons.directions_car_filled_outlined,
+    'USED_VEHICLE' => Icons.car_rental_outlined,
+    'FINANCE' => Icons.payments_outlined,
+    'INSURANCE' => Icons.shield_outlined,
+    'ASSISTANCE' => Icons.support_agent_outlined,
     _ => Icons.local_offer_outlined,
   };
 }

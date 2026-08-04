@@ -23,6 +23,16 @@ class CommercialOfferBundle {
 
   int get savedCount => offers.where((offer) => offer.isSaved).length;
 
+  int get currentVehicleCount =>
+      offers.where((offer) => !offer.isPurchaseOffer).length;
+
+  int get purchaseCount =>
+      offers.where((offer) => offer.isPurchaseOffer).length;
+
+  int relevantNowCountForContext(String context) => offers
+      .where((offer) => offer.offerContext == context && offer.relevantNow)
+      .length;
+
   factory CommercialOfferBundle.fromMap(Map<String, dynamic> map) {
     final rawOffers = map['offers'];
 
@@ -57,6 +67,8 @@ class CommercialOffer {
     required this.title,
     required this.summary,
     required this.category,
+    required this.offerContext,
+    required this.targetingScope,
     required this.benefitKind,
     required this.benefitLabel,
     required this.currency,
@@ -75,6 +87,8 @@ class CommercialOffer {
     required this.requiresNetworkParticipation,
     required this.requiresExistingContract,
     required this.lastVerifiedAt,
+    required this.autoExtracted,
+    this.extractionConfidence,
     this.benefitValue,
     this.priceAmount,
     this.originalPriceAmount,
@@ -87,6 +101,8 @@ class CommercialOffer {
   final String title;
   final String summary;
   final String category;
+  final String offerContext;
+  final String targetingScope;
   final String benefitKind;
   final String benefitLabel;
   final double? benefitValue;
@@ -110,6 +126,16 @@ class CommercialOffer {
   final bool requiresNetworkParticipation;
   final bool requiresExistingContract;
   final DateTime lastVerifiedAt;
+  final bool autoExtracted;
+  final int? extractionConfidence;
+
+  bool get isPurchaseOffer => offerContext == 'VEHICLE_PURCHASE';
+
+  String get contextLabel => switch (offerContext) {
+    'VEHICLE_PURCHASE' => 'Changer de voiture',
+    'FINANCE_INSURANCE' => 'Financement et protection',
+    _ => 'Pour ma voiture',
+  };
 
   String get categoryLabel => switch (category) {
     'MAINTENANCE' => 'Entretien',
@@ -121,14 +147,30 @@ class CommercialOffer {
     'WINDSCREEN' => 'Pare-brise',
     'CONTRACT' => 'Contrat d’entretien',
     'BODYWORK' => 'Carrosserie',
+    'PARTS' => 'Pièces',
+    'NEW_VEHICLE' => 'Véhicule neuf',
+    'USED_VEHICLE' => 'Véhicule d’occasion',
+    'FINANCE' => 'Financement',
+    'INSURANCE' => 'Assurance',
+    'ASSISTANCE' => 'Assistance',
     _ => 'Service automobile',
   };
 
-  String get compatibilityLabel => switch (compatibility) {
-    'COMPATIBLE' => 'Compatible avec votre véhicule',
-    'LIKELY' => 'Probablement compatible',
-    _ => 'Conditions à vérifier',
-  };
+  String get compatibilityLabel {
+    if (isPurchaseOffer) {
+      return switch (compatibility) {
+        'COMPATIBLE' => 'Même modèle identifié',
+        'LIKELY' => 'Même modèle probablement identifié',
+        _ => 'Conditions commerciales à vérifier',
+      };
+    }
+
+    return switch (compatibility) {
+      'COMPATIBLE' => 'Compatible avec votre véhicule',
+      'LIKELY' => 'Probablement compatible',
+      _ => 'Conditions à vérifier',
+    };
+  }
 
   String get validityLabel {
     final end = endsAt;
@@ -172,6 +214,8 @@ class CommercialOffer {
       title: map['title']?.toString() ?? 'Offre officielle',
       summary: map['summary']?.toString() ?? '',
       category: map['category']?.toString() ?? 'OTHER',
+      offerContext: map['offer_context']?.toString() ?? 'CURRENT_VEHICLE',
+      targetingScope: map['targeting_scope']?.toString() ?? 'UNKNOWN',
       benefitKind: map['benefit_kind']?.toString() ?? 'INFO',
       benefitLabel: map['benefit_label']?.toString() ?? 'Avantage à vérifier',
       benefitValue: _nullableDecimal(map['benefit_value']),
@@ -203,6 +247,10 @@ class CommercialOffer {
       lastVerifiedAt:
           DateTime.tryParse(map['last_verified_at']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
+      autoExtracted: map['auto_extracted'] == true,
+      extractionConfidence: map['extraction_confidence'] == null
+          ? null
+          : _integer(map['extraction_confidence']),
     );
   }
 }

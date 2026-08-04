@@ -17,6 +17,8 @@ void main() {
           'title': 'Contrat d’entretien Volkswagen',
           'summary': 'Entretien courant pendant 24 mois.',
           'category': 'CONTRACT',
+          'offer_context': 'CURRENT_VEHICLE',
+          'targeting_scope': 'BRAND',
           'benefit_kind': 'INFO',
           'benefit_label': 'Contrat 24 mois',
           'currency': 'EUR',
@@ -39,6 +41,8 @@ void main() {
           'requires_manual_eligibility': false,
           'requires_network_participation': true,
           'requires_existing_contract': false,
+          'auto_extracted': true,
+          'extraction_confidence': 94,
           'last_verified_at': '2026-08-04T04:20:00Z',
         },
       ],
@@ -53,6 +57,11 @@ void main() {
       'Compatible avec votre véhicule',
     );
     expect(bundle.topOffer?.categoryLabel, 'Contrat d’entretien');
+    expect(bundle.currentVehicleCount, 1);
+    expect(bundle.purchaseCount, 0);
+    expect(bundle.topOffer?.contextLabel, 'Pour ma voiture');
+    expect(bundle.topOffer?.autoExtracted, isTrue);
+    expect(bundle.topOffer?.extractionConfidence, 94);
   });
 
   test('keeps uncertain eligibility explicit', () {
@@ -62,6 +71,8 @@ void main() {
       'title': 'Pack contrôle technique',
       'summary': 'Offre réseau.',
       'category': 'INSPECTION',
+      'offer_context': 'CURRENT_VEHICLE',
+      'targeting_scope': 'ALL_VEHICLES',
       'benefit_kind': 'FIXED_PRICE',
       'benefit_label': 'À partir de 99 €',
       'price_amount': 99,
@@ -95,6 +106,8 @@ void main() {
       'title': 'Accessoires',
       'summary': '',
       'category': 'ACCESSORIES',
+      'offer_context': 'CURRENT_VEHICLE',
+      'targeting_scope': 'BRAND',
       'benefit_kind': 'FIXED_PRICE',
       'benefit_label': 'Promotion',
       'price_amount': 120,
@@ -118,5 +131,86 @@ void main() {
     });
 
     expect(offer.calculatedSavings, 40);
+  });
+
+  test('separates purchase offers from current vehicle offers', () {
+    final bundle = CommercialOfferBundle.fromMap({
+      'vehicle_id': 'vehicle-a1',
+      'vehicle_name': 'Audi A1',
+      'generated_at': '2026-08-04T15:00:00Z',
+      'active_source_count': 88,
+      'active_offer_count': 2,
+      'offers': [
+        {
+          'id': 'service-1',
+          'offer_key': 'service',
+          'title': 'Programme Audi 5+',
+          'summary': 'Entretien.',
+          'category': 'MAINTENANCE',
+          'offer_context': 'CURRENT_VEHICLE',
+          'targeting_scope': 'BRAND',
+          'benefit_kind': 'PERCENT',
+          'benefit_label': '-20 %',
+          'currency': 'EUR',
+          'source_name': 'Audi France',
+          'official_url': 'https://www.audi.fr/service',
+          'conditions_summary': '',
+          'eligibility_notes': '',
+          'compatibility': 'COMPATIBLE',
+          'relevance_label': 'Pertinente',
+          'relevance_score': 72,
+          'relevant_now': false,
+          'expires_soon': false,
+          'is_saved': false,
+          'why': [],
+          'requires_manual_eligibility': false,
+          'requires_network_participation': true,
+          'requires_existing_contract': false,
+          'auto_extracted': true,
+          'extraction_confidence': 91,
+          'last_verified_at': '2026-08-04T14:00:00Z',
+        },
+        {
+          'id': 'purchase-1',
+          'offer_key': 'purchase',
+          'title': 'Audi A1 en LLD',
+          'summary': 'Même modèle.',
+          'category': 'NEW_VEHICLE',
+          'offer_context': 'VEHICLE_PURCHASE',
+          'targeting_scope': 'MODEL',
+          'benefit_kind': 'FROM_PRICE',
+          'benefit_label': 'À partir de 299 € par mois',
+          'price_amount': 299,
+          'currency': 'EUR',
+          'source_name': 'Audi France',
+          'official_url': 'https://www.audi.fr/a1',
+          'conditions_summary': '',
+          'eligibility_notes': '',
+          'compatibility': 'CHECK',
+          'relevance_label': 'À vérifier',
+          'relevance_score': 60,
+          'relevant_now': false,
+          'expires_soon': false,
+          'is_saved': false,
+          'why': [],
+          'requires_manual_eligibility': true,
+          'requires_network_participation': true,
+          'requires_existing_contract': false,
+          'auto_extracted': true,
+          'extraction_confidence': 96,
+          'last_verified_at': '2026-08-04T14:00:00Z',
+        },
+      ],
+    });
+
+    expect(bundle.currentVehicleCount, 1);
+    expect(bundle.purchaseCount, 1);
+    expect(bundle.offers.last.isPurchaseOffer, isTrue);
+    expect(bundle.offers.last.contextLabel, 'Changer de voiture');
+    expect(bundle.offers.last.categoryLabel, 'Véhicule neuf');
+    expect(
+      bundle.offers.last.compatibilityLabel,
+      'Conditions commerciales à vérifier',
+    );
   });
 }

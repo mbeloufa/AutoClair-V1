@@ -12,14 +12,14 @@ class CommercialOffersService {
 
   Future<CommercialOfferBundle> fetchVehicleOffers(
     String vehicleId, {
-    int limit = 60,
+    int limit = 120,
   }) async {
     try {
       final raw = await _client.rpc(
         'get_vehicle_commercial_offers',
         params: {
           'p_vehicle_id': vehicleId,
-          'p_limit': limit.clamp(1, 100).toInt(),
+          'p_limit': limit.clamp(1, 150).toInt(),
         },
       );
 
