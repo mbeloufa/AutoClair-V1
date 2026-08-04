@@ -12,7 +12,16 @@ class ParkingOffer {
     required this.parkAndRide,
     required this.covered,
     required this.sourceKind,
+    required this.availabilityStatus,
+    required this.realtime,
+    required this.confidence,
+    required this.smartScore,
+    required this.recommendationRank,
+    required this.recommendationReasons,
     this.capacity,
+    this.availableSpaces,
+    this.predictedAvailableSpaces,
+    this.predictionSamples,
     this.disabledSpaces,
     this.chargingSpaces,
     this.charge,
@@ -22,6 +31,10 @@ class ParkingOffer {
     this.phone,
     this.maxHeightM,
     this.surface,
+    this.availabilityUpdatedAt,
+    this.availabilitySource,
+    this.providerCode,
+    this.externalId,
   });
 
   final String parkingId;
@@ -37,6 +50,9 @@ class ParkingOffer {
   final bool covered;
   final String sourceKind;
   final int? capacity;
+  final int? availableSpaces;
+  final int? predictedAvailableSpaces;
+  final int? predictionSamples;
   final int? disabledSpaces;
   final int? chargingSpaces;
   final String? charge;
@@ -46,16 +62,39 @@ class ParkingOffer {
   final String? phone;
   final double? maxHeightM;
   final String? surface;
+  final String availabilityStatus;
+  final bool realtime;
+  final String confidence;
+  final DateTime? availabilityUpdatedAt;
+  final String? availabilitySource;
+  final String? providerCode;
+  final String? externalId;
+  final double smartScore;
+  final int recommendationRank;
+  final List<String> recommendationReasons;
 
   bool get isFree => fee == 'free';
-
   bool get isPaid => fee == 'paid';
-
   bool get hasAccessibleSpaces => (disabledSpaces ?? 0) > 0;
-
   bool get hasChargingSpaces => (chargingSpaces ?? 0) > 0;
-
   bool get hasContact => phone != null || website != null;
+  bool get isRecommended => recommendationRank == 1;
+  bool get hasPrediction =>
+      predictedAvailableSpaces != null && (predictionSamples ?? 0) >= 3;
+  bool get availabilityIsFresh => confidence == 'official_realtime';
+  bool get availabilityIsStale => confidence == 'official_stale';
+  bool get isOpen => availabilityStatus == 'open';
+  bool get isClosed => availabilityStatus == 'closed';
+  bool get isFull => availabilityStatus == 'full';
+  bool get hasKnownAvailability =>
+      availableSpaces != null && (availabilityIsFresh || availabilityIsStale);
+
+  double? get occupancyRate {
+    final total = capacity;
+    final available = availableSpaces;
+    if (total == null || available == null || total <= 0) return null;
+    return ((total - available) / total).clamp(0, 1);
+  }
 
   String get displayName {
     final trimmed = name.trim();
@@ -107,7 +146,48 @@ class ParkingOffer {
   String get distanceLabel =>
       '${distanceKm.toStringAsFixed(1).replaceAll('.', ',')} km';
 
+  String get availabilityLabel {
+    if (isClosed) return 'Fermé';
+    if (isFull) return 'Complet';
+    if (availabilityStatus == 'unavailable') {
+      return 'Temps réel indisponible';
+    }
+    final available = availableSpaces;
+    if (available != null && availabilityIsFresh) {
+      return '$available place${available == 1 ? '' : 's'} libre${available == 1 ? '' : 's'}';
+    }
+    if (available != null && availabilityIsStale) {
+      return '$available places — donnée ancienne';
+    }
+    return 'Disponibilité inconnue';
+  }
+
+  String get confidenceLabel {
+    return switch (confidence) {
+      'official_realtime' => 'Temps réel officiel',
+      'official_stale' => 'Donnée officielle ancienne',
+      'official_static' => 'Donnée officielle descriptive',
+      _ => 'Donnée cartographique',
+    };
+  }
+
+  String? availabilityAgeLabel(DateTime now) {
+    final updatedAt = availabilityUpdatedAt;
+    if (updatedAt == null) return null;
+    final difference = now.difference(updatedAt.toLocal());
+    if (difference.isNegative) return 'mise à jour récente';
+    if (difference.inMinutes < 1) return 'mise à jour à l’instant';
+    if (difference.inMinutes < 60) {
+      return 'mise à jour il y a ${difference.inMinutes} min';
+    }
+    if (difference.inHours < 24) {
+      return 'mise à jour il y a ${difference.inHours} h';
+    }
+    return 'mise à jour ancienne';
+  }
+
   factory ParkingOffer.fromJson(Map<String, dynamic> json) {
+    final reasons = json['recommendation_reasons'];
     return ParkingOffer(
       parkingId: _requiredString(json['parking_id'], 'parking_id'),
       name: _optionalString(json['name']) ?? '',
@@ -122,6 +202,11 @@ class ParkingOffer {
       covered: json['covered'] == true,
       sourceKind: _optionalString(json['source_kind']) ?? 'facility',
       capacity: _optionalInt(json['capacity']),
+      availableSpaces: _optionalInt(json['available_spaces']),
+      predictedAvailableSpaces: _optionalInt(
+        json['predicted_available_spaces'],
+      ),
+      predictionSamples: _optionalInt(json['prediction_samples']),
       disabledSpaces: _optionalInt(json['disabled_spaces']),
       chargingSpaces: _optionalInt(json['charging_spaces']),
       charge: _optionalString(json['charge']),
@@ -131,6 +216,24 @@ class ParkingOffer {
       phone: _optionalString(json['phone']),
       maxHeightM: _optionalDouble(json['max_height_m']),
       surface: _optionalString(json['surface']),
+      availabilityStatus:
+          _optionalString(json['availability_status']) ?? 'unknown',
+      realtime: json['realtime'] == true,
+      confidence: _optionalString(json['confidence']) ?? 'osm',
+      availabilityUpdatedAt: DateTime.tryParse(
+        json['availability_updated_at']?.toString() ?? '',
+      ),
+      availabilitySource: _optionalString(json['availability_source']),
+      providerCode: _optionalString(json['provider_code']),
+      externalId: _optionalString(json['external_id']),
+      smartScore: _optionalDouble(json['smart_score']) ?? 0,
+      recommendationRank: _optionalInt(json['recommendation_rank']) ?? 0,
+      recommendationReasons: reasons is List
+          ? reasons
+                .map((value) => value?.toString().trim() ?? '')
+                .where((value) => value.isNotEmpty)
+                .toList(growable: false)
+          : const [],
     );
   }
 
@@ -165,8 +268,39 @@ class ParkingOffer {
     if (value == null) return null;
     if (value is int) return value;
     if (value is num) return value.round();
-    final match = RegExp(r'\d+').firstMatch(value.toString());
+    final match = RegExp(r'-?\d+').firstMatch(value.toString());
     return match == null ? null : int.tryParse(match.group(0)!);
+  }
+}
+
+class ParkingProviderSummary {
+  const ParkingProviderSummary({
+    required this.code,
+    required this.name,
+    required this.status,
+    required this.records,
+    required this.realtime,
+    this.message,
+  });
+
+  final String code;
+  final String name;
+  final String status;
+  final int records;
+  final bool realtime;
+  final String? message;
+
+  bool get succeeded => status == 'ok';
+
+  factory ParkingProviderSummary.fromJson(Map<String, dynamic> json) {
+    return ParkingProviderSummary(
+      code: json['code']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'unknown',
+      records: ParkingOffer._optionalInt(json['records']) ?? 0,
+      realtime: json['realtime'] == true,
+      message: ParkingOffer._optionalString(json['message']),
+    );
   }
 }
 
@@ -178,6 +312,10 @@ class ParkingSearchResult {
     required this.sourceName,
     required this.availabilityDisclaimer,
     required this.truncated,
+    required this.providers,
+    required this.realtimeCoverage,
+    required this.recommendedParkingId,
+    required this.historyEnabled,
     this.osmBase,
   });
 
@@ -188,4 +326,8 @@ class ParkingSearchResult {
   final String availabilityDisclaimer;
   final bool truncated;
   final DateTime? osmBase;
+  final List<ParkingProviderSummary> providers;
+  final bool realtimeCoverage;
+  final String? recommendedParkingId;
+  final bool historyEnabled;
 }

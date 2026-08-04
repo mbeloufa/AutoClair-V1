@@ -17,17 +17,22 @@ class ParkingPage extends StatefulWidget {
 
 class _ParkingPageState extends State<ParkingPage> {
   static const _radiusChoices = <double>[1, 3, 5, 10, 20];
+  static const _arrivalChoices = <int>[0, 15, 30, 60];
 
   final _parkingService = ParkingService();
   final _locationService = TechnicalControlLocationService();
 
   List<ParkingOffer> _offers = const [];
-  Position? _lastPosition;
+  List<ParkingProviderSummary> _providers = const [];
+  Position? _position;
   String? _selectedParkingId;
+  String? _recommendedParkingId;
   String _parkingType = 'all';
-  String _sortBy = 'distance';
+  String _sortBy = 'recommendation';
+  String _preference = 'availability';
   String _viewMode = 'map';
   double _radiusKm = 5;
+  int _arrivalMinutes = 15;
   bool _freeOnly = false;
   bool _accessibleOnly = false;
   bool _evOnly = false;
@@ -36,11 +41,13 @@ class _ParkingPageState extends State<ParkingPage> {
   bool _openLocationServices = false;
   bool _cacheHit = false;
   bool _truncated = false;
+  bool _realtimeCoverage = false;
+  bool _historyEnabled = false;
   DateTime? _sourceFetchedAt;
   DateTime? _osmBase;
-  String _sourceName = 'OpenStreetMap via Overpass';
+  String _sourceName = 'OpenStreetMap et flux officiels locaux';
   String _availabilityDisclaimer =
-      'La disponibilité en temps réel n’est pas fournie.';
+      'La disponibilité dépend des flux publiés par les exploitants.';
   String? _errorMessage;
 
   Future<void> _search() async {
@@ -73,6 +80,8 @@ class _ParkingPageState extends State<ParkingPage> {
         radiusKm: _radiusKm,
         parkingType: _parkingType,
         sortBy: _sortBy,
+        preference: _preference,
+        arrivalMinutes: _arrivalMinutes,
         freeOnly: _freeOnly,
         accessibleOnly: _accessibleOnly,
         evOnly: _evOnly,
@@ -82,18 +91,23 @@ class _ParkingPageState extends State<ParkingPage> {
       final selectedParkingId =
           result.offers.any((offer) => offer.parkingId == previousSelection)
           ? previousSelection
-          : (result.offers.isEmpty ? null : result.offers.first.parkingId);
+          : result.recommendedParkingId ??
+                (result.offers.isEmpty ? null : result.offers.first.parkingId);
 
       if (!mounted) return;
       setState(() {
-        _lastPosition = position;
+        _position = position;
         _offers = result.offers;
+        _providers = result.providers;
         _selectedParkingId = selectedParkingId;
+        _recommendedParkingId = result.recommendedParkingId;
         _cacheHit = result.cacheHit;
         _sourceFetchedAt = result.sourceFetchedAt;
         _sourceName = result.sourceName;
         _availabilityDisclaimer = result.availabilityDisclaimer;
         _truncated = result.truncated;
+        _realtimeCoverage = result.realtimeCoverage;
+        _historyEnabled = result.historyEnabled;
         _osmBase = result.osmBase;
         _searching = false;
         _errorMessage = null;
@@ -109,29 +123,47 @@ class _ParkingPageState extends State<ParkingPage> {
     }
   }
 
-  void _resetResults() {
-    _offers = const [];
-    _selectedParkingId = null;
-    _lastPosition = null;
-    _sourceFetchedAt = null;
-    _osmBase = null;
-    _cacheHit = false;
-    _truncated = false;
-    _errorMessage = null;
-  }
-
-  Future<void> _changeSort(String sortBy) async {
-    if (_sortBy == sortBy) return;
-    setState(() => _sortBy = sortBy);
-
-    final position = _lastPosition;
+  Future<void> _refreshSearch() async {
+    final position = _position;
     if (position == null) return;
-
     setState(() {
       _searching = true;
       _errorMessage = null;
     });
     await _searchAt(position);
+  }
+
+  void _resetResults() {
+    _offers = const [];
+    _providers = const [];
+    _position = null;
+    _selectedParkingId = null;
+    _recommendedParkingId = null;
+    _sourceFetchedAt = null;
+    _osmBase = null;
+    _cacheHit = false;
+    _truncated = false;
+    _realtimeCoverage = false;
+    _historyEnabled = false;
+    _errorMessage = null;
+  }
+
+  Future<void> _setPreference(String value) async {
+    if (_preference == value) return;
+    setState(() => _preference = value);
+    await _refreshSearch();
+  }
+
+  Future<void> _setSort(String value) async {
+    if (_sortBy == value) return;
+    setState(() => _sortBy = value);
+    await _refreshSearch();
+  }
+
+  Future<void> _setArrival(int value) async {
+    if (_arrivalMinutes == value) return;
+    setState(() => _arrivalMinutes = value);
+    await _refreshSearch();
   }
 
   Future<void> _openSettings() async {
@@ -193,16 +225,16 @@ class _ParkingPageState extends State<ParkingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Parkings autour de moi')),
+      appBar: AppBar(title: const Text('Parking intelligent')),
       body: RefreshIndicator(
         onRefresh: _search,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
           children: [
-            const _IntroductionCard(),
+            const _HeroCard(),
             const SizedBox(height: 20),
-            _buildSearchForm(context),
+            _searchCard(context),
             if (_errorMessage != null) ...[
               const SizedBox(height: 14),
               _ErrorPanel(
@@ -213,14 +245,14 @@ class _ParkingPageState extends State<ParkingPage> {
               ),
             ],
             const SizedBox(height: 24),
-            _buildResults(context),
+            _results(context),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSearchForm(BuildContext context) {
+  Widget _searchCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -231,6 +263,65 @@ class _ParkingPageState extends State<ParkingPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            'Votre priorité',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _PreferenceChip(
+                label: 'Trouver une place',
+                icon: Icons.bolt_rounded,
+                selected: _preference == 'availability',
+                onTap: () => _setPreference('availability'),
+              ),
+              _PreferenceChip(
+                label: 'Plus proche',
+                icon: Icons.near_me_rounded,
+                selected: _preference == 'closest',
+                onTap: () => _setPreference('closest'),
+              ),
+              _PreferenceChip(
+                label: 'Économiser',
+                icon: Icons.savings_outlined,
+                selected: _preference == 'free',
+                onTap: () => _setPreference('free'),
+              ),
+              _PreferenceChip(
+                label: 'Recharge',
+                icon: Icons.ev_station_rounded,
+                selected: _preference == 'ev',
+                onTap: () => _setPreference('ev'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          DropdownButtonFormField<int>(
+            initialValue: _arrivalMinutes,
+            decoration: const InputDecoration(
+              labelText: 'Arrivée prévue',
+              prefixIcon: Icon(Icons.schedule_rounded),
+            ),
+            items: _arrivalChoices
+                .map(
+                  (minutes) => DropdownMenuItem(
+                    value: minutes,
+                    child: Text(
+                      minutes == 0 ? 'Maintenant' : 'Dans $minutes minutes',
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: _searching
+                ? null
+                : (value) {
+                    if (value != null) _setArrival(value);
+                  },
+          ),
+          const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             initialValue: _parkingType,
             decoration: const InputDecoration(
@@ -291,50 +382,41 @@ class _ParkingPageState extends State<ParkingPage> {
                     });
                   },
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           _FilterSwitch(
-            title: 'Uniquement les parkings gratuits',
-            subtitle:
-                'Les parkings dont le tarif n’est pas renseigné sont exclus.',
+            title: 'Gratuits uniquement',
+            subtitle: 'Les tarifs inconnus sont exclus.',
             value: _freeOnly,
             onChanged: _searching
                 ? null
-                : (value) {
-                    setState(() {
-                      _freeOnly = value;
-                      _resetResults();
-                    });
-                  },
+                : (value) => setState(() {
+                    _freeOnly = value;
+                    _resetResults();
+                  }),
           ),
           _FilterSwitch(
             title: 'Places PMR déclarées',
-            subtitle:
-                'Affiche les parkings mentionnant au moins une place accessible.',
+            subtitle: 'Au moins une place accessible renseignée.',
             value: _accessibleOnly,
             onChanged: _searching
                 ? null
-                : (value) {
-                    setState(() {
-                      _accessibleOnly = value;
-                      _resetResults();
-                    });
-                  },
+                : (value) => setState(() {
+                    _accessibleOnly = value;
+                    _resetResults();
+                  }),
           ),
           _FilterSwitch(
-            title: 'Places avec recharge déclarée',
-            subtitle:
-                'Affiche les parkings mentionnant des emplacements de recharge.',
+            title: 'Recharge déclarée',
+            subtitle: 'Au moins un emplacement de recharge renseigné.',
             value: _evOnly,
             onChanged: _searching
                 ? null
-                : (value) {
-                    setState(() {
-                      _evOnly = value;
-                      _resetResults();
-                    });
-                  },
+                : (value) => setState(() {
+                    _evOnly = value;
+                    _resetResults();
+                  }),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _searching ? null : _search,
             icon: _searching
@@ -345,9 +427,9 @@ class _ParkingPageState extends State<ParkingPage> {
                       color: Colors.white,
                     ),
                   )
-                : const Icon(Icons.my_location_rounded),
+                : const Icon(Icons.auto_awesome_rounded),
             label: Text(
-              _searching ? 'Recherche en cours…' : 'Rechercher autour de moi',
+              _searching ? 'Analyse en cours…' : 'Trouver le meilleur parking',
             ),
           ),
         ],
@@ -355,21 +437,22 @@ class _ParkingPageState extends State<ParkingPage> {
     );
   }
 
-  Widget _buildResults(BuildContext context) {
-    if (_lastPosition == null && !_searching && _errorMessage == null) {
+  Widget _results(BuildContext context) {
+    if (_position == null && !_searching && _errorMessage == null) {
       return const _MessagePanel(
-        icon: Icons.local_parking_rounded,
-        title: 'Trouvez un stationnement adapté',
+        icon: Icons.auto_awesome_rounded,
+        title: 'Plus qu’une simple recherche',
         message:
-            'Lancez la recherche pour afficher les parkings publics, les parcs relais et les zones de stationnement cartographiées autour de vous.',
+            'AutoClair combine distance, disponibilité officielle, fraîcheur des données et vos préférences.',
       );
     }
 
     if (_searching && _offers.isEmpty) {
       return const _MessagePanel(
         icon: Icons.travel_explore_rounded,
-        title: 'Recherche des parkings proches',
-        message: 'La carte est en cours d’interrogation.',
+        title: 'Analyse des solutions proches',
+        message:
+            'La carte nationale et les flux officiels disponibles sont interrogés.',
         showProgress: true,
       );
     }
@@ -377,6 +460,12 @@ class _ParkingPageState extends State<ParkingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _CoverageBanner(
+          realtimeCoverage: _realtimeCoverage,
+          providers: _providers,
+          historyEnabled: _historyEnabled,
+        ),
+        const SizedBox(height: 14),
         Row(
           children: [
             Expanded(
@@ -393,28 +482,30 @@ class _ParkingPageState extends State<ParkingPage> {
           ],
         ),
         const SizedBox(height: 10),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(
-              value: 'distance',
-              icon: Icon(Icons.near_me_outlined),
-              label: Text('Distance'),
+        DropdownButtonFormField<String>(
+          initialValue: _sortBy,
+          decoration: const InputDecoration(
+            labelText: 'Classement',
+            prefixIcon: Icon(Icons.sort_rounded),
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: 'recommendation',
+              child: Text('Recommandation AutoClair'),
             ),
-            ButtonSegment(
-              value: 'capacity',
-              icon: Icon(Icons.directions_car_filled_outlined),
-              label: Text('Places'),
+            DropdownMenuItem(
+              value: 'availability',
+              child: Text('Places disponibles'),
             ),
-            ButtonSegment(
-              value: 'free',
-              icon: Icon(Icons.euro_rounded),
-              label: Text('Gratuit'),
-            ),
+            DropdownMenuItem(value: 'distance', child: Text('Distance')),
+            DropdownMenuItem(value: 'capacity', child: Text('Capacité')),
+            DropdownMenuItem(value: 'free', child: Text('Gratuité')),
           ],
-          selected: {_sortBy},
-          onSelectionChanged: _searching
+          onChanged: _searching
               ? null
-              : (selection) => _changeSort(selection.first),
+              : (value) {
+                  if (value != null) _setSort(value);
+                },
         ),
         const SizedBox(height: 10),
         SegmentedButton<String>(
@@ -435,25 +526,24 @@ class _ParkingPageState extends State<ParkingPage> {
           onSelectionChanged: (selection) {
             setState(() {
               _viewMode = selection.first;
-              if (_selectedParkingId == null && _offers.isNotEmpty) {
-                _selectedParkingId = _offers.first.parkingId;
-              }
+              _selectedParkingId ??=
+                  _recommendedParkingId ??
+                  (_offers.isEmpty ? null : _offers.first.parkingId);
             });
           },
         ),
         if (_sourceFetchedAt != null) ...[
           const SizedBox(height: 10),
           Text(
-            'Données récupérées le ${_dateTime(_sourceFetchedAt!)}'
-            '${_cacheHit ? ' • cache récent' : ''}',
+            'Recherche réalisée le ${_dateTime(_sourceFetchedAt!)}'
+            '${_cacheHit ? ' • résultat récent réutilisé' : ''}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
         if (_truncated) ...[
           const SizedBox(height: 10),
           const _WarningBanner(
-            message:
-                'De nombreux parkings ont été trouvés. Seuls les résultats les plus pertinents sont affichés.',
+            message: 'Seuls les résultats les plus pertinents sont affichés.',
           ),
         ],
         const SizedBox(height: 14),
@@ -465,7 +555,7 @@ class _ParkingPageState extends State<ParkingPage> {
                 'Aucun stationnement correspondant aux filtres n’a été trouvé dans un rayon de ${_radiusKm.toInt()} km.',
           )
         else if (_viewMode == 'map')
-          _buildMapResults(context)
+          _map(context)
         else
           for (var index = 0; index < _offers.length; index++) ...[
             _ParkingCard(
@@ -485,29 +575,27 @@ class _ParkingPageState extends State<ParkingPage> {
           sourceName: _sourceName,
           osmBase: _osmBase,
           availabilityDisclaimer: _availabilityDisclaimer,
+          providers: _providers,
         ),
       ],
     );
   }
 
-  Widget _buildMapResults(BuildContext context) {
-    final position = _lastPosition;
+  Widget _map(BuildContext context) {
+    final position = _position;
     if (position == null || _offers.isEmpty) return const SizedBox.shrink();
 
-    ParkingOffer selectedOffer = _offers.first;
+    var selected = _offers.first;
     for (final offer in _offers) {
-      if (offer.parkingId == _selectedParkingId) {
-        selectedOffer = offer;
-        break;
-      }
+      if (offer.parkingId == _selectedParkingId) selected = offer;
     }
 
-    final mapHeight = (MediaQuery.sizeOf(context).height * 0.72)
+    final height = (MediaQuery.sizeOf(context).height * 0.72)
         .clamp(560.0, 760.0)
         .toDouble();
 
     return SizedBox(
-      height: mapHeight,
+      height: height,
       child: ComparisonMapView(
         key: ValueKey(
           'parking-map-${_sourceFetchedAt?.millisecondsSinceEpoch ?? 0}',
@@ -521,43 +609,50 @@ class _ParkingPageState extends State<ParkingPage> {
                 latitude: offer.latitude,
                 longitude: offer.longitude,
                 label: _markerLabel(offer),
-                icon: offer.parkAndRide
+                icon: offer.isRecommended
+                    ? Icons.auto_awesome_rounded
+                    : offer.parkAndRide
                     ? Icons.directions_bus_rounded
                     : Icons.local_parking_rounded,
                 color: _markerColor(offer),
               ),
             )
             .toList(growable: false),
-        selectedMarkerId: selectedOffer.parkingId,
+        selectedMarkerId: selected.parkingId,
         onMarkerSelected: (parkingId) {
           setState(() => _selectedParkingId = parkingId);
         },
         sheetBuilder: (context, controller) => _ParkingMapSheet(
           controller: controller,
-          offer: selectedOffer,
-          onDirections: () => _openDirections(selectedOffer),
-          onCall: selectedOffer.phone == null
+          offer: selected,
+          onDirections: () => _openDirections(selected),
+          onCall: selected.phone == null ? null : () => _callOperator(selected),
+          onWebsite: selected.website == null
               ? null
-              : () => _callOperator(selectedOffer),
-          onWebsite: selectedOffer.website == null
-              ? null
-              : () => _openWebsite(selectedOffer),
+              : () => _openWebsite(selected),
         ),
       ),
     );
   }
 
   static String _markerLabel(ParkingOffer offer) {
+    if (offer.isClosed) return 'Fermé';
+    if (offer.isFull) return 'Complet';
+    if (offer.availableSpaces != null && offer.availabilityIsFresh) {
+      return '${offer.availableSpaces} libres';
+    }
+    if (offer.isRecommended) return 'Conseillé';
     if (offer.parkAndRide) return 'P+R';
     if (offer.isFree) return 'Gratuit';
-    final capacity = offer.capacity;
-    if (capacity != null) return '$capacity pl.';
-    return 'Parking';
+    return offer.capacity == null ? 'Parking' : '${offer.capacity} pl.';
   }
 
   static Color _markerColor(ParkingOffer offer) {
+    if (offer.isClosed || offer.isFull) return AppColors.error;
+    if (offer.isRecommended) return AppColors.success;
+    if (offer.availabilityIsFresh) return AppColors.info;
     if (offer.isFree) return AppColors.success;
-    if (offer.parkAndRide) return AppColors.info;
+    if (offer.parkAndRide) return AppColors.warning;
     return AppColors.primary;
   }
 
@@ -571,8 +666,8 @@ class _ParkingPageState extends State<ParkingPage> {
   }
 }
 
-class _IntroductionCard extends StatelessWidget {
-  const _IntroductionCard();
+class _HeroCard extends StatelessWidget {
+  const _HeroCard();
 
   @override
   Widget build(BuildContext context) {
@@ -597,7 +692,7 @@ class _IntroductionCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(15),
             ),
             child: const Icon(
-              Icons.local_parking_rounded,
+              Icons.auto_awesome_rounded,
               color: Colors.white,
               size: 29,
             ),
@@ -608,14 +703,14 @@ class _IntroductionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Le bon stationnement autour de vous',
+                  'Le meilleur choix, pas seulement le plus proche',
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(color: Colors.white),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Parkings publics, parcs relais, capacité déclarée, accès PMR et recharge lorsque ces informations sont disponibles.',
+                  'Disponibilité officielle, distance, fiabilité, équipements et historique observé.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Colors.white.withValues(alpha: 0.82),
                   ),
@@ -625,6 +720,30 @@ class _IntroductionCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PreferenceChip extends StatelessWidget {
+  const _PreferenceChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      selected: selected,
+      onSelected: (_) => onTap(),
+      avatar: Icon(icon, size: 18),
+      label: Text(label),
     );
   }
 }
@@ -654,6 +773,59 @@ class _FilterSwitch extends StatelessWidget {
   }
 }
 
+class _CoverageBanner extends StatelessWidget {
+  const _CoverageBanner({
+    required this.realtimeCoverage,
+    required this.providers,
+    required this.historyEnabled,
+  });
+
+  final bool realtimeCoverage;
+  final List<ParkingProviderSummary> providers;
+  final bool historyEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final names = providers
+        .where((provider) => provider.succeeded && provider.realtime)
+        .map((provider) => provider.name)
+        .where((name) => name.isNotEmpty)
+        .join(', ');
+
+    final color = realtimeCoverage ? AppColors.success : AppColors.info;
+    final background = realtimeCoverage
+        ? AppColors.successSoft
+        : AppColors.infoSoft;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            realtimeCoverage ? Icons.sensors_rounded : Icons.public_rounded,
+            color: color,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              realtimeCoverage
+                  ? 'Temps réel officiel : $names'
+                        '${historyEnabled ? '\nHistorique AutoClair actif.' : ''}'
+                  : 'Aucun flux temps réel officiel compatible dans cette zone. La couverture cartographique nationale reste disponible.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ParkingMapSheet extends StatelessWidget {
   const _ParkingMapSheet({
     required this.controller,
@@ -675,59 +847,6 @@ class _ParkingMapSheet extends StatelessWidget {
       controller: controller,
       padding: const EdgeInsets.fromLTRB(18, 8, 18, 28),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.softPrimary,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                offer.parkAndRide
-                    ? Icons.directions_bus_rounded
-                    : Icons.local_parking_rounded,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    offer.displayName,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    offer.address.isEmpty ? offer.typeLabel : offer.address,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              offer.distanceLabel,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: AppColors.primary),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Text(
-          'Faites glisser ce panneau vers le haut pour afficher tous les détails.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 14),
-        const Divider(),
-        const SizedBox(height: 14),
         _ParkingCard(
           offer: offer,
           onDirections: onDirections,
@@ -754,46 +873,25 @@ class _ParkingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badges = <Widget>[
-      _Badge(label: offer.typeLabel, icon: Icons.local_parking_rounded),
-      _Badge(
-        label: offer.feeLabel,
-        icon: offer.isFree ? Icons.money_off_rounded : Icons.euro_rounded,
-        positive: offer.isFree,
-      ),
-      if (offer.capacity != null)
-        _Badge(
-          label: offer.capacityLabel,
-          icon: Icons.directions_car_filled_outlined,
-        ),
-      if (offer.parkAndRide)
-        const _Badge(label: 'Parc relais', icon: Icons.directions_bus_rounded),
-      if (offer.hasAccessibleSpaces)
-        _Badge(
-          label:
-              '${offer.disabledSpaces} place${offer.disabledSpaces == 1 ? '' : 's'} PMR',
-          icon: Icons.accessible_rounded,
-        ),
-      if (offer.hasChargingSpaces)
-        _Badge(
-          label:
-              '${offer.chargingSpaces} place${offer.chargingSpaces == 1 ? '' : 's'} avec recharge',
-          icon: Icons.ev_station_rounded,
-        ),
-      if (offer.covered)
-        const _Badge(label: 'Couvert', icon: Icons.roofing_rounded),
-    ];
-
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(
+          color: offer.isRecommended
+              ? AppColors.success.withValues(alpha: 0.45)
+              : AppColors.border,
+          width: offer.isRecommended ? 1.5 : 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (offer.isRecommended) ...[
+            const _RecommendationBanner(),
+            const SizedBox(height: 14),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -801,16 +899,24 @@ class _ParkingCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: offer.isFree
+                  color: offer.isRecommended
                       ? AppColors.successSoft
+                      : offer.availabilityIsFresh
+                      ? AppColors.infoSoft
                       : AppColors.softPrimary,
                   borderRadius: BorderRadius.circular(15),
                 ),
                 child: Icon(
-                  offer.parkAndRide
+                  offer.isRecommended
+                      ? Icons.auto_awesome_rounded
+                      : offer.parkAndRide
                       ? Icons.directions_bus_rounded
                       : Icons.local_parking_rounded,
-                  color: offer.isFree ? AppColors.success : AppColors.primary,
+                  color: offer.isRecommended
+                      ? AppColors.success
+                      : offer.availabilityIsFresh
+                      ? AppColors.info
+                      : AppColors.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -831,27 +937,98 @@ class _ParkingCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(
-                offer.distanceLabel,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(color: AppColors.primary),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    offer.distanceLabel,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleMedium?.copyWith(color: AppColors.primary),
+                  ),
+                  Text(
+                    '${offer.smartScore.round()}/100',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(spacing: 7, runSpacing: 7, children: badges),
-          if (offer.openingHours != null ||
-              offer.operatorName != null ||
-              offer.maxHeightM != null ||
-              offer.surface != null) ...[
-            const SizedBox(height: 14),
-            const Divider(),
+          const SizedBox(height: 14),
+          _AvailabilityPanel(offer: offer),
+          if (offer.recommendationReasons.isNotEmpty) ...[
             const SizedBox(height: 12),
+            for (final reason in offer.recommendationReasons.take(3))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 17,
+                      color: AppColors.success,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        reason,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 7,
+            runSpacing: 7,
+            children: [
+              _Badge(label: offer.typeLabel, icon: Icons.local_parking_rounded),
+              _Badge(
+                label: offer.feeLabel,
+                icon: offer.isFree
+                    ? Icons.money_off_rounded
+                    : Icons.euro_rounded,
+                positive: offer.isFree,
+              ),
+              if (offer.capacity != null)
+                _Badge(
+                  label: offer.capacityLabel,
+                  icon: Icons.directions_car_filled_outlined,
+                ),
+              if (offer.parkAndRide)
+                const _Badge(
+                  label: 'Parc relais',
+                  icon: Icons.directions_bus_rounded,
+                ),
+              if (offer.hasAccessibleSpaces)
+                _Badge(
+                  label: '${offer.disabledSpaces} places PMR',
+                  icon: Icons.accessible_rounded,
+                ),
+              if (offer.hasChargingSpaces)
+                _Badge(
+                  label: '${offer.chargingSpaces} avec recharge',
+                  icon: Icons.ev_station_rounded,
+                ),
+              if (offer.covered)
+                const _Badge(label: 'Couvert', icon: Icons.roofing_rounded),
+            ],
+          ),
+          if (offer.operatorName != null ||
+              offer.openingHours != null ||
+              offer.maxHeightM != null) ...[
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 10),
             if (offer.openingHours != null)
               _DetailRow(
                 icon: Icons.schedule_rounded,
-                label: 'Horaires déclarés',
+                label: 'Horaires',
                 value: offer.openingHours!,
               ),
             if (offer.operatorName != null)
@@ -867,16 +1044,8 @@ class _ParkingCard extends StatelessWidget {
                 value:
                     '${offer.maxHeightM!.toStringAsFixed(1).replaceAll('.', ',')} m',
               ),
-            if (offer.surface != null)
-              _DetailRow(
-                icon: Icons.layers_outlined,
-                label: 'Revêtement',
-                value: offer.surface!,
-              ),
           ],
-          const SizedBox(height: 14),
-          Text(offer.accessLabel, style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: onDirections,
             icon: const Icon(Icons.directions_rounded),
@@ -913,6 +1082,99 @@ class _ParkingCard extends StatelessWidget {
   }
 }
 
+class _RecommendationBanner extends StatelessWidget {
+  const _RecommendationBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.successSoft,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.auto_awesome_rounded,
+            size: 19,
+            color: AppColors.success,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Recommandation AutoClair',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: AppColors.success,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AvailabilityPanel extends StatelessWidget {
+  const _AvailabilityPanel({required this.offer});
+  final ParkingOffer offer;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = offer.isClosed || offer.isFull;
+    final color = error
+        ? AppColors.error
+        : offer.availabilityIsFresh
+        ? AppColors.success
+        : offer.availabilityIsStale
+        ? AppColors.warning
+        : AppColors.info;
+    final background = error
+        ? AppColors.errorSoft
+        : offer.availabilityIsFresh
+        ? AppColors.successSoft
+        : offer.availabilityIsStale
+        ? AppColors.warningSoft
+        : AppColors.infoSoft;
+    final age = offer.availabilityAgeLabel(DateTime.now());
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            offer.availabilityLabel,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${offer.confidenceLabel}'
+            '${age == null ? '' : ' • $age'}'
+            '${offer.availabilitySource == null ? '' : ' • ${offer.availabilitySource}'}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (offer.hasPrediction) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Historique AutoClair : environ ${offer.predictedAvailableSpaces} places habituellement disponibles à cette heure '
+              '(${offer.predictionSamples} observations).',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _Badge extends StatelessWidget {
   const _Badge({
     required this.label,
@@ -928,7 +1190,6 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground = positive ? AppColors.success : AppColors.primary;
     final background = positive ? AppColors.successSoft : AppColors.softPrimary;
-
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
       decoration: BoxDecoration(
@@ -1008,7 +1269,6 @@ class _ErrorPanel extends StatelessWidget {
         border: Border.all(color: AppColors.error.withValues(alpha: 0.22)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1086,7 +1346,6 @@ class _MessagePanel extends StatelessWidget {
 
 class _WarningBanner extends StatelessWidget {
   const _WarningBanner({required this.message});
-
   final String message;
 
   @override
@@ -1115,18 +1374,24 @@ class _SourceNote extends StatelessWidget {
     required this.sourceName,
     required this.osmBase,
     required this.availabilityDisclaimer,
+    required this.providers,
   });
 
   final String sourceName;
   final DateTime? osmBase;
   final String availabilityDisclaimer;
+  final List<ParkingProviderSummary> providers;
 
   @override
   Widget build(BuildContext context) {
-    final base = osmBase;
-    final baseLabel = base == null
+    final providerLabels = providers
+        .where((provider) => provider.succeeded)
+        .map((provider) => provider.name)
+        .where((name) => name.isNotEmpty)
+        .join(', ');
+    final baseLabel = osmBase == null
         ? null
-        : 'Mise à jour cartographique : ${_ParkingPageState._dateTime(base)}';
+        : _ParkingPageState._dateTime(osmBase!);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1141,10 +1406,10 @@ class _SourceNote extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Source : $sourceName — © contributeurs OpenStreetMap.'
-              '${baseLabel == null ? '' : '\n$baseLabel'}'
-              '\n$availabilityDisclaimer '
-              'Les tarifs, horaires, accès et capacités doivent être vérifiés auprès de l’exploitant.',
+              'Sources : $sourceName — © contributeurs OpenStreetMap.'
+              '${providerLabels.isEmpty ? '' : '\nFlux officiels : $providerLabels.'}'
+              '${baseLabel == null ? '' : '\nCarte mise à jour : $baseLabel.'}'
+              '\n$availabilityDisclaimer',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),

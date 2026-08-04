@@ -1,83 +1,62 @@
-import { authenticate } from "../_shared/auth.ts";
-import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import {
+  authenticate,
+  type AuthContext,
+} from "../_shared/auth.ts";
+import {
+  corsHeaders,
+  jsonResponse,
+} from "../_shared/cors.ts";
 import {
   asBoolean,
   asInteger,
   asNumber,
   asString,
-  isRecord,
+  clamp,
   readJsonBody,
   safeError,
+  sha256Hex,
   type JsonMap,
 } from "../_shared/utils.ts";
+import {
+  fetchOfficialProviders,
+  fetchOsm,
+  haversineKm,
+  mergeSources,
+} from "./providers.ts";
+import {
+  type ParkingResult,
+  type Prediction,
+  type ProviderSummary,
+} from "./types.ts";
 
 type CacheEntry = {
   expiresAt: number;
   payload: JsonMap;
 };
 
-type OsmElement = JsonMap & {
-  type?: unknown;
-  id?: unknown;
-  lat?: unknown;
-  lon?: unknown;
-  center?: unknown;
-  tags?: unknown;
-};
-
-type ParkingResult = {
-  parking_id: string;
-  name: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-  distance_km: number;
-  parking_type: string;
-  access: string;
-  fee: "free" | "paid" | "unknown";
-  charge: string | null;
-  capacity: number | null;
-  disabled_spaces: number | null;
-  charging_spaces: number | null;
-  park_and_ride: boolean;
-  covered: boolean;
-  opening_hours: string | null;
-  operator: string | null;
-  website: string | null;
-  phone: string | null;
-  max_height_m: number | null;
-  surface: string | null;
-  source_kind: "facility" | "entrance";
-};
-
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 3 * 60 * 1000;
 const MAX_RADIUS_KM = 20;
 const MAX_RESULTS = 100;
 const cache = new Map<string, CacheEntry>();
-
-const OVERPASS_ENDPOINTS = [
-  "https://overpass-api.de/api/interpreter",
-  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-];
 
 function statusForError(message: string): number {
   if (
     message === "AUTHENTICATION_REQUIRED" ||
     message === "INVALID_OR_EXPIRED_TOKEN"
   ) return 401;
+
   if (
     message === "INVALID_JSON_BODY" ||
     message === "INVALID_COORDINATES" ||
     message === "INVALID_RADIUS" ||
     message === "INVALID_FILTER" ||
-    message === "INVALID_SORT"
+    message === "INVALID_SORT" ||
+    message === "INVALID_PREFERENCE" ||
+    message === "INVALID_ARRIVAL"
   ) return 400;
+
   if (message === "PARKING_SOURCE_UNAVAILABLE") return 503;
   return 500;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function normalizeEnum(
@@ -91,231 +70,12 @@ function normalizeEnum(
   return normalized;
 }
 
-function parseInteger(value: unknown): number | null {
-  const parsed = asInteger(value);
-  if (parsed !== null && parsed >= 0) return parsed;
-
-  const text = asString(value);
-  if (!text) return null;
-  const match = text.match(/\d+/);
-  return match ? Number(match[0]) : null;
-}
-
-function parseHeightMeters(value: unknown): number | null {
-  const text = asString(value);
-  if (!text) return null;
-
-  const metric = text
-    .toLowerCase()
-    .replace(",", ".")
-    .match(/(\d+(?:\.\d+)?)\s*(?:m|meter|metre)?/);
-  if (!metric) return null;
-
-  const parsed = Number(metric[1]);
-  return Number.isFinite(parsed) && parsed > 0 && parsed < 10
-    ? parsed
-    : null;
-}
-
-function normalizeFee(tags: JsonMap): "free" | "paid" | "unknown" {
-  const fee = (asString(tags.fee) ?? "").toLowerCase();
-  if (["no", "0", "free"].includes(fee)) return "free";
-  if (["yes", "1", "paid"].includes(fee)) return "paid";
-  if (asString(tags.charge)) return "paid";
-  return "unknown";
-}
-
-function normalizeAccess(tags: JsonMap): string {
-  const access = (
-    asString(tags.access) ??
-    asString(tags.motorcar) ??
-    asString(tags.vehicle) ??
-    "unknown"
-  ).toLowerCase();
-
-  return access;
-}
-
-function isExcludedAccess(access: string): boolean {
-  return [
-    "private",
-    "no",
-    "residents",
-    "permit",
-    "delivery",
-    "agricultural",
-    "forestry",
-  ].includes(access);
-}
-
-function coordinateFor(element: OsmElement): {
-  latitude: number;
-  longitude: number;
-} | null {
-  const lat = asNumber(element.lat);
-  const lon = asNumber(element.lon);
-  if (lat !== null && lon !== null) {
-    return { latitude: lat, longitude: lon };
-  }
-
-  if (isRecord(element.center)) {
-    const centerLat = asNumber(element.center.lat);
-    const centerLon = asNumber(element.center.lon);
-    if (centerLat !== null && centerLon !== null) {
-      return { latitude: centerLat, longitude: centerLon };
-    }
-  }
-
-  return null;
-}
-
-function haversineKm(
-  latitude1: number,
-  longitude1: number,
-  latitude2: number,
-  longitude2: number,
-): number {
-  const radians = (degrees: number) => degrees * Math.PI / 180;
-  const earthRadiusKm = 6371.0088;
-  const deltaLatitude = radians(latitude2 - latitude1);
-  const deltaLongitude = radians(longitude2 - longitude1);
-  const lat1 = radians(latitude1);
-  const lat2 = radians(latitude2);
-
-  const value =
-    Math.sin(deltaLatitude / 2) ** 2 +
-    Math.cos(lat1) *
-      Math.cos(lat2) *
-      Math.sin(deltaLongitude / 2) ** 2;
-
-  return 2 * earthRadiusKm * Math.asin(Math.sqrt(value));
-}
-
-function addressFromTags(tags: JsonMap): string {
-  const line = [
-    asString(tags["addr:housenumber"]),
-    asString(tags["addr:street"]),
-  ].filter(Boolean).join(" ");
-
-  const locality = [
-    asString(tags["addr:postcode"]),
-    asString(tags["addr:city"]) ??
-      asString(tags["addr:town"]) ??
-      asString(tags["addr:village"]),
-  ].filter(Boolean).join(" ");
-
-  return [line, locality].filter(Boolean).join(", ");
-}
-
-function parkingType(tags: JsonMap): string {
-  return (
-    asString(tags.parking) ??
-    asString(tags.location) ??
-    "unknown"
-  ).toLowerCase();
-}
-
-function isCovered(type: string, tags: JsonMap): boolean {
-  if (asString(tags.covered)?.toLowerCase() === "yes") return true;
-  return [
-    "underground",
-    "multi-storey",
-    "rooftop",
-    "carports",
-    "garage_boxes",
-  ].includes(type);
-}
-
-function parkAndRide(tags: JsonMap): boolean {
-  const value = (asString(tags.park_ride) ?? "").toLowerCase();
-  return Boolean(value && !["no", "false", "0"].includes(value));
-}
-
-function buildResult(
-  element: OsmElement,
-  originLatitude: number,
-  originLongitude: number,
-): ParkingResult | null {
-  if (!isRecord(element.tags)) return null;
-  const tags = element.tags;
-  const coordinate = coordinateFor(element);
-  if (!coordinate) return null;
-
-  const access = normalizeAccess(tags);
-  if (isExcludedAccess(access)) return null;
-
-  const type = parkingType(tags);
-  const sourceKind = asString(tags.amenity) === "parking_entrance"
-    ? "entrance"
-    : "facility";
-
-  const name =
-    asString(tags.name) ??
-    asString(tags["name:fr"]) ??
-    asString(tags.operator) ??
-    "";
-
-  const disabledSpaces =
-    parseInteger(tags["capacity:disabled"]) ??
-    parseInteger(tags["capacity:handicapped"]);
-
-  const chargingSpaces =
-    parseInteger(tags["capacity:charging"]) ??
-    parseInteger(tags["capacity:charging_station"]) ??
-    (
-      ["yes", "designated"].includes(
-        (asString(tags.charging_station) ?? "").toLowerCase(),
-      )
-        ? 1
-        : null
-    );
-
-  const id = `${asString(element.type) ?? "element"}-${String(element.id)}`;
-
-  return {
-    parking_id: id,
-    name,
-    address: addressFromTags(tags),
-    latitude: coordinate.latitude,
-    longitude: coordinate.longitude,
-    distance_km: Number(
-      haversineKm(
-        originLatitude,
-        originLongitude,
-        coordinate.latitude,
-        coordinate.longitude,
-      ).toFixed(3),
-    ),
-    parking_type: type,
-    access,
-    fee: normalizeFee(tags),
-    charge: asString(tags.charge),
-    capacity:
-      parseInteger(tags.capacity) ??
-      parseInteger(tags["capacity:car"]),
-    disabled_spaces: disabledSpaces,
-    charging_spaces: chargingSpaces,
-    park_and_ride: parkAndRide(tags),
-    covered: isCovered(type, tags),
-    opening_hours: asString(tags.opening_hours),
-    operator: asString(tags.operator),
-    website:
-      asString(tags.website) ??
-      asString(tags["contact:website"]),
-    phone:
-      asString(tags.phone) ??
-      asString(tags["contact:phone"]),
-    max_height_m: parseHeightMeters(tags.maxheight),
-    surface: asString(tags.surface),
-    source_kind: sourceKind,
-  };
-}
-
 function matchesType(result: ParkingResult, filter: string): boolean {
   if (filter === "all") return true;
   if (filter === "park_and_ride") return result.park_and_ride;
   if (filter === "covered") return result.covered;
   if (filter === "surface") return result.parking_type === "surface";
+
   if (filter === "street") {
     return [
       "street_side",
@@ -325,32 +85,27 @@ function matchesType(result: ParkingResult, filter: string): boolean {
       "half_on_kerb",
     ].includes(result.parking_type);
   }
+
   return true;
 }
 
-function deduplicate(results: ParkingResult[]): ParkingResult[] {
-  const facilities = results.filter((item) => item.source_kind === "facility");
+function deduplicateOsm(results: ParkingResult[]): ParkingResult[] {
+  const facilities = results.filter(
+    (item) => item.source_kind === "facility",
+  );
   const output = [...facilities];
 
   for (const entrance of results.filter(
     (item) => item.source_kind === "entrance",
   )) {
-    const duplicate = facilities.some((facility) => {
-      const close = haversineKm(
+    const duplicate = facilities.some((facility) =>
+      haversineKm(
         facility.latitude,
         facility.longitude,
         entrance.latitude,
         entrance.longitude,
-      ) <= 0.08;
-
-      const sameName = Boolean(
-        facility.name &&
-        entrance.name &&
-        facility.name.toLowerCase() === entrance.name.toLowerCase(),
-      );
-
-      return close && (sameName || !entrance.name);
-    });
+      ) <= 0.07
+    );
 
     if (!duplicate) output.push(entrance);
   }
@@ -358,11 +113,387 @@ function deduplicate(results: ParkingResult[]): ParkingResult[] {
   return output;
 }
 
-function sortResults(
+async function storeSnapshots(
+  auth: AuthContext,
   results: ParkingResult[],
+): Promise<boolean> {
+  const observedAt = new Date().toISOString();
+  const rows: JsonMap[] = [];
+
+  for (const result of results) {
+    if (
+      !result.provider_code ||
+      !result.external_id ||
+      !result.realtime
+    ) continue;
+
+    const sourceUpdatedAt =
+      result.availability_updated_at ??
+      observedAt;
+
+    rows.push({
+      provider_code: result.provider_code,
+      external_id: result.external_id,
+      parking_name: result.name,
+      latitude: result.latitude,
+      longitude: result.longitude,
+      available_spaces: result.available_spaces,
+      capacity: result.capacity,
+      availability_status: result.availability_status,
+      source_updated_at: sourceUpdatedAt,
+      observed_at: observedAt,
+      source_hash: await sha256Hex({
+        provider_code: result.provider_code,
+        external_id: result.external_id,
+        available_spaces: result.available_spaces,
+        capacity: result.capacity,
+        availability_status: result.availability_status,
+        source_updated_at: sourceUpdatedAt,
+      }),
+    });
+  }
+
+  if (!rows.length) return false;
+
+  const { error } = await auth.adminClient
+    .from("parking_availability_snapshots")
+    .upsert(rows, {
+      onConflict: "provider_code,external_id,source_updated_at",
+      ignoreDuplicates: true,
+    });
+
+  if (error) {
+    console.warn("PARKING_HISTORY_WRITE_FAILED", error.message);
+    return false;
+  }
+
+  return true;
+}
+
+function localDateParts(
+  value: Date,
+  timezoneOffsetMinutes: number,
+): {
+  weekday: number;
+  hour: number;
+} {
+  const local = new Date(
+    value.getTime() + timezoneOffsetMinutes * 60_000,
+  );
+
+  return {
+    weekday: local.getUTCDay(),
+    hour: local.getUTCHours(),
+  };
+}
+
+function hourDistance(left: number, right: number): number {
+  const direct = Math.abs(left - right);
+  return Math.min(direct, 24 - direct);
+}
+
+async function loadPredictions(
+  auth: AuthContext,
+  results: ParkingResult[],
+  arrivalMinutes: number,
+  timezoneOffsetMinutes: number,
+): Promise<Map<string, Prediction>> {
+  const official = results.filter(
+    (item) => item.provider_code && item.external_id,
+  );
+
+  if (!official.length) return new Map();
+
+  const externalIds = Array.from(
+    new Set(official.map((item) => item.external_id!)),
+  );
+
+  const since = new Date(
+    Date.now() - 56 * 86_400_000,
+  ).toISOString();
+
+  const { data, error } = await auth.adminClient
+    .from("parking_availability_snapshots")
+    .select(
+      "provider_code,external_id,available_spaces," +
+        "availability_status,observed_at",
+    )
+    .in("external_id", externalIds)
+    .gte("observed_at", since)
+    .limit(5000);
+
+  if (error || !data) return new Map();
+
+  const target = new Date(
+    Date.now() + arrivalMinutes * 60_000,
+  );
+  const targetParts = localDateParts(
+    target,
+    timezoneOffsetMinutes,
+  );
+  const groups = new Map<string, number[]>();
+
+  for (const row of data) {
+    if (
+      row.availability_status !== "open" ||
+      typeof row.available_spaces !== "number" ||
+      typeof row.provider_code !== "string" ||
+      typeof row.external_id !== "string" ||
+      typeof row.observed_at !== "string"
+    ) continue;
+
+    const observed = new Date(row.observed_at);
+    if (Number.isNaN(observed.getTime())) continue;
+
+    const parts = localDateParts(
+      observed,
+      timezoneOffsetMinutes,
+    );
+
+    if (
+      parts.weekday !== targetParts.weekday ||
+      hourDistance(parts.hour, targetParts.hour) > 1
+    ) continue;
+
+    const key = `${row.provider_code}:${row.external_id}`;
+    const values = groups.get(key) ?? [];
+    values.push(row.available_spaces);
+    groups.set(key, values);
+  }
+
+  const predictions = new Map<string, Prediction>();
+
+  for (const [key, values] of groups.entries()) {
+    if (values.length < 3) continue;
+
+    values.sort((a, b) => a - b);
+    const middle = Math.floor(values.length / 2);
+    const median = values.length % 2 === 0
+      ? Math.round(
+        (values[middle - 1] + values[middle]) / 2,
+      )
+      : values[middle];
+
+    predictions.set(key, {
+      available: median,
+      samples: values.length,
+    });
+  }
+
+  return predictions;
+}
+
+function applyPredictions(
+  results: ParkingResult[],
+  predictions: Map<string, Prediction>,
+): void {
+  for (const result of results) {
+    if (!result.provider_code || !result.external_id) continue;
+
+    const prediction = predictions.get(
+      `${result.provider_code}:${result.external_id}`,
+    );
+
+    if (!prediction) continue;
+
+    result.predicted_available_spaces = prediction.available;
+    result.prediction_samples = prediction.samples;
+  }
+}
+
+function ageMinutes(value: string | null): number | null {
+  if (!value) return null;
+
+  const age = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(age)) return null;
+
+  return Math.max(0, Math.round(age / 60_000));
+}
+
+function scoreParking(
+  item: ParkingResult,
+  preference: string,
+  arrivalMinutes: number,
+  radiusKm: number,
+): number {
+  const maxDistance = Math.max(radiusKm, 1);
+  let score = clamp(
+    35 * (1 - item.distance_km / maxDistance),
+    0,
+    35,
+  );
+
+  if (preference === "closest") {
+    score += clamp(
+      20 * (1 - item.distance_km / maxDistance),
+      0,
+      20,
+    );
+  }
+
+  if (item.availability_status === "closed") score -= 45;
+  if (item.availability_status === "full") score -= 40;
+  if (item.availability_status === "unavailable") score -= 8;
+
+  if (
+    item.available_spaces !== null &&
+    item.capacity !== null &&
+    item.capacity > 0 &&
+    item.availability_status === "open"
+  ) {
+    const ratio = clamp(
+      item.available_spaces / item.capacity,
+      0,
+      1,
+    );
+    const arrivalDecay = clamp(
+      1 - arrivalMinutes / 120,
+      0.45,
+      1,
+    );
+    let weight = preference === "availability" ? 46 : 34;
+    weight *= arrivalDecay;
+
+    if (item.confidence === "official_realtime") {
+      score += 12 + ratio * weight;
+    } else if (item.confidence === "official_stale") {
+      score += 4 + ratio * 10;
+    }
+  } else if (item.confidence === "official_realtime") {
+    score += 8;
+  }
+
+  if (
+    item.predicted_available_spaces !== null &&
+    item.prediction_samples !== null &&
+    item.prediction_samples >= 3
+  ) {
+    const capacity = item.capacity ??
+      Math.max(item.predicted_available_spaces, 1);
+
+    const ratio = clamp(
+      item.predicted_available_spaces /
+        Math.max(capacity, 1),
+      0,
+      1,
+    );
+
+    score += ratio * (arrivalMinutes >= 30 ? 18 : 10);
+  }
+
+  if (item.confidence === "official_realtime") score += 8;
+  if (item.confidence === "official_stale") score += 2;
+  if (item.park_and_ride) score += 2;
+
+  if ((item.charging_spaces ?? 0) > 0) {
+    score += preference === "ev" ? 22 : 3;
+  }
+
+  if (item.fee === "free") {
+    score += preference === "free" ? 24 : 5;
+  }
+
+  if (preference === "free" && item.fee === "paid") score -= 12;
+  if (preference === "ev" && (item.charging_spaces ?? 0) < 1) {
+    score -= 14;
+  }
+
+  return Number(clamp(score, 0, 100).toFixed(1));
+}
+
+function recommendationReasons(
+  item: ParkingResult,
+  arrivalMinutes: number,
+): string[] {
+  const reasons: string[] = [];
+
+  if (
+    item.availability_status === "open" &&
+    item.available_spaces !== null &&
+    item.confidence === "official_realtime"
+  ) {
+    const count = item.available_spaces;
+    reasons.push(
+      `${count} place${count === 1 ? "" : "s"} ` +
+        `libre${count === 1 ? "" : "s"} en temps réel`,
+    );
+  }
+
+  if (
+    item.predicted_available_spaces !== null &&
+    item.prediction_samples !== null &&
+    item.prediction_samples >= 3 &&
+    arrivalMinutes > 0
+  ) {
+    reasons.push(
+      `Environ ${item.predicted_available_spaces} places ` +
+        "habituellement disponibles à l’heure d’arrivée",
+    );
+  }
+
+  if (item.distance_km <= 1) {
+    reasons.push("À moins d’un kilomètre");
+  } else if (item.distance_km <= 3) {
+    reasons.push(
+      `À ${item.distance_km.toFixed(1).replace(".", ",")} km`,
+    );
+  }
+
+  if (item.fee === "free") {
+    reasons.push("Stationnement déclaré gratuit");
+  }
+
+  if (item.park_and_ride) reasons.push("Parc relais");
+
+  if ((item.charging_spaces ?? 0) > 0) {
+    reasons.push(
+      `${item.charging_spaces} places avec recharge déclarées`,
+    );
+  }
+
+  const age = ageMinutes(item.availability_updated_at);
+
+  if (age !== null && age <= 5) {
+    reasons.push(
+      `Donnée officielle mise à jour il y a ${age} min`,
+    );
+  }
+
+  if (!reasons.length) {
+    reasons.push(
+      "Solution cartographiée proche de votre position",
+    );
+  }
+
+  return reasons.slice(0, 4);
+}
+
+function rankResults(
+  results: ParkingResult[],
+  preference: string,
+  arrivalMinutes: number,
+  radiusKm: number,
   sortBy: string,
 ): ParkingResult[] {
-  return results.slice().sort((a, b) => {
+  for (const result of results) {
+    result.smart_score = scoreParking(
+      result,
+      preference,
+      arrivalMinutes,
+      radiusKm,
+    );
+
+    result.recommendation_reasons = recommendationReasons(
+      result,
+      arrivalMinutes,
+    );
+  }
+
+  const sorted = results.slice().sort((a, b) => {
+    if (sortBy === "distance") {
+      return a.distance_km - b.distance_km;
+    }
+
     if (sortBy === "capacity") {
       const capacityA = a.capacity ?? -1;
       const capacityB = b.capacity ?? -1;
@@ -370,89 +501,52 @@ function sortResults(
     }
 
     if (sortBy === "free") {
-      const score = (item: ParkingResult) =>
-        item.fee === "free" ? 0 : item.fee === "unknown" ? 1 : 2;
-      const difference = score(a) - score(b);
+      const feeScore = (item: ParkingResult) =>
+        item.fee === "free"
+          ? 0
+          : item.fee === "unknown"
+          ? 1
+          : 2;
+
+      const difference = feeScore(a) - feeScore(b);
       if (difference !== 0) return difference;
+    }
+
+    if (sortBy === "availability") {
+      const availableA =
+        a.availability_status === "open"
+          ? a.available_spaces ?? -1
+          : -1;
+
+      const availableB =
+        b.availability_status === "open"
+          ? b.available_spaces ?? -1
+          : -1;
+
+      if (availableA !== availableB) {
+        return availableB - availableA;
+      }
+    }
+
+    if (a.smart_score !== b.smart_score) {
+      return b.smart_score - a.smart_score;
     }
 
     return a.distance_km - b.distance_km;
   });
+
+  sorted.forEach((item, index) => {
+    item.recommendation_rank = index + 1;
+  });
+
+  return sorted;
 }
 
-function buildQuery(
-  latitude: number,
-  longitude: number,
-  radiusMeters: number,
-): string {
-  return `
-[out:json][timeout:20];
-(
-  nwr(around:${radiusMeters},${latitude},${longitude})
-    ["amenity"="parking"];
-  node(around:${radiusMeters},${latitude},${longitude})
-    ["amenity"="parking_entrance"];
-);
-out center tags;
-`.trim();
-}
-
-async function fetchOverpass(query: string): Promise<JsonMap> {
-  let lastError = "UNKNOWN";
-
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 22_000);
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-          "Accept": "application/json",
-          "User-Agent": "AutoClair-Mobile/0.1 parking-search",
-        },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        lastError = `HTTP_${response.status}`;
-        continue;
-      }
-
-      const payload = await response.json();
-      if (!isRecord(payload) || !Array.isArray(payload.elements)) {
-        lastError = "INVALID_RESPONSE";
-        continue;
-      }
-
-      return payload;
-    } catch (error) {
-      lastError = safeError(error);
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  throw new Error(`PARKING_SOURCE_UNAVAILABLE:${lastError}`);
-}
-
-function cacheKey(input: {
-  latitude: number;
-  longitude: number;
-  radiusKm: number;
-  parkingType: string;
-  sortBy: string;
-  freeOnly: boolean;
-  accessibleOnly: boolean;
-  evOnly: boolean;
-  resultLimit: number;
-}): string {
+function cacheKey(input: JsonMap): string {
   return JSON.stringify({
     ...input,
-    latitude: input.latitude.toFixed(3),
-    longitude: input.longitude.toFixed(3),
+    latitude: asNumber(input.latitude)?.toFixed(3),
+    longitude: asNumber(input.longitude)?.toFixed(3),
   });
 }
 
@@ -466,7 +560,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    await authenticate(req);
+    const auth = await authenticate(req);
     const body = await readJsonBody(req);
 
     const latitude = asNumber(body.latitude);
@@ -497,9 +591,34 @@ Deno.serve(async (req: Request) => {
 
     const sortBy = normalizeEnum(
       body.sort_by,
-      ["distance", "capacity", "free"],
-      "distance",
+      [
+        "recommendation",
+        "availability",
+        "distance",
+        "capacity",
+        "free",
+      ],
+      "recommendation",
       "INVALID_SORT",
+    );
+
+    const preference = normalizeEnum(
+      body.preference,
+      ["availability", "closest", "free", "ev"],
+      "availability",
+      "INVALID_PREFERENCE",
+    );
+
+    const arrivalMinutes = asInteger(body.arrival_minutes) ?? 15;
+
+    if (![0, 15, 30, 60].includes(arrivalMinutes)) {
+      throw new Error("INVALID_ARRIVAL");
+    }
+
+    const timezoneOffsetMinutes = clamp(
+      asInteger(body.timezone_offset_minutes) ?? 0,
+      -840,
+      840,
     );
 
     const freeOnly = asBoolean(body.free_only);
@@ -511,12 +630,15 @@ Deno.serve(async (req: Request) => {
       MAX_RESULTS,
     );
 
-    const input = {
+    const input: JsonMap = {
       latitude,
       longitude,
       radiusKm,
       parkingType,
       sortBy,
+      preference,
+      arrivalMinutes,
+      timezoneOffsetMinutes,
       freeOnly,
       accessibleOnly,
       evOnly,
@@ -525,6 +647,7 @@ Deno.serve(async (req: Request) => {
 
     const key = cacheKey(input);
     const cached = cache.get(key);
+
     if (cached && cached.expiresAt > Date.now()) {
       return jsonResponse({
         ...cached.payload,
@@ -532,47 +655,110 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const query = buildQuery(
-      latitude,
-      longitude,
-      Math.round(radiusKm * 1000),
+    const [osmSettlement, officialSettlement] =
+      await Promise.allSettled([
+        fetchOsm(latitude, longitude, radiusKm),
+        fetchOfficialProviders(latitude, longitude, radiusKm),
+      ]);
+
+    const osmResults = osmSettlement.status === "fulfilled"
+      ? deduplicateOsm(osmSettlement.value.results)
+      : [];
+
+    const osmBase = osmSettlement.status === "fulfilled"
+      ? osmSettlement.value.osmBase
+      : null;
+
+    const officialResults =
+      officialSettlement.status === "fulfilled"
+        ? officialSettlement.value.results
+        : [];
+
+    const providers: ProviderSummary[] =
+      officialSettlement.status === "fulfilled"
+        ? officialSettlement.value.summaries
+        : [{
+          code: "official_providers",
+          name: "Flux officiels locaux",
+          status: "error",
+          records: 0,
+          realtime: true,
+          message: safeError(officialSettlement.reason),
+        }];
+
+    if (!osmResults.length && !officialResults.length) {
+      throw new Error("PARKING_SOURCE_UNAVAILABLE");
+    }
+
+    let results = mergeSources(
+      officialResults,
+      osmResults,
     );
-    const payload = await fetchOverpass(query);
-    const elements = payload.elements as unknown[];
 
-    let results = elements
-      .filter(isRecord)
-      .map((element) =>
-        buildResult(element as OsmElement, latitude, longitude)
-      )
-      .filter((item): item is ParkingResult => item !== null);
-
-    results = deduplicate(results).filter((item) => {
+    results = results.filter((item) => {
       if (item.distance_km > radiusKm + 0.05) return false;
       if (!matchesType(item, parkingType)) return false;
       if (freeOnly && item.fee !== "free") return false;
-      if (accessibleOnly && (item.disabled_spaces ?? 0) < 1) return false;
-      if (evOnly && (item.charging_spaces ?? 0) < 1) return false;
+      if (
+        accessibleOnly &&
+        (item.disabled_spaces ?? 0) < 1
+      ) return false;
+      if (evOnly && (item.charging_spaces ?? 0) < 1) {
+        return false;
+      }
       return true;
     });
 
-    results = sortResults(results, sortBy);
+    const historyStored = await storeSnapshots(
+      auth,
+      officialResults,
+    );
+
+    const predictions = await loadPredictions(
+      auth,
+      results,
+      arrivalMinutes,
+      timezoneOffsetMinutes,
+    );
+
+    applyPredictions(results, predictions);
+
+    results = rankResults(
+      results,
+      preference,
+      arrivalMinutes,
+      radiusKm,
+      sortBy,
+    );
+
     const truncated = results.length > resultLimit;
     results = results.slice(0, resultLimit);
 
-    const osm3s = isRecord(payload.osm3s) ? payload.osm3s : {};
-    const sourceFetchedAt = new Date().toISOString();
+    const realtimeCoverage = officialResults.some(
+      (item) => item.confidence === "official_realtime",
+    );
 
     const responsePayload: JsonMap = {
       success: true,
       results,
-      source_name: "OpenStreetMap via Overpass",
-      source_fetched_at: sourceFetchedAt,
-      osm_base: asString(osm3s.timestamp_osm_base),
+      providers,
+      source_name:
+        "OpenStreetMap, Dijon Métropole, Nantes Métropole " +
+        "et Eurométropole de Strasbourg",
+      source_fetched_at: new Date().toISOString(),
+      osm_base: osmBase,
       cache_hit: false,
       truncated,
+      realtime_coverage: realtimeCoverage,
+      recommended_parking_id:
+        results[0]?.parking_id ?? null,
+      history_enabled:
+        historyStored || predictions.size > 0,
       availability_disclaimer:
-        "La source ne fournit généralement pas le nombre de places libres en temps réel. La capacité affichée est une capacité déclarée, pas une disponibilité.",
+        "Le nombre de places libres provient des flux officiels " +
+        "lorsqu’ils sont disponibles. Une donnée trop ancienne est " +
+        "signalée et moins bien classée. La disponibilité peut " +
+        "évoluer avant l’arrivée.",
     };
 
     cache.set(key, {
@@ -582,7 +768,9 @@ Deno.serve(async (req: Request) => {
 
     if (cache.size > 120) {
       for (const [cacheKeyValue, entry] of cache.entries()) {
-        if (entry.expiresAt <= Date.now()) cache.delete(cacheKeyValue);
+        if (entry.expiresAt <= Date.now()) {
+          cache.delete(cacheKeyValue);
+        }
       }
     }
 
@@ -595,7 +783,7 @@ Deno.serve(async (req: Request) => {
       success: false,
       error: code,
       message: code === "PARKING_SOURCE_UNAVAILABLE"
-        ? "La source cartographique des parkings est momentanément indisponible."
+        ? "Les sources de stationnement sont momentanément indisponibles."
         : message,
     }, statusForError(code));
   }

@@ -4,7 +4,6 @@ import 'parking_offer.dart';
 
 class ParkingServiceException implements Exception {
   const ParkingServiceException(this.message);
-
   final String message;
 }
 
@@ -17,6 +16,8 @@ class ParkingService {
     required double radiusKm,
     required String parkingType,
     required String sortBy,
+    required String preference,
+    required int arrivalMinutes,
     required bool freeOnly,
     required bool accessibleOnly,
     required bool evOnly,
@@ -31,6 +32,9 @@ class ParkingService {
           'radius_km': radiusKm,
           'parking_type': parkingType,
           'sort_by': sortBy,
+          'preference': preference,
+          'arrival_minutes': arrivalMinutes,
+          'timezone_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
           'free_only': freeOnly,
           'accessible_only': accessibleOnly,
           'ev_only': evOnly,
@@ -50,7 +54,7 @@ class ParkingService {
         final message = payload['message']?.toString().trim();
         throw ParkingServiceException(
           message == null || message.isEmpty
-              ? 'La recherche des parkings a échoué.'
+              ? 'La recherche intelligente des parkings a échoué.'
               : message,
         );
       }
@@ -61,6 +65,8 @@ class ParkingService {
           "Le serveur n'a pas renvoyé une liste de parkings.",
         );
       }
+
+      final rawProviders = payload['providers'];
 
       return ParkingSearchResult(
         offers: rawResults
@@ -75,11 +81,23 @@ class ParkingService {
         ),
         sourceName:
             payload['source_name']?.toString().trim() ??
-            'OpenStreetMap via Overpass',
+            'OpenStreetMap et flux officiels locaux',
         availabilityDisclaimer:
             payload['availability_disclaimer']?.toString().trim() ??
-            'La disponibilité en temps réel n’est pas fournie.',
+            'La disponibilité dépend des flux publiés par les exploitants.',
         truncated: payload['truncated'] == true,
+        providers: rawProviders is List
+            ? rawProviders
+                  .map(
+                    (row) => ParkingProviderSummary.fromJson(
+                      Map<String, dynamic>.from(row as Map),
+                    ),
+                  )
+                  .toList(growable: false)
+            : const [],
+        realtimeCoverage: payload['realtime_coverage'] == true,
+        recommendedParkingId: payload['recommended_parking_id']?.toString(),
+        historyEnabled: payload['history_enabled'] == true,
         osmBase: DateTime.tryParse(payload['osm_base']?.toString() ?? ''),
       );
     } on ParkingServiceException {
@@ -91,11 +109,10 @@ class ParkingService {
 
   static String _message(Object error) {
     final normalized = error.toString().toLowerCase();
-
     if (normalized.contains('search-parking') ||
         normalized.contains('function not found') ||
         normalized.contains('404')) {
-      return 'Le moteur de recherche des parkings est indisponible. Vérifiez la fonction Supabase.';
+      return 'Le moteur intelligent des parkings est indisponible. Vérifiez la fonction Supabase.';
     }
     if (normalized.contains('401') ||
         normalized.contains('unauthorized') ||
@@ -105,14 +122,13 @@ class ParkingService {
     if (normalized.contains('overpass') ||
         normalized.contains('source_unavailable') ||
         normalized.contains('503')) {
-      return 'La source cartographique est momentanément indisponible. Réessayez dans quelques instants.';
+      return 'Les sources de stationnement sont momentanément indisponibles. Réessayez dans quelques instants.';
     }
     if (normalized.contains('network') ||
         normalized.contains('socket') ||
         normalized.contains('connection')) {
       return 'Connexion impossible. Vérifiez votre accès Internet.';
     }
-
     return 'Impossible de récupérer les parkings proches.';
   }
 }
