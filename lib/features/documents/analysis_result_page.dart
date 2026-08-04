@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'document_analysis_result.dart';
+import 'document_carnet_sync_result.dart';
 import 'document_analysis_service.dart';
 
 class AnalysisResultPage extends StatefulWidget {
@@ -18,8 +19,12 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
   final _service = DocumentAnalysisService();
 
   DocumentAnalysisResult? _result;
+  DocumentCarnetSyncResult? _carnetSync;
   String? _errorMessage;
+  String? _carnetSyncError;
   bool _loading = true;
+  bool _syncingCarnet = false;
+  bool _confirmingCarnetEvent = false;
 
   @override
   void initState() {
@@ -31,13 +36,19 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
     setState(() {
       _loading = true;
       _errorMessage = null;
+      _carnetSyncError = null;
     });
 
     try {
       final result = await _service.fetchAnalysis(widget.documentId);
-      if (mounted) {
-        setState(() => _result = result);
-      }
+      if (!mounted) return;
+
+      setState(() {
+        _result = result;
+        _loading = false;
+      });
+
+      await _syncCarnet();
     } on DocumentAnalysisException catch (error) {
       if (mounted) {
         setState(() => _errorMessage = error.message);
@@ -47,6 +58,70 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _syncCarnet() async {
+    if (_syncingCarnet) return;
+
+    setState(() {
+      _syncingCarnet = true;
+      _carnetSyncError = null;
+    });
+
+    try {
+      final sync = await _service.syncDocumentToCarnet(widget.documentId);
+      if (mounted) {
+        setState(() => _carnetSync = sync);
+      }
+    } on DocumentAnalysisException catch (error) {
+      if (mounted) {
+        setState(() => _carnetSyncError = error.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncingCarnet = false);
+      }
+    }
+  }
+
+  Future<void> _confirmCarnetEvent() async {
+    if (_confirmingCarnetEvent) return;
+
+    setState(() {
+      _confirmingCarnetEvent = true;
+      _carnetSyncError = null;
+    });
+
+    try {
+      final confirmed = await _service.confirmDocumentCarnetEvent(
+        widget.documentId,
+      );
+
+      if (!mounted) return;
+
+      setState(() => _carnetSync = confirmed);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Événement confirmé dans le carnet.')),
+      );
+    } on DocumentAnalysisException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _confirmingCarnetEvent = false);
+      }
+    }
+  }
+
+  void _openVehicleCarnet(DocumentCarnetSyncResult sync) {
+    final vehicleId = sync.vehicleId;
+    if (vehicleId == null || vehicleId.isEmpty) return;
+
+    final section = sync.wasAutomaticallyAdded ? 'timeline' : 'overview';
+    context.push('/vehicles/$vehicleId/care?section=$section');
   }
 
   @override
@@ -91,6 +166,22 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
       children: [
         _SummaryCard(result: result),
         const SizedBox(height: 18),
+        _CarnetSyncCard(
+          sync: _carnetSync,
+          errorMessage: _carnetSyncError,
+          loading: _syncingCarnet,
+          confirming: _confirmingCarnetEvent,
+          onRetry: _syncCarnet,
+          onConfirm:
+              _carnetSync?.wasAutomaticallyAdded == true &&
+                  _carnetSync?.userConfirmed == false
+              ? _confirmCarnetEvent
+              : null,
+          onOpenCarnet: _carnetSync?.canOpenCarnet == true
+              ? () => _openVehicleCarnet(_carnetSync!)
+              : null,
+        ),
+        const SizedBox(height: 18),
         _DocumentInformationSection(result: result),
         const SizedBox(height: 18),
         _AmountsSection(result: result),
@@ -126,6 +217,230 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
         const SizedBox(height: 18),
         const _ResultNavigation(),
       ],
+    );
+  }
+}
+
+class _CarnetSyncCard extends StatelessWidget {
+  const _CarnetSyncCard({
+    required this.sync,
+    required this.errorMessage,
+    required this.loading,
+    required this.confirming,
+    required this.onRetry,
+    required this.onConfirm,
+    required this.onOpenCarnet,
+  });
+
+  final DocumentCarnetSyncResult? sync;
+  final String? errorMessage;
+  final bool loading;
+  final bool confirming;
+  final VoidCallback onRetry;
+  final VoidCallback? onConfirm;
+  final VoidCallback? onOpenCarnet;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && sync == null) {
+      return const _CarnetSyncContainer(
+        icon: Icons.sync_rounded,
+        color: AppColors.info,
+        background: AppColors.infoSoft,
+        title: 'Mise à jour du carnet',
+        message:
+            'AutoClair vérifie si ce document peut créer un événement fiable.',
+        trailing: SizedBox.square(
+          dimension: 22,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    if (errorMessage != null) {
+      return _CarnetSyncContainer(
+        icon: Icons.sync_problem_rounded,
+        color: AppColors.warning,
+        background: AppColors.warningSoft,
+        title: 'Carnet non mis à jour',
+        message:
+            '$errorMessage Le résultat de l’analyse reste disponible et '
+            'aucune donnée incertaine n’a été ajoutée.',
+        action: OutlinedButton.icon(
+          onPressed: loading ? null : onRetry,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Réessayer'),
+        ),
+      );
+    }
+
+    final value = sync;
+    if (value == null) {
+      return _CarnetSyncContainer(
+        icon: Icons.shield_outlined,
+        color: AppColors.info,
+        background: AppColors.infoSoft,
+        title: 'Protection du carnet active',
+        message:
+            'L’ajout automatique est limité aux documents suffisamment '
+            'fiables et clairement rattachés au véhicule.',
+        action: OutlinedButton.icon(
+          onPressed: loading ? null : onRetry,
+          icon: const Icon(Icons.sync_rounded),
+          label: const Text('Vérifier maintenant'),
+        ),
+      );
+    }
+
+    if (value.wasAutomaticallyAdded) {
+      return _CarnetSyncContainer(
+        icon: value.userConfirmed
+            ? Icons.library_add_check_rounded
+            : Icons.pending_actions_rounded,
+        color: value.userConfirmed ? AppColors.success : AppColors.warning,
+        background: value.userConfirmed
+            ? AppColors.successSoft
+            : AppColors.warningSoft,
+        title: value.userConfirmed
+            ? 'Événement confirmé dans le carnet'
+            : value.status == 'AUTO_CREATED'
+            ? 'Événement ajouté — à vérifier'
+            : 'Événement déjà présent — à vérifier',
+        message:
+            '${value.eventTitle ?? value.message}\n'
+            '${value.matchLabel}'
+            '${value.matchScore == null ? '' : ' • confiance de rapprochement ${(value.matchScore! * 100).round()} %'}'
+            '${value.suggestionCount > 0 ? '\n${value.suggestionCount} autre(s) information(s) restent à vérifier.' : ''}',
+        action: value.userConfirmed
+            ? FilledButton.tonalIcon(
+                onPressed: onOpenCarnet,
+                icon: const Icon(Icons.verified_rounded),
+                label: const Text('Voir l’événement confirmé'),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton.icon(
+                    onPressed: confirming ? null : onConfirm,
+                    icon: confirming
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.verified_user_outlined),
+                    label: Text(
+                      confirming ? 'Confirmation…' : 'Confirmer cet événement',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: onOpenCarnet,
+                    icon: const Icon(Icons.timeline_rounded),
+                    label: const Text('Voir avant de confirmer'),
+                  ),
+                ],
+              ),
+      );
+    }
+
+    if (value.needsReview) {
+      return _CarnetSyncContainer(
+        icon: Icons.fact_check_outlined,
+        color: AppColors.warning,
+        background: AppColors.warningSoft,
+        title: 'Vérification nécessaire',
+        message:
+            '${value.message}'
+            '${value.suggestionCount > 0 ? '\n${value.suggestionCount} proposition(s) sont prêtes dans le carnet.' : ''}'
+            '${value.suggestionPreparationFailed ? '\nLa préparation automatique pourra être relancée depuis le carnet.' : ''}',
+        action: FilledButton.tonalIcon(
+          onPressed: onOpenCarnet,
+          icon: const Icon(Icons.rule_rounded),
+          label: const Text('Vérifier dans le carnet'),
+        ),
+      );
+    }
+
+    return _CarnetSyncContainer(
+      icon: Icons.info_outline_rounded,
+      color: AppColors.info,
+      background: AppColors.infoSoft,
+      title: 'Aucun événement ajouté automatiquement',
+      message: value.message,
+      action: onOpenCarnet == null
+          ? null
+          : OutlinedButton.icon(
+              onPressed: onOpenCarnet,
+              icon: const Icon(Icons.directions_car_outlined),
+              label: const Text('Ouvrir le carnet'),
+            ),
+    );
+  }
+}
+
+class _CarnetSyncContainer extends StatelessWidget {
+  const _CarnetSyncContainer({
+    required this.icon,
+    required this.color,
+    required this.background,
+    required this.title,
+    required this.message,
+    this.action,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final Color color;
+  final Color background;
+  final String title;
+  final String message;
+  final Widget? action;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              ?trailing,
+            ],
+          ),
+          const SizedBox(height: 9),
+          Text(message, style: Theme.of(context).textTheme.bodyMedium),
+          if (action != null) ...[const SizedBox(height: 14), action!],
+          const SizedBox(height: 10),
+          Text(
+            'Sécurité : aucun ajout automatique en cas de conflit VIN ou '
+            'immatriculation, de devis, de date incertaine ou de confiance '
+            'insuffisante.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
     );
   }
 }

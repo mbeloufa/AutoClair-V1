@@ -1096,17 +1096,31 @@ class _TimelineEventCard extends StatelessWidget {
           if (event.sourceType == 'DOCUMENT_AI' ||
               event.sourceType == 'USER_CONFIRMED') ...[
             const SizedBox(height: 9),
-            const Row(
+            Row(
               children: [
                 Icon(
-                  Icons.description_outlined,
+                  event.userConfirmed
+                      ? Icons.verified_rounded
+                      : Icons.pending_actions_rounded,
                   size: 15,
-                  color: AppColors.info,
+                  color: event.userConfirmed
+                      ? AppColors.info
+                      : AppColors.warning,
                 ),
-                SizedBox(width: 5),
-                Text(
-                  'Issu d’un document confirmé',
-                  style: TextStyle(color: AppColors.info, fontSize: 12),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    event.userConfirmed
+                        ? 'Issu d’un document et confirmé'
+                        : 'Ajouté automatiquement depuis un document • à vérifier',
+                    style: TextStyle(
+                      color: event.userConfirmed
+                          ? AppColors.info
+                          : AppColors.warning,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
