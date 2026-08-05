@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'vehicle.dart';
+import 'vehicle_brand_catalog.dart';
+import 'vehicle_brand_picker.dart';
 import 'vehicle_service.dart';
 
 class VehicleFormPage extends StatefulWidget {
@@ -163,7 +165,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       await _service.saveVehicle(
         vehicleId: widget.vehicleId,
         nickname: _nicknameController.text,
-        make: _makeController.text,
+        make: VehicleBrandCatalog.canonicalValue(_makeController.text),
         model: _modelController.text,
         vehicleYear: _nullableInt(_yearController),
         fuelType: _fuelType,
@@ -261,17 +263,11 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
             ),
           ),
           const SizedBox(height: 16),
-          TextFormField(
+          VehicleBrandPickerField(
             controller: _makeController,
-            textInputAction: TextInputAction.next,
-            textCapitalization: TextCapitalization.words,
+            enabled: !_saving,
             validator: (value) =>
-                _requiredText(value, 'Saisissez la marque du véhicule.'),
-            decoration: const InputDecoration(
-              labelText: 'Marque',
-              hintText: 'Ex. Volkswagen',
-              prefixIcon: Icon(Icons.directions_car_outlined),
-            ),
+                _requiredText(value, 'Sélectionnez la marque du véhicule.'),
           ),
           const SizedBox(height: 16),
           TextFormField(

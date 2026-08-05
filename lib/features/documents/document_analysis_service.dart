@@ -71,9 +71,13 @@ class DocumentAnalysisService {
         );
       }
 
-      final result = DocumentAnalysisResult.fromMap(
-        Map<String, dynamic>.from(rawAnalysis),
-      );
+      final analysisMap = Map<String, dynamic>.from(rawAnalysis);
+      final declaredDocumentType = await _fetchDeclaredDocumentType(documentId);
+      if (declaredDocumentType != null) {
+        analysisMap['declared_document_type'] = declaredDocumentType;
+      }
+
+      final result = DocumentAnalysisResult.fromMap(analysisMap);
 
       // L'analyse reste prioritaire : un incident de synchronisation du carnet
       // ne doit jamais masquer un résultat déjà obtenu. L'appel est néanmoins
@@ -304,7 +308,13 @@ class DocumentAnalysisService {
         );
       }
 
-      return DocumentAnalysisResult.fromMap(Map<String, dynamic>.from(data));
+      final analysisMap = Map<String, dynamic>.from(data);
+      final declaredDocumentType = await _fetchDeclaredDocumentType(documentId);
+      if (declaredDocumentType != null) {
+        analysisMap['declared_document_type'] = declaredDocumentType;
+      }
+
+      return DocumentAnalysisResult.fromMap(analysisMap);
     } on PostgrestException catch (error) {
       throw DocumentAnalysisException(_databaseMessage(error));
     } on DocumentAnalysisException {
@@ -313,6 +323,23 @@ class DocumentAnalysisService {
       throw const DocumentAnalysisException(
         "Le résultat de l'analyse n'a pas pu être chargé.",
       );
+    }
+  }
+
+  Future<String?> _fetchDeclaredDocumentType(String documentId) async {
+    try {
+      final data = await _client
+          .from('documents')
+          .select('document_type')
+          .eq('id', documentId)
+          .maybeSingle();
+
+      final value = data?['document_type']?.toString().trim();
+      return value == null || value.isEmpty ? null : value;
+    } catch (_) {
+      // Le résultat de l'analyse reste disponible même si le libellé déclaré
+      // ne peut pas être relu ponctuellement.
+      return null;
     }
   }
 

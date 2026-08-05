@@ -10,6 +10,7 @@ import '../documents/document_history_item.dart';
 import '../vehicle_care/vehicle_care_models.dart';
 import '../vehicle_care/vehicle_care_service.dart';
 import '../vehicles/vehicle.dart';
+import '../vehicles/vehicle_brand_logo.dart';
 import '../vehicles/vehicle_service.dart';
 
 class HomePage extends StatefulWidget {
@@ -552,6 +553,7 @@ class _PrimaryVehicleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final details = <String>[
+      if (vehicle.nickname?.trim().isNotEmpty == true) vehicle.makeAndModel,
       if (vehicle.vehicleYear != null) vehicle.vehicleYear.toString(),
       if (vehicle.fuelType?.trim().isNotEmpty == true) vehicle.fuelType!,
       if (vehicle.mileage != null) '${_formatInteger(vehicle.mileage!)} km',
@@ -571,18 +573,11 @@ class _PrimaryVehicleCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.13),
-                      borderRadius: BorderRadius.circular(17),
-                    ),
-                    child: const Icon(
-                      Icons.directions_car_filled_outlined,
-                      color: Colors.white,
-                      size: 29,
-                    ),
+                  VehicleBrandLogo(
+                    brand: vehicle.make,
+                    size: 54,
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.white.withValues(alpha: 0.13),
                   ),
                   const SizedBox(width: 14),
                   Expanded(

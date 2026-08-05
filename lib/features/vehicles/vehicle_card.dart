@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'vehicle.dart';
+import 'vehicle_brand_logo.dart';
 
 enum VehicleCardAction { edit, delete }
 
@@ -41,19 +42,7 @@ class VehicleCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: AppColors.softPrimary,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: const Icon(
-                  Icons.directions_car,
-                  color: AppColors.primary,
-                  size: 30,
-                ),
-              ),
+              VehicleBrandLogo(brand: vehicle.make, size: 54),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(

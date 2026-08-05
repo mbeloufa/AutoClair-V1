@@ -119,14 +119,7 @@ class _AccountPageState extends State<AccountPage> {
                 : const Icon(Icons.logout),
             label: const Text('Se déconnecter'),
           ),
-          const SizedBox(height: 32),
-          Text(
-            'Zone sensible',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(color: AppColors.error),
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 22),
           _DangerCard(
             onDeleteAccount: _loading
                 ? null

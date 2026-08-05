@@ -5,11 +5,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../vehicles/vehicle.dart';
+import '../vehicles/vehicle_brand_logo.dart';
 import '../vehicles/vehicle_service.dart';
 import 'document_analysis_journey.dart';
 import 'document_analysis_service.dart';
 import 'document_file_preview.dart';
 import 'document_scanner_service.dart';
+import 'document_type_catalog.dart';
 import 'document_upload_service.dart';
 import 'selected_document_file.dart';
 
@@ -23,12 +25,6 @@ class DocumentUploadPage extends StatefulWidget {
 enum _AnalysisStage { idle, uploading, analyzing, failed }
 
 class _DocumentUploadPageState extends State<DocumentUploadPage> {
-  static const _documentTypes = <String, String>{
-    'estimate': 'Devis',
-    'invoice': 'Facture',
-    'repair_order': 'Ordre de réparation',
-  };
-
   final _formKey = GlobalKey<FormState>();
   final _commentController = TextEditingController();
   final _vehicleService = VehicleService();
@@ -322,15 +318,26 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
               prefixIcon: Icon(Icons.directions_car_outlined),
             ),
             items: _vehicles
-                .map(
-                  (vehicle) => DropdownMenuItem(
+                .map((vehicle) {
+                  final hasNickname =
+                      vehicle.nickname?.trim().isNotEmpty == true;
+                  final label = hasNickname
+                      ? '${vehicle.displayName} — ${vehicle.makeAndModel}'
+                      : vehicle.makeAndModel;
+
+                  return DropdownMenuItem(
                     value: vehicle.id,
-                    child: Text(
-                      '${vehicle.displayName} — ${vehicle.makeAndModel}',
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: [
+                        VehicleBrandLogo(brand: vehicle.make, size: 34),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(label, overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
                     ),
-                  ),
-                )
+                  );
+                })
                 .toList(growable: false),
             validator: (value) =>
                 value == null ? 'Sélectionnez le véhicule concerné.' : null,
@@ -345,11 +352,17 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
               labelText: 'Type de document',
               prefixIcon: Icon(Icons.description_outlined),
             ),
-            items: _documentTypes.entries
+            items: DocumentTypeCatalog.definitions
                 .map(
-                  (entry) => DropdownMenuItem(
-                    value: entry.key,
-                    child: Text(entry.value),
+                  (definition) => DropdownMenuItem(
+                    value: definition.value,
+                    child: Row(
+                      children: [
+                        Icon(definition.icon, size: 20),
+                        const SizedBox(width: 10),
+                        Text(definition.label),
+                      ],
+                    ),
                   ),
                 )
                 .toList(growable: false),

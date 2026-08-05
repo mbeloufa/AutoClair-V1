@@ -44,7 +44,7 @@ class DocumentUploadService {
       onProgress('Création du dossier sécurisé…');
 
       final draftData = await _client.rpc(
-        'create_document_draft',
+        'create_document_draft_v2',
         params: {
           'p_vehicle_id': vehicleId,
           'p_document_type': documentType,

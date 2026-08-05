@@ -1,3 +1,5 @@
+import 'document_type_catalog.dart';
+
 class DocumentHistoryItem {
   const DocumentHistoryItem({
     required this.id,
@@ -31,14 +33,7 @@ class DocumentHistoryItem {
     );
   }
 
-  String get typeLabel {
-    return switch (documentType) {
-      'estimate' => 'Devis',
-      'invoice' => 'Facture',
-      'repair_order' => 'Ordre de réparation',
-      _ => 'Document',
-    };
-  }
+  String get typeLabel => DocumentTypeCatalog.labelFor(documentType);
 
   String get statusLabel {
     return switch (status) {
