@@ -60,6 +60,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.error,
       ),
       _FinancialTool(
+        icon: Icons.sell_outlined,
+        title: 'Préparer ma vente',
+        description:
+            'Vérifiez le dossier, les documents et le produit net attendu.',
+        route: '/sale-preparation',
+        background: AppColors.warningSoft,
+        foreground: AppColors.warning,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',

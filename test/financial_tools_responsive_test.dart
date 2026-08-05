@@ -24,6 +24,7 @@ void main() {
           '/eco-driving',
           '/maintenance-planner',
           '/breakdown-assistant',
+          '/sale-preparation',
           '/compliance',
           '/quote-comparison',
           '/insurance-review',
@@ -90,6 +91,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Gérer une panne'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Préparer ma vente'),
+      180,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Préparer ma vente'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(
