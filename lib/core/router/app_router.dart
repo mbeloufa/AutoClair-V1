@@ -23,6 +23,7 @@ import '../../features/compliance/vehicle_compliance_page.dart';
 import '../../features/financial_tools/financial_tools_page.dart';
 import '../../features/fuel_optimizer/fuel_optimizer_page.dart';
 import '../../features/insurance_review/insurance_review_page.dart';
+import '../../features/maintenance_planner/maintenance_planner_page.dart';
 import '../../features/quote_comparison/quote_comparison_page.dart';
 import '../../features/vehicle_budget/vehicle_budget_page.dart';
 import '../../features/fuel_prices/fuel_price_compare_page.dart';
@@ -196,6 +197,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/eco-driving',
         builder: (context, state) => const EcoDrivingPage(),
+      ),
+      GoRoute(
+        path: '/maintenance-planner',
+        builder: (context, state) => const MaintenancePlannerPage(),
       ),
       GoRoute(
         path: '/compliance',

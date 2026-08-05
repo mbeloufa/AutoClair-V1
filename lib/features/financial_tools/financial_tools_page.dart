@@ -42,6 +42,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.success,
       ),
       _FinancialTool(
+        icon: Icons.event_repeat_outlined,
+        title: 'Planifier mon entretien',
+        description:
+            'Anticipez les échéances et le budget des 12 prochains mois.',
+        route: '/maintenance-planner',
+        background: AppColors.infoSoft,
+        foreground: AppColors.info,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',
