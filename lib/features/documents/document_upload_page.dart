@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,13 +7,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../vehicles/vehicle.dart';
-import '../vehicles/vehicle_brand_logo.dart';
 import '../vehicles/vehicle_service.dart';
 import 'document_analysis_journey.dart';
 import 'document_analysis_service.dart';
 import 'document_file_preview.dart';
 import 'document_scanner_service.dart';
 import 'document_type_catalog.dart';
+import 'document_vehicle_selector.dart';
 import 'document_upload_service.dart';
 import 'selected_document_file.dart';
 
@@ -73,12 +75,21 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
     });
 
     try {
-      final vehicles = await _vehicleService.fetchVehicles();
+      final vehicles = await _vehicleService.fetchVehicles().timeout(
+        const Duration(seconds: 12),
+      );
       if (!mounted) return;
       setState(() {
         _vehicles = vehicles;
         _selectedVehicleId = vehicles.isEmpty ? null : vehicles.first.id;
       });
+    } on TimeoutException {
+      if (mounted) {
+        setState(
+          () => _loadError =
+              'Le chargement prend trop de temps. Vérifiez votre connexion.',
+        );
+      }
     } on VehicleServiceException catch (error) {
       if (mounted) setState(() => _loadError = error.message);
     } finally {
@@ -261,7 +272,15 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
 
   Widget _buildBody(BuildContext context) {
     if (_loadingVehicles) {
-      return const Center(child: CircularProgressIndicator());
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
+        children: const [
+          _JourneyHeader(),
+          SizedBox(height: 24),
+          _LoadingVehiclesCard(),
+        ],
+      );
     }
     if (_loadError != null) {
       return _CenteredMessage(
@@ -311,39 +330,13 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _selectedVehicleId,
-            decoration: const InputDecoration(
-              labelText: 'Véhicule concerné',
-              prefixIcon: Icon(Icons.directions_car_outlined),
-            ),
-            items: _vehicles
-                .map((vehicle) {
-                  final hasNickname =
-                      vehicle.nickname?.trim().isNotEmpty == true;
-                  final label = hasNickname
-                      ? '${vehicle.displayName} — ${vehicle.makeAndModel}'
-                      : vehicle.makeAndModel;
-
-                  return DropdownMenuItem(
-                    value: vehicle.id,
-                    child: Row(
-                      children: [
-                        VehicleBrandLogo(brand: vehicle.make, size: 34),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(label, overflow: TextOverflow.ellipsis),
-                        ),
-                      ],
-                    ),
-                  );
-                })
-                .toList(growable: false),
-            validator: (value) =>
-                value == null ? 'Sélectionnez le véhicule concerné.' : null,
-            onChanged: _documentAlreadyUploaded
-                ? null
-                : (value) => setState(() => _selectedVehicleId = value),
+          DocumentVehicleSelector(
+            vehicles: _vehicles,
+            selectedVehicleId: _selectedVehicleId,
+            enabled: !_documentAlreadyUploaded,
+            onChanged: (value) {
+              setState(() => _selectedVehicleId = value);
+            },
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
@@ -446,6 +439,32 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LoadingVehiclesCard extends StatelessWidget {
+  const _LoadingVehiclesCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Row(
+        children: [
+          SizedBox.square(
+            dimension: 24,
+            child: CircularProgressIndicator(strokeWidth: 2.5),
+          ),
+          SizedBox(width: 14),
+          Expanded(child: Text('Chargement de vos véhicules…')),
         ],
       ),
     );

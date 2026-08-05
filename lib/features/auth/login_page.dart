@@ -62,9 +62,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return AuthLayout(
       title: 'Ravi de vous revoir',
-      subtitle:
-          'Connectez-vous pour retrouver vos véhicules, vos documents et '
-          'vos analyses AutoClair.',
+      subtitle: 'Retrouvez vos véhicules et vos documents.',
       child: Form(
         key: _formKey,
         child: Column(
@@ -129,18 +127,16 @@ class _LoginPageState extends State<LoginPage> {
                         strokeWidth: 2.5,
                       ),
                     )
-                  : const Text('Accéder à mon espace'),
+                  : const Text(
+                      'Accéder à mon espace',
+                      textAlign: TextAlign.center,
+                    ),
             ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text("Vous n'avez pas de compte ?"),
-                TextButton(
-                  onPressed: () => context.push('/register'),
-                  child: const Text('Créer un compte'),
-                ),
-              ],
+            const Text('Pas encore de compte ?', textAlign: TextAlign.center),
+            TextButton(
+              onPressed: () => context.push('/register'),
+              child: const Text('Créer un compte', textAlign: TextAlign.center),
             ),
           ],
         ),

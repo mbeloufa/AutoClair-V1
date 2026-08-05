@@ -94,13 +94,15 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                         strokeWidth: 2.5,
                       ),
                     )
-                  : const Text('Envoyer le lien de réinitialisation'),
+                  : const Text('Envoyer le lien', textAlign: TextAlign.center),
             ),
             const SizedBox(height: 12),
-            TextButton.icon(
+            TextButton(
               onPressed: () => context.go('/login'),
-              icon: const Icon(Icons.arrow_back),
-              label: const Text('Retour à la connexion'),
+              child: const Text(
+                'Retour à la connexion',
+                textAlign: TextAlign.center,
+              ),
             ),
           ],
         ),

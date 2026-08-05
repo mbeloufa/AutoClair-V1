@@ -175,18 +175,14 @@ class _HistoryPageState extends State<HistoryPage> {
       appBar: AppBar(
         title: const Text('Mes documents'),
         actions: [
-          IconButton(
+          TextButton.icon(
             onPressed: _operationInProgress
                 ? null
                 : () => context.push('/documents/new'),
             icon: const Icon(Icons.add_rounded),
-            tooltip: 'Ajouter un document',
+            label: const Text('Ajouter'),
           ),
-          IconButton(
-            onPressed: _loading || _operationInProgress ? null : _loadDocuments,
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Actualiser',
-          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
@@ -316,7 +312,7 @@ class _HistoryHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = documentCount > 1 ? 'documents suivis' : 'document suivi';
+    final label = documentCount > 1 ? 'documents' : 'document';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -349,7 +345,7 @@ class _HistoryHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'Retrouvez chaque fichier, son analyse et son état au même endroit.',
+                  'Vos fichiers et leurs analyses.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

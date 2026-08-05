@@ -95,4 +95,30 @@ void main() {
     expect(offer.confidenceLabel, 'Donnée cartographique');
     expect(offer.hasKnownAvailability, isFalse);
   });
+
+  test('does not expose an URL as a parking price', () {
+    final offer = ParkingOffer.fromJson({
+      'parking_id': 'way-456',
+      'name': 'Parking Saint-Étienne',
+      'address': 'Beaune',
+      'latitude': 47.02,
+      'longitude': 4.84,
+      'distance_km': 0.7,
+      'parking_type': 'underground',
+      'access': 'yes',
+      'fee': 'paid',
+      'charge': 'http://www.beaune.fr/IMG/pdf/stationnement_tarifs.pdf',
+      'park_and_ride': false,
+      'covered': true,
+      'source_kind': 'facility',
+      'availability_status': 'unknown',
+      'realtime': false,
+      'confidence': 'osm',
+      'smart_score': 16,
+      'recommendation_rank': 1,
+      'recommendation_reasons': ['À moins d’un kilomètre'],
+    });
+
+    expect(offer.feeLabel, 'Payant');
+  });
 }

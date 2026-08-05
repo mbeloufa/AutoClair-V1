@@ -172,7 +172,7 @@ class _RegisterPageState extends State<RegisterPage> {
               validator: Validators.password,
               onFieldSubmitted: (_) => _submit(),
               decoration: InputDecoration(
-                labelText: 'Confirmer le mot de passe',
+                labelText: 'Confirmation',
                 hintText: 'Répétez votre mot de passe',
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
@@ -226,15 +226,10 @@ class _RegisterPageState extends State<RegisterPage> {
                   : const Text('Créer mon compte'),
             ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text("J'ai déjà un compte ?"),
-                TextButton(
-                  onPressed: () => context.go('/login'),
-                  child: const Text('Se connecter'),
-                ),
-              ],
+            const Text("J'ai déjà un compte ?", textAlign: TextAlign.center),
+            TextButton(
+              onPressed: () => context.go('/login'),
+              child: const Text('Se connecter', textAlign: TextAlign.center),
             ),
           ],
         ),

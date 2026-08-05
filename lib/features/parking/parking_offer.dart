@@ -133,7 +133,13 @@ class ParkingOffer {
     if (isFree) return 'Gratuit';
     if (isPaid) {
       final value = charge?.trim();
-      return value == null || value.isEmpty ? 'Payant' : value;
+      if (value == null || value.isEmpty) return 'Payant';
+
+      final uri = Uri.tryParse(value);
+      if (uri != null && uri.hasScheme) return 'Payant';
+      if (value.length > 48) return 'Tarif à vérifier';
+
+      return value;
     }
     return 'Tarif non renseigné';
   }

@@ -216,6 +216,27 @@ class _ParkingPageState extends State<ParkingPage> {
     }
   }
 
+  Future<void> _showSourceInfo() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+            child: _SourceDetails(
+              sourceName: _sourceName,
+              osmBase: _osmBase,
+              availabilityDisclaimer: _availabilityDisclaimer,
+              providers: _providers,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showMessage(String message) {
     ScaffoldMessenger.of(
       context,
@@ -475,10 +496,18 @@ class _ParkingPageState extends State<ParkingPage> {
               ),
             ),
             if (_searching)
-              const SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
+              const Padding(
+                padding: EdgeInsets.only(right: 8),
+                child: SizedBox.square(
+                  dimension: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
               ),
+            IconButton(
+              onPressed: _sourceFetchedAt == null ? null : _showSourceInfo,
+              icon: const Icon(Icons.info_outline_rounded),
+              tooltip: 'Sources et fiabilité',
+            ),
           ],
         ),
         const SizedBox(height: 10),
@@ -535,8 +564,8 @@ class _ParkingPageState extends State<ParkingPage> {
         if (_sourceFetchedAt != null) ...[
           const SizedBox(height: 10),
           Text(
-            'Recherche réalisée le ${_dateTime(_sourceFetchedAt!)}'
-            '${_cacheHit ? ' • résultat récent réutilisé' : ''}',
+            'Mis à jour ${_dateTime(_sourceFetchedAt!)}'
+            '${_cacheHit ? ' • résultat récent' : ''}',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -570,13 +599,6 @@ class _ParkingPageState extends State<ParkingPage> {
             ),
             if (index < _offers.length - 1) const SizedBox(height: 12),
           ],
-        const SizedBox(height: 14),
-        _SourceNote(
-          sourceName: _sourceName,
-          osmBase: _osmBase,
-          availabilityDisclaimer: _availabilityDisclaimer,
-          providers: _providers,
-        ),
       ],
     );
   }
@@ -590,8 +612,8 @@ class _ParkingPageState extends State<ParkingPage> {
       if (offer.parkingId == _selectedParkingId) selected = offer;
     }
 
-    final height = (MediaQuery.sizeOf(context).height * 0.72)
-        .clamp(560.0, 760.0)
+    final height = (MediaQuery.sizeOf(context).height * 0.58)
+        .clamp(460.0, 620.0)
         .toDouble();
 
     return SizedBox(
@@ -619,6 +641,9 @@ class _ParkingPageState extends State<ParkingPage> {
             )
             .toList(growable: false),
         selectedMarkerId: selected.parkingId,
+        initialSheetSize: 0.40,
+        minSheetSize: 0.30,
+        maxSheetSize: 0.88,
         onMarkerSelected: (parkingId) {
           setState(() => _selectedParkingId = parkingId);
         },
@@ -849,6 +874,7 @@ class _ParkingMapSheet extends StatelessWidget {
       children: [
         _ParkingCard(
           offer: offer,
+          compact: true,
           onDirections: onDirections,
           onCall: onCall,
           onWebsite: onWebsite,
@@ -864,9 +890,11 @@ class _ParkingCard extends StatelessWidget {
     required this.onDirections,
     required this.onCall,
     required this.onWebsite,
+    this.compact = false,
   });
 
   final ParkingOffer offer;
+  final bool compact;
   final VoidCallback onDirections;
   final VoidCallback? onCall;
   final VoidCallback? onWebsite;
@@ -926,33 +954,26 @@ class _ParkingCard extends StatelessWidget {
                   children: [
                     Text(
                       offer.displayName,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       offer.address.isEmpty ? offer.typeLabel : offer.address,
+                      maxLines: compact ? 1 : 2,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    offer.distanceLabel,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.titleMedium?.copyWith(color: AppColors.primary),
-                  ),
-                  Text(
-                    '${offer.smartScore.round()}/100',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
+              Text(
+                offer.distanceLabel,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(color: AppColors.primary),
               ),
             ],
           ),
@@ -960,7 +981,9 @@ class _ParkingCard extends StatelessWidget {
           _AvailabilityPanel(offer: offer),
           if (offer.recommendationReasons.isNotEmpty) ...[
             const SizedBox(height: 12),
-            for (final reason in offer.recommendationReasons.take(3))
+            for (final reason in offer.recommendationReasons.take(
+              compact ? 1 : 3,
+            ))
               Padding(
                 padding: const EdgeInsets.only(bottom: 5),
                 child: Row(
@@ -1019,9 +1042,10 @@ class _ParkingCard extends StatelessWidget {
                 const _Badge(label: 'Couvert', icon: Icons.roofing_rounded),
             ],
           ),
-          if (offer.operatorName != null ||
-              offer.openingHours != null ||
-              offer.maxHeightM != null) ...[
+          if (!compact &&
+              (offer.operatorName != null ||
+                  offer.openingHours != null ||
+                  offer.maxHeightM != null)) ...[
             const SizedBox(height: 12),
             const Divider(),
             const SizedBox(height: 10),
@@ -1101,11 +1125,15 @@ class _RecommendationBanner extends StatelessWidget {
             color: AppColors.success,
           ),
           const SizedBox(width: 8),
-          Text(
-            'Recommandation AutoClair',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: AppColors.success,
-              fontWeight: FontWeight.w800,
+          Expanded(
+            child: Text(
+              'Recommandation AutoClair',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.success,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
         ],
@@ -1190,25 +1218,36 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground = positive ? AppColors.success : AppColors.primary;
     final background = positive ? AppColors.successSoft : AppColors.softPrimary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(99),
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: (MediaQuery.sizeOf(context).width - 92)
+            .clamp(180.0, 420.0)
+            .toDouble(),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: foreground),
-          const SizedBox(width: 5),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: foreground,
-              fontWeight: FontWeight.w700,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+        decoration: BoxDecoration(
+          color: background,
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: foreground),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1369,8 +1408,8 @@ class _WarningBanner extends StatelessWidget {
   }
 }
 
-class _SourceNote extends StatelessWidget {
-  const _SourceNote({
+class _SourceDetails extends StatelessWidget {
+  const _SourceDetails({
     required this.sourceName,
     required this.osmBase,
     required this.availabilityDisclaimer,
@@ -1393,26 +1432,60 @@ class _SourceNote extends StatelessWidget {
         ? null
         : _ParkingPageState._dateTime(osmBase!);
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.infoSoft,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.info_outline_rounded, color: AppColors.info),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Sources et fiabilité',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
+        _SourceDetailRow(label: 'Carte', value: sourceName),
+        if (providerLabels.isNotEmpty)
+          _SourceDetailRow(label: 'Flux officiels', value: providerLabels),
+        if (baseLabel != null)
+          _SourceDetailRow(label: 'Mise à jour', value: baseLabel),
+        _SourceDetailRow(label: 'Disponibilité', value: availabilityDisclaimer),
+        const SizedBox(height: 10),
+        Text(
+          '© contributeurs OpenStreetMap',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+class _SourceDetailRow extends StatelessWidget {
+  const _SourceDetailRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppColors.info),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Sources : $sourceName — © contributeurs OpenStreetMap.'
-              '${providerLabels.isEmpty ? '' : '\nFlux officiels : $providerLabels.'}'
-              '${baseLabel == null ? '' : '\nCarte mise à jour : $baseLabel.'}'
-              '\n$availabilityDisclaimer',
-              style: Theme.of(context).textTheme.bodySmall,
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w800,
             ),
           ),
+          const SizedBox(height: 3),
+          Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],
       ),
     );

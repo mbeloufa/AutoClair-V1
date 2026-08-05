@@ -274,17 +274,6 @@ class _HomePageState extends State<HomePage> {
       );
     }
 
-    if (items.isEmpty) {
-      items.add(
-        _HomeActionItem(
-          icon: Icons.verified_outlined,
-          title: 'Rien d’urgent pour le moment',
-          subtitle: 'Votre suivi est à jour. AutoClair continue de surveiller.',
-          priority: _HomeActionPriority.success,
-        ),
-      );
-    }
-
     return items.take(3).toList(growable: false);
   }
 
@@ -317,6 +306,7 @@ class _HomePageState extends State<HomePage> {
         ? null
         : fullName.split(RegExp(r'\s+')).first;
     final vehicle = _primaryVehicle;
+    final priorityItems = _buildPriorityItems();
 
     return Scaffold(
       appBar: AppBar(
@@ -350,9 +340,11 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 22),
             if (_loading && vehicle == null)
-              const _LoadingCard(height: 188)
-            else
-              _PriorityPanel(items: _buildPriorityItems()),
+              const _LoadingCard(height: 132)
+            else if (priorityItems.isNotEmpty)
+              _PriorityPanel(items: priorityItems)
+            else if (vehicle != null)
+              const _UpToDateLine(),
             if (_dashboardError != null) ...[
               const SizedBox(height: 12),
               _DashboardWarning(
@@ -407,6 +399,42 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       bottomNavigationBar: const AppBottomNav(currentIndex: 0),
+    );
+  }
+}
+
+class _UpToDateLine extends StatelessWidget {
+  const _UpToDateLine();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Votre suivi est à jour',
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: AppColors.successSoft,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              color: AppColors.success,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            'Vous êtes à jour',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: AppColors.success,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -760,7 +788,7 @@ class _HomeMenuGrid extends StatelessWidget {
               width: tileWidth,
               icon: Icons.directions_car_outlined,
               title: 'Mes véhicules',
-              subtitle: 'Suivi, entretien et budget',
+              subtitle: 'Suivi et entretien',
               foreground: AppColors.primary,
               background: AppColors.softPrimary,
               onTap: onVehicles,
@@ -769,7 +797,7 @@ class _HomeMenuGrid extends StatelessWidget {
               width: tileWidth,
               icon: Icons.near_me_outlined,
               title: 'Autour de moi',
-              subtitle: 'Carburant, bornes et contrôle',
+              subtitle: 'Stations, bornes et parking',
               foreground: AppColors.success,
               background: AppColors.successSoft,
               onTap: onNearby,
@@ -779,7 +807,7 @@ class _HomeMenuGrid extends StatelessWidget {
               icon: Icons.document_scanner_outlined,
               title: hasVehicle ? 'Analyser un document' : 'Démarrer mon suivi',
               subtitle: hasVehicle
-                  ? 'Devis, facture ou ordre de réparation'
+                  ? 'Facture, devis ou contrôle'
                   : 'Ajoutez d’abord votre véhicule',
               foreground: AppColors.info,
               background: AppColors.infoSoft,
@@ -790,7 +818,7 @@ class _HomeMenuGrid extends StatelessWidget {
               icon: Icons.folder_copy_outlined,
               title: 'Mes documents',
               subtitle: documentCount == 0
-                  ? 'Analyses et justificatifs'
+                  ? 'Tous vos documents'
                   : '$documentCount document${documentCount > 1 ? 's' : ''} suivi${documentCount > 1 ? 's' : ''}',
               foreground: AppColors.warning,
               background: AppColors.warningSoft,
@@ -826,6 +854,7 @@ class _HomeMenuTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: width,
+      height: 188,
       child: Material(
         color: AppColors.surface,
         shape: RoundedRectangleBorder(
@@ -849,7 +878,7 @@ class _HomeMenuTile extends StatelessWidget {
                   ),
                   child: Icon(icon, color: foreground, size: 24),
                 ),
-                const SizedBox(height: 14),
+                const Spacer(),
                 Text(
                   title,
                   maxLines: 2,
@@ -915,28 +944,33 @@ class _CompactAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
-          child: Row(
-            children: [
-              Icon(icon, color: AppColors.primary),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+    return SizedBox(
+      height: 82,
+      child: Material(
+        color: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Icon(icon, color: AppColors.primary),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
