@@ -12,6 +12,7 @@ import '../vehicles/vehicle_brand_logo.dart';
 import '../vehicles/vehicle_service.dart';
 import 'vehicle_care_models.dart';
 import 'vehicle_care_service.dart';
+import 'vehicle_event_notification_service.dart';
 
 enum _CareSection { overview, timeline, maintenance, alerts }
 
@@ -33,6 +34,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   final _vehicleService = VehicleService();
   final _careService = VehicleCareService();
   final _offersService = CommercialOffersService();
+  final _notificationService = VehicleEventNotificationService.instance;
 
   Vehicle? _vehicle;
   VehicleCareBundle? _bundle;
@@ -74,12 +76,28 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
         _loading = false;
       });
       unawaited(_loadOfferPreview());
+      unawaited(_synchronizeEventReminders(vehicle));
     } on VehicleServiceException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } on VehicleCareException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _synchronizeEventReminders(Vehicle vehicle) async {
+    try {
+      final plans = await _careService.fetchPlannedEventReminders(vehicle.id);
+      await _notificationService.synchronizeReminders(
+        vehicleId: vehicle.id,
+        plans: plans,
+        vehicleLabel: vehicle.displayName,
+      );
+    } on VehicleCareException {
+      // La page du carnet reste utilisable si la synchronisation locale échoue.
+    } on VehicleEventNotificationException {
+      // Une permission refusée ne bloque jamais le suivi du véhicule.
     }
   }
 

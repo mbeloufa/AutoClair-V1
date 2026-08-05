@@ -102,6 +102,12 @@ class VehicleEventCatalog {
           eventType: 'INSPECTION',
           defaultTitle: 'Contrôle technique',
         ),
+        VehicleEventSubcategory(
+          code: 'ANTI_POLLUTION',
+          label: 'Antipollution',
+          eventType: 'INSPECTION',
+          defaultTitle: 'Contrôle antipollution',
+        ),
       ],
     ),
     VehicleEventCategory(
@@ -114,6 +120,12 @@ class VehicleEventCatalog {
           label: 'Moteur et transmission',
           eventType: 'REPAIR',
           defaultTitle: 'Réparation moteur ou transmission',
+        ),
+        VehicleEventSubcategory(
+          code: 'DIAGNOSTICS',
+          label: 'Diagnostic',
+          eventType: 'REPAIR',
+          defaultTitle: 'Diagnostic du véhicule',
         ),
         VehicleEventSubcategory(
           code: 'BATTERY_ELECTRICAL',
@@ -153,10 +165,22 @@ class VehicleEventCatalog {
           defaultTitle: 'Assurance',
         ),
         VehicleEventSubcategory(
+          code: 'ACCIDENT_CLAIM',
+          label: 'Sinistre',
+          eventType: 'ACCIDENT',
+          defaultTitle: 'Sinistre automobile',
+        ),
+        VehicleEventSubcategory(
           code: 'REGISTRATION',
           label: 'Immatriculation',
           eventType: 'ADMINISTRATIVE',
           defaultTitle: 'Démarche d’immatriculation',
+        ),
+        VehicleEventSubcategory(
+          code: 'PURCHASE_SALE',
+          label: 'Achat et vente',
+          eventType: 'ADMINISTRATIVE',
+          defaultTitle: 'Achat ou vente du véhicule',
         ),
         VehicleEventSubcategory(
           code: 'WARRANTY_RECALL',
@@ -236,8 +260,19 @@ class VehicleEventCatalog {
       'contre visite',
       'inspection technique',
       'proces verbal controle',
+      'pv controle technique',
     ])) {
       return pick('SAFETY', 'TECHNICAL_INSPECTION');
+    }
+    if (_containsAny(normalized, [
+      'antipollution',
+      'anti pollution',
+      'controle pollution',
+      'controle emission',
+      'emissions polluantes',
+      'opacite fumee',
+    ])) {
+      return pick('SAFETY', 'ANTI_POLLUTION');
     }
     if (_containsAny(normalized, [
       'plaquette',
@@ -245,6 +280,7 @@ class VehicleEventCatalog {
       'freinage',
       'liquide de frein',
       'etrier',
+      'maitre cylindre',
     ])) {
       return pick('SAFETY', 'BRAKES');
     }
@@ -255,6 +291,7 @@ class VehicleEventCatalog {
       'jante',
       'equilibrage',
       'geometrie',
+      'parallellisme',
     ])) {
       return pick('SAFETY', 'TYRES');
     }
@@ -265,6 +302,7 @@ class VehicleEventCatalog {
       'ampoule',
       'eclairage',
       'visibilite',
+      'balai essuie glace',
     ])) {
       return pick('SAFETY', 'LIGHTING_VISIBILITY');
     }
@@ -275,40 +313,57 @@ class VehicleEventCatalog {
       'filtre carburant',
       'liquide refroidissement',
       'liquide lave glace',
+      'liquide direction',
       'fluide',
     ])) {
       return pick('MAINTENANCE', 'FILTERS_FLUIDS');
     }
     if (_containsAny(normalized, [
       'vidange',
-      'revision',
+      'revision constructeur',
+      'revision complete',
+      'revision annuelle',
       'entretien periodique',
       'huile moteur',
+      'service entretien',
     ])) {
       return pick('MAINTENANCE', 'SERVICE_OIL');
     }
     if (_containsAny(normalized, [
       'distribution',
-      'courroie',
+      'courroie distribution',
       'chaine distribution',
       'pompe a eau',
+      'galet tendeur',
     ])) {
       return pick('MAINTENANCE', 'TIMING');
     }
     if (_containsAny(normalized, [
       'climatisation',
-      'clim ',
+      'recharge clim',
       'recharge gaz',
-      'filtre habitacle',
+      'compresseur clim',
+      'circuit clim',
     ])) {
       return pick('MAINTENANCE', 'CLIMATE');
+    }
+    if (_containsAny(normalized, [
+      'diagnostic',
+      'lecture defaut',
+      'lecture code erreur',
+      'passage valise',
+      'voyant moteur',
+      'recherche de panne',
+    ])) {
+      return pick('REPAIR', 'DIAGNOSTICS');
     }
     if (_containsAny(normalized, [
       'batterie',
       'alternateur',
       'demarreur',
       'electricite',
-      'electrique',
+      'faisceau',
+      'fusible',
     ])) {
       return pick('REPAIR', 'BATTERY_ELECTRICAL');
     }
@@ -318,6 +373,8 @@ class VehicleEventCatalog {
       'direction',
       'rotule',
       'triangle',
+      'biellette',
+      'roulement',
     ])) {
       return pick('REPAIR', 'STEERING_SUSPENSION');
     }
@@ -326,6 +383,8 @@ class VehicleEventCatalog {
       'silencieux',
       'catalyseur',
       'filtre a particules',
+      'fap',
+      'vanne egr',
     ])) {
       return pick('REPAIR', 'EXHAUST');
     }
@@ -335,6 +394,8 @@ class VehicleEventCatalog {
       'pare choc',
       'portiere',
       'peinture',
+      'debosselage',
+      'impact pare brise',
     ])) {
       return pick('REPAIR', 'BODY_GLASS');
     }
@@ -345,24 +406,53 @@ class VehicleEventCatalog {
       'transmission',
       'injecteur',
       'turbo',
-      'diagnostic',
+      'joint de culasse',
+      'cardan',
     ])) {
       return pick('REPAIR', 'ENGINE_TRANSMISSION');
     }
-    if (_containsAny(normalized, ['assurance', 'sinistre'])) {
+    if (_containsAny(normalized, [
+      'sinistre',
+      'accident',
+      'constat amiable',
+      'expertise assurance',
+      'indemnisation',
+    ])) {
+      return pick('ADMINISTRATIVE', 'ACCIDENT_CLAIM');
+    }
+    if (_containsAny(normalized, [
+      'assurance',
+      'attestation assurance',
+      'carte verte',
+      'cotisation assurance',
+    ])) {
       return pick('ADMINISTRATIVE', 'INSURANCE');
     }
     if (_containsAny(normalized, [
       'immatriculation',
       'carte grise',
       'certificat immatriculation',
+      'changement titulaire',
+      'changement adresse carte grise',
     ])) {
       return pick('ADMINISTRATIVE', 'REGISTRATION');
+    }
+    if (_containsAny(normalized, [
+      'achat vehicule',
+      'vente vehicule',
+      'certificat de cession',
+      'declaration de cession',
+      'reprise vehicule',
+      'bon de commande',
+    ])) {
+      return pick('ADMINISTRATIVE', 'PURCHASE_SALE');
     }
     if (_containsAny(normalized, [
       'garantie',
       'rappel constructeur',
       'campagne rappel',
+      'action de rappel',
+      'prise en charge constructeur',
     ])) {
       return pick('ADMINISTRATIVE', 'WARRANTY_RECALL');
     }
@@ -371,7 +461,8 @@ class VehicleEventCatalog {
       'MAINTENANCE' => pick('MAINTENANCE', 'SERVICE_OIL'),
       'INSPECTION' || 'REINSPECTION' => pick('SAFETY', 'TECHNICAL_INSPECTION'),
       'TYRES' => pick('SAFETY', 'TYRES'),
-      'INSURANCE' || 'ACCIDENT' => pick('ADMINISTRATIVE', 'INSURANCE'),
+      'INSURANCE' => pick('ADMINISTRATIVE', 'INSURANCE'),
+      'ACCIDENT' => pick('ADMINISTRATIVE', 'ACCIDENT_CLAIM'),
       'WARRANTY' || 'RECALL' => pick('ADMINISTRATIVE', 'WARRANTY_RECALL'),
       'ADMINISTRATIVE' => pick('ADMINISTRATIVE', 'REGISTRATION'),
       'REPAIR' ||
@@ -407,6 +498,23 @@ class VehicleEventCatalog {
   }
 
   static bool _containsAny(String value, List<String> patterns) {
-    return patterns.any((pattern) => value.contains(_normalize(pattern)));
+    final tokens = value.split(' ').where((token) => token.isNotEmpty).toSet();
+    final paddedValue = ' $value ';
+
+    for (final pattern in patterns) {
+      final normalizedPattern = _normalize(pattern);
+      if (normalizedPattern.isEmpty) continue;
+
+      if (normalizedPattern.contains(' ')) {
+        if (paddedValue.contains(' $normalizedPattern ')) return true;
+        continue;
+      }
+
+      if (tokens.contains(normalizedPattern) ||
+          tokens.contains('${normalizedPattern}s')) {
+        return true;
+      }
+    }
+    return false;
   }
 }

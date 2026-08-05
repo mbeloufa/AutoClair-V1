@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'vehicle_care_models.dart';
+import 'vehicle_event_reminder.dart';
 
 class VehicleCareException implements Exception {
   const VehicleCareException(this.message);
@@ -172,6 +173,48 @@ class VehicleCareService {
         clientReference: clientReference,
         eventId: eventId,
       );
+    } catch (error) {
+      throw VehicleCareException(_message(error));
+    }
+  }
+
+  Future<List<VehicleEventReminderPlan>> fetchPlannedEventReminders(
+    String vehicleId,
+  ) async {
+    try {
+      final rows = await _client
+          .from('vehicle_events')
+          .select(
+            'id,title,occurred_at,status,reminder_enabled,reminder_days_before',
+          )
+          .eq('vehicle_id', vehicleId)
+          .eq('status', 'PLANNED')
+          .eq('reminder_enabled', true)
+          .order('occurred_at');
+
+      return (rows as List)
+          .map((raw) => Map<String, dynamic>.from(raw as Map))
+          .where((row) {
+            final days = _integer(row['reminder_days_before']);
+            return row['id'] != null &&
+                row['occurred_at'] != null &&
+                isSupportedVehicleEventReminderDays(days);
+          })
+          .map((row) {
+            final days = _integer(row['reminder_days_before']);
+            return VehicleEventReminderPlan(
+              vehicleId: vehicleId,
+              eventKey: row['id'].toString(),
+              eventTitle: row['title']?.toString().trim().isNotEmpty == true
+                  ? row['title'].toString().trim()
+                  : 'Événement prévu',
+              eventDate: DateTime.parse(
+                row['occurred_at'].toString(),
+              ).toLocal(),
+              daysBefore: days,
+            );
+          })
+          .toList(growable: false);
     } catch (error) {
       throw VehicleCareException(_message(error));
     }

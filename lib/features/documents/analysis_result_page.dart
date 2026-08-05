@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../vehicle_care/vehicle_event_catalog.dart';
 import 'document_analysis_result.dart';
 import 'document_analysis_service.dart';
 import 'document_carnet_sync_result.dart';
@@ -91,8 +92,8 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
         widget.documentId,
         mileage: details.mileage,
         amount: details.amount,
-        categoryCode: operation.categoryCode,
-        subcategoryCode: operation.subcategoryCode,
+        categoryCode: details.categoryCode,
+        subcategoryCode: details.subcategoryCode,
       );
       if (!mounted) return;
       setState(() => _carnetSync = confirmed);
@@ -664,8 +665,15 @@ class _SimpleCard extends StatelessWidget {
 }
 
 class _OperationConfirmationData {
-  const _OperationConfirmationData({this.mileage, this.amount});
+  const _OperationConfirmationData({
+    required this.categoryCode,
+    required this.subcategoryCode,
+    this.mileage,
+    this.amount,
+  });
 
+  final String categoryCode;
+  final String subcategoryCode;
   final int? mileage;
   final double? amount;
 }
@@ -684,6 +692,8 @@ class _OperationConfirmationSheetState
     extends State<_OperationConfirmationSheet> {
   late final TextEditingController _mileageController;
   late final TextEditingController _amountController;
+  late String _categoryCode;
+  late String _subcategoryCode;
 
   @override
   void initState() {
@@ -696,6 +706,20 @@ class _OperationConfirmationSheetState
           ? ''
           : widget.operation.amount!.toStringAsFixed(2).replaceAll('.', ','),
     );
+    final initialCategory = VehicleEventCatalog.categoryByCode(
+      widget.operation.categoryCode,
+    );
+    final initialSubcategory = VehicleEventCatalog.subcategoryByCode(
+      widget.operation.subcategoryCode,
+      categoryCode: initialCategory.code,
+    );
+    _categoryCode = initialCategory.code;
+    _subcategoryCode =
+        initialCategory.subcategories.any(
+          (subcategory) => subcategory.code == initialSubcategory.code,
+        )
+        ? initialSubcategory.code
+        : initialCategory.subcategories.first.code;
   }
 
   @override
@@ -718,7 +742,61 @@ class _OperationConfirmationSheetState
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 5),
-          Text(widget.operation.categoryPath),
+          Text(
+            'Vérifiez la catégorie détectée avant l’ajout au carnet.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 18),
+          DropdownButtonFormField<String>(
+            key: const ValueKey('analysis-event-category'),
+            initialValue: _categoryCode,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Grande catégorie',
+              prefixIcon: Icon(Icons.category_outlined),
+            ),
+            items: VehicleEventCatalog.categories
+                .map(
+                  (category) => DropdownMenuItem(
+                    value: category.code,
+                    child: Text(category.label),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: (value) {
+              if (value == null || value == _categoryCode) return;
+              final category = VehicleEventCatalog.categoryByCode(value);
+              setState(() {
+                _categoryCode = category.code;
+                _subcategoryCode = category.subcategories.first.code;
+              });
+            },
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            key: ValueKey('analysis-event-subcategory-$_categoryCode'),
+            initialValue: _subcategoryCode,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Sous-catégorie',
+              prefixIcon: Icon(Icons.build_outlined),
+            ),
+            items: VehicleEventCatalog.categoryByCode(_categoryCode)
+                .subcategories
+                .map(
+                  (subcategory) => DropdownMenuItem(
+                    value: subcategory.code,
+                    child: Text(
+                      subcategory.label,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(growable: false),
+            onChanged: (value) {
+              if (value != null) setState(() => _subcategoryCode = value);
+            },
+          ),
           const SizedBox(height: 18),
           TextFormField(
             controller: _mileageController,
@@ -764,7 +842,12 @@ class _OperationConfirmationSheetState
               }
 
               Navigator.of(context).pop(
-                _OperationConfirmationData(mileage: mileage, amount: amount),
+                _OperationConfirmationData(
+                  categoryCode: _categoryCode,
+                  subcategoryCode: _subcategoryCode,
+                  mileage: mileage,
+                  amount: amount,
+                ),
               );
             },
             icon: const Icon(Icons.check_rounded),

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/comparison_map.dart';
+import '../home/nearby_location.dart';
+import '../home/nearby_location_service.dart';
+import '../home/nearby_radius_slider.dart';
 import '../technical_control/technical_control_location_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
@@ -20,11 +22,9 @@ class FuelPriceComparePage extends StatefulWidget {
 }
 
 class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
-  static const _radiusChoices = <double>[5, 10, 20, 30, 50];
-
   final _vehicleService = VehicleService();
   final _fuelPriceService = FuelPriceService();
-  final _locationService = TechnicalControlLocationService();
+  final _locationService = NearbyLocationService.instance;
 
   List<Vehicle> _vehicles = const [];
   List<FuelStationOffer> _offers = const [];
@@ -35,7 +35,7 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
   String _viewMode = 'map';
   String? _selectedStationId;
   double _radiusKm = 20;
-  Position? _lastPosition;
+  NearbySearchLocation? _lastLocation;
   DateTime? _sourceFetchedAt;
   bool _cacheHit = false;
   bool _truncated = false;
@@ -101,7 +101,7 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
   void _resetResults() {
     _offers = const [];
     _selectedStationId = null;
-    _lastPosition = null;
+    _lastLocation = null;
     _sourceFetchedAt = null;
     _cacheHit = false;
     _truncated = false;
@@ -123,8 +123,8 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
     });
 
     try {
-      final position = await _locationService.determineCurrentPosition();
-      await _searchAt(position, fuelType: fuelType, sortBy: _sortBy);
+      final location = await _locationService.resolveSearchLocation();
+      await _searchAt(location, fuelType: fuelType, sortBy: _sortBy);
     } on TechnicalControlLocationException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -137,14 +137,14 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
   }
 
   Future<void> _searchAt(
-    Position position, {
+    NearbySearchLocation location, {
     required String fuelType,
     required String sortBy,
   }) async {
     try {
       final result = await _fuelPriceService.searchStations(
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: location.latitude,
+        longitude: location.longitude,
         radiusKm: _radiusKm,
         fuelType: fuelType,
         sortBy: sortBy,
@@ -158,7 +158,7 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
 
       if (!mounted) return;
       setState(() {
-        _lastPosition = position;
+        _lastLocation = location;
         _offers = result.offers;
         _selectedStationId = selectedStationId;
         _sourceFetchedAt = result.sourceFetchedAt;
@@ -182,17 +182,17 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
   Future<void> _changeSort(String sortBy) async {
     if (_sortBy == sortBy) return;
 
-    final position = _lastPosition;
+    final location = _lastLocation;
     final fuelType = _selectedFuelType;
     setState(() => _sortBy = sortBy);
 
-    if (position == null || fuelType == null) return;
+    if (location == null || fuelType == null) return;
 
     setState(() {
       _searching = true;
       _errorMessage = null;
     });
-    await _searchAt(position, fuelType: fuelType, sortBy: sortBy);
+    await _searchAt(location, fuelType: fuelType, sortBy: sortBy);
   }
 
   Future<void> _openSettings() async {
@@ -328,30 +328,21 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
                   },
           ),
           const SizedBox(height: 20),
-          Text(
-            'Rayon de recherche',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final radius in _radiusChoices)
-                ChoiceChip(
-                  label: Text('${radius.toInt()} km'),
-                  selected: _radiusKm == radius,
-                  onSelected: _searching
-                      ? null
-                      : (selected) {
-                          if (!selected) return;
-                          setState(() {
-                            _radiusKm = radius;
-                            _resetResults();
-                          });
-                        },
-                ),
-            ],
+          _SearchLocationBanner(location: _locationService.sessionLocation),
+          const SizedBox(height: 14),
+          NearbyRadiusSlider(
+            key: const ValueKey('fuel-radius-slider'),
+            value: _radiusKm,
+            min: 5,
+            max: 50,
+            divisions: 9,
+            enabled: !_searching,
+            onChanged: (value) {
+              setState(() {
+                _radiusKm = ((value / 5).round() * 5).toDouble();
+                _resetResults();
+              });
+            },
           ),
           const SizedBox(height: 20),
           FilledButton.icon(
@@ -366,7 +357,11 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
                   )
                 : const Icon(Icons.my_location_rounded),
             label: Text(
-              _searching ? 'Recherche en cours…' : 'Comparer autour de moi',
+              _searching
+                  ? 'Recherche en cours…'
+                  : _locationService.sessionLocation == null
+                  ? 'Comparer autour de moi'
+                  : 'Comparer autour de ${_locationService.sessionLocation!.label}',
             ),
           ),
           const SizedBox(height: 10),
@@ -403,7 +398,7 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
       );
     }
 
-    if (_lastPosition == null && _offers.isEmpty) {
+    if (_lastLocation == null && _offers.isEmpty) {
       return const _MessagePanel(
         icon: Icons.map_outlined,
         title: 'Les résultats apparaîtront ici',
@@ -520,8 +515,8 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
   }
 
   Widget _buildMapResults(BuildContext context) {
-    final position = _lastPosition;
-    if (position == null || _offers.isEmpty) return const SizedBox.shrink();
+    final location = _lastLocation;
+    if (location == null || _offers.isEmpty) return const SizedBox.shrink();
 
     FuelStationOffer selectedOffer = _offers.first;
     for (final offer in _offers) {
@@ -546,8 +541,8 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
         key: ValueKey(
           'fuel-map-${_selectedFuelType ?? 'fuel'}-${_sourceFetchedAt?.millisecondsSinceEpoch ?? 0}',
         ),
-        userLatitude: position.latitude,
-        userLongitude: position.longitude,
+        userLatitude: location.latitude,
+        userLongitude: location.longitude,
         markers: _offers
             .map(
               (offer) => ComparisonMapMarkerData(
@@ -696,6 +691,42 @@ class _FuelMapSheet extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _SearchLocationBanner extends StatelessWidget {
+  const _SearchLocationBanner({required this.location});
+
+  final NearbySearchLocation? location;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = location;
+    if (value == null) {
+      return Text(
+        'La position de votre appareil sera utilisée. Vous pouvez aussi choisir une ville depuis Autour de moi.',
+        style: Theme.of(context).textTheme.bodySmall,
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.softPrimary,
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.place_outlined, color: AppColors.primary),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              'Zone : ${value.label}',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

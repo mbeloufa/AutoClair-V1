@@ -25,29 +25,73 @@ class VehicleEventNotificationService {
   bool _initialized = false;
 
   Future<void> scheduleReminder({
+    required String vehicleId,
     required String eventKey,
     required String vehicleLabel,
     required String eventTitle,
     required DateTime eventDate,
     required int daysBefore,
   }) async {
-    final reminderAt = vehicleEventReminderAt(
+    final plan = VehicleEventReminderPlan(
+      vehicleId: vehicleId,
+      eventKey: eventKey,
+      eventTitle: eventTitle,
       eventDate: eventDate,
       daysBefore: daysBefore,
     );
-    if (!reminderAt.isAfter(DateTime.now())) {
+    if (!plan.isFutureAt(DateTime.now())) {
       throw const VehicleEventNotificationException(
         'La date choisie est trop proche pour ce délai de rappel.',
       );
     }
 
     await ensurePermission();
+    await _schedulePlan(plan, vehicleLabel: vehicleLabel);
+  }
 
-    final scheduledDate = tz.TZDateTime.from(reminderAt, tz.local);
+  Future<void> synchronizeReminders({
+    required String vehicleId,
+    required Iterable<VehicleEventReminderPlan> plans,
+    required String vehicleLabel,
+  }) async {
+    await _initialize();
+
+    final now = DateTime.now();
+    final futurePlans = plans
+        .where((plan) => plan.isFutureAt(now))
+        .toList(growable: false);
+    final desiredIds = desiredVehicleEventNotificationIds(
+      futurePlans,
+      now: now,
+    );
+
+    final pending = await _plugin.pendingNotificationRequests();
+    final scopedPayloadPrefix = vehicleEventNotificationPayloadPrefix(
+      vehicleId,
+    );
+    for (final request in pending) {
+      if (request.payload?.startsWith(scopedPayloadPrefix) == true &&
+          !desiredIds.contains(request.id)) {
+        await _plugin.cancel(request.id);
+      }
+    }
+
+    if (futurePlans.isEmpty) return;
+
+    for (final plan in futurePlans) {
+      await _schedulePlan(plan, vehicleLabel: vehicleLabel);
+    }
+  }
+
+  Future<void> _schedulePlan(
+    VehicleEventReminderPlan plan, {
+    required String vehicleLabel,
+  }) async {
+    final scheduledDate = tz.TZDateTime.from(plan.reminderAt, tz.local);
     await _plugin.zonedSchedule(
-      vehicleEventNotificationId(eventKey),
+      plan.notificationId,
       'Rappel AutoClair',
-      '$eventTitle · $vehicleLabel',
+      '${plan.eventTitle} · $vehicleLabel',
       scheduledDate,
       const NotificationDetails(
         android: AndroidNotificationDetails(
@@ -64,7 +108,10 @@ class VehicleEventNotificationService {
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      payload: 'vehicle-event:$eventKey',
+      payload: vehicleEventNotificationPayload(
+        vehicleId: plan.vehicleId,
+        eventKey: plan.eventKey,
+      ),
     );
   }
 

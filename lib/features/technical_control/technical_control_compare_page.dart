@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../home/nearby_location.dart';
+import '../home/nearby_location_service.dart';
+import '../home/nearby_radius_slider.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
 import 'technical_control_actions.dart';
@@ -21,11 +23,9 @@ class TechnicalControlComparePage extends StatefulWidget {
 
 class _TechnicalControlComparePageState
     extends State<TechnicalControlComparePage> {
-  static const _radiusChoices = <double>[10, 20, 30, 50, 100];
-
   final _vehicleService = VehicleService();
   final _technicalControlService = TechnicalControlService();
-  final _locationService = TechnicalControlLocationService();
+  final _locationService = NearbyLocationService.instance;
 
   List<Vehicle> _vehicles = const [];
   List<TechnicalControlCatalogOption> _vehicleCategories = const [];
@@ -37,7 +37,7 @@ class _TechnicalControlComparePageState
   String? _selectedEnergyCategoryId;
   String _sortBy = 'price';
   double _radiusKm = 30;
-  Position? _lastPosition;
+  NearbySearchLocation? _lastLocation;
 
   bool _loading = true;
   bool _searching = false;
@@ -156,7 +156,7 @@ class _TechnicalControlComparePageState
       _selectedVehicleId = vehicleId;
       _selectedEnergyCategoryId = energyId;
       _offers = const [];
-      _lastPosition = null;
+      _lastLocation = null;
       _errorMessage = null;
     });
   }
@@ -178,9 +178,9 @@ class _TechnicalControlComparePageState
     });
 
     try {
-      final position = await _locationService.determineCurrentPosition();
+      final location = await _locationService.resolveSearchLocation();
       await _searchAt(
-        position,
+        location,
         vehicleCategoryId: vehicleCategoryId,
         energyCategoryId: energyCategoryId,
         sortBy: _sortBy,
@@ -197,15 +197,15 @@ class _TechnicalControlComparePageState
   }
 
   Future<void> _searchAt(
-    Position position, {
+    NearbySearchLocation location, {
     required String vehicleCategoryId,
     required String energyCategoryId,
     required String sortBy,
   }) async {
     try {
       final offers = await _technicalControlService.searchOffers(
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: location.latitude,
+        longitude: location.longitude,
         radiusKm: _radiusKm,
         vehicleCategoryId: vehicleCategoryId,
         energyCategoryId: energyCategoryId,
@@ -214,7 +214,7 @@ class _TechnicalControlComparePageState
 
       if (!mounted) return;
       setState(() {
-        _lastPosition = position;
+        _lastLocation = location;
         _offers = offers;
         _sortBy = sortBy;
         _searching = false;
@@ -234,13 +234,13 @@ class _TechnicalControlComparePageState
   Future<void> _changeSort(String sortBy) async {
     if (_sortBy == sortBy) return;
 
-    final position = _lastPosition;
+    final location = _lastLocation;
     final vehicleCategoryId = _selectedVehicleCategoryId;
     final energyCategoryId = _selectedEnergyCategoryId;
 
     setState(() => _sortBy = sortBy);
 
-    if (position == null ||
+    if (location == null ||
         vehicleCategoryId == null ||
         energyCategoryId == null) {
       return;
@@ -252,7 +252,7 @@ class _TechnicalControlComparePageState
     });
 
     await _searchAt(
-      position,
+      location,
       vehicleCategoryId: vehicleCategoryId,
       energyCategoryId: energyCategoryId,
       sortBy: sortBy,
@@ -408,7 +408,7 @@ class _TechnicalControlComparePageState
                     setState(() {
                       _selectedVehicleCategoryId = value;
                       _offers = const [];
-                      _lastPosition = null;
+                      _lastLocation = null;
                     });
                   },
           ),
@@ -435,36 +435,27 @@ class _TechnicalControlComparePageState
                     setState(() {
                       _selectedEnergyCategoryId = value;
                       _offers = const [];
-                      _lastPosition = null;
+                      _lastLocation = null;
                     });
                   },
           ),
           const SizedBox(height: 20),
-          Text(
-            'Rayon de recherche',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final radius in _radiusChoices)
-                ChoiceChip(
-                  label: Text('${radius.toInt()} km'),
-                  selected: _radiusKm == radius,
-                  onSelected: _searching
-                      ? null
-                      : (selected) {
-                          if (!selected) return;
-                          setState(() {
-                            _radiusKm = radius;
-                            _offers = const [];
-                            _lastPosition = null;
-                          });
-                        },
-                ),
-            ],
+          _SearchLocationBanner(location: _locationService.sessionLocation),
+          const SizedBox(height: 14),
+          NearbyRadiusSlider(
+            key: const ValueKey('technical-control-radius-slider'),
+            value: _radiusKm,
+            min: 10,
+            max: 100,
+            divisions: 9,
+            enabled: !_searching,
+            onChanged: (value) {
+              setState(() {
+                _radiusKm = ((value / 10).round() * 10).toDouble();
+                _offers = const [];
+                _lastLocation = null;
+              });
+            },
           ),
           const SizedBox(height: 20),
           FilledButton.icon(
@@ -479,7 +470,11 @@ class _TechnicalControlComparePageState
                   )
                 : const Icon(Icons.my_location_rounded),
             label: Text(
-              _searching ? 'Recherche en cours…' : 'Comparer autour de moi',
+              _searching
+                  ? 'Recherche en cours…'
+                  : _locationService.sessionLocation == null
+                  ? 'Comparer autour de moi'
+                  : 'Comparer près de ${_locationService.sessionLocation!.label}',
             ),
           ),
           const SizedBox(height: 10),
@@ -511,7 +506,7 @@ class _TechnicalControlComparePageState
       return const _SearchingPanel();
     }
 
-    if (_lastPosition == null && _offers.isEmpty) {
+    if (_lastLocation == null && _offers.isEmpty) {
       return const _InitialResultsPanel();
     }
 
@@ -604,6 +599,26 @@ class _TechnicalControlComparePageState
         .replaceAll('ù', 'u')
         .replaceAll('û', 'u')
         .replaceAll('ü', 'u');
+  }
+}
+
+class _SearchLocationBanner extends StatelessWidget {
+  const _SearchLocationBanner({required this.location});
+
+  final NearbySearchLocation? location;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = location;
+    return Text(
+      value == null
+          ? 'La position de votre appareil sera utilisée. Une ville peut être choisie depuis Autour de moi.'
+          : 'Zone de recherche : ${value.label}',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: value == null ? null : AppColors.primary,
+        fontWeight: value == null ? null : FontWeight.w800,
+      ),
+    );
   }
 }
 

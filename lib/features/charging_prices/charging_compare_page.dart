@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/comparison_map.dart';
+import '../home/nearby_location.dart';
+import '../home/nearby_location_service.dart';
+import '../home/nearby_radius_slider.dart';
 import '../technical_control/technical_control_location_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
@@ -22,7 +24,7 @@ class ChargingComparePage extends StatefulWidget {
 class _ChargingComparePageState extends State<ChargingComparePage> {
   final _vehicleService = VehicleService();
   final _chargingService = ChargingService();
-  final _locationService = TechnicalControlLocationService();
+  final _locationService = NearbyLocationService.instance;
 
   List<Vehicle> _vehicles = const [];
   List<ChargingStationOffer> _offers = const [];
@@ -35,7 +37,7 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
   double _minimumPowerKw = 0;
   double _energyKwh = 40;
   double _radiusKm = 20;
-  Position? _lastPosition;
+  NearbySearchLocation? _lastLocation;
   DateTime? _sourceFetchedAt;
   String _sourceName = 'Base nationale IRVE';
   String _pricingDisclaimer =
@@ -117,7 +119,7 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
   void _resetResults() {
     _offers = const [];
     _selectedStationId = null;
-    _lastPosition = null;
+    _lastLocation = null;
     _sourceFetchedAt = null;
     _sourceName = 'Base nationale IRVE';
     _pricingDisclaimer = 'Le tarif publié par l’opérateur reste la référence.';
@@ -135,8 +137,8 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
     });
 
     try {
-      final position = await _locationService.determineCurrentPosition();
-      await _searchAt(position, sortBy: _sortBy);
+      final location = await _locationService.resolveSearchLocation();
+      await _searchAt(location, sortBy: _sortBy);
     } on TechnicalControlLocationException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -148,11 +150,14 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
     }
   }
 
-  Future<void> _searchAt(Position position, {required String sortBy}) async {
+  Future<void> _searchAt(
+    NearbySearchLocation location, {
+    required String sortBy,
+  }) async {
     try {
       final result = await _chargingService.searchStations(
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: location.latitude,
+        longitude: location.longitude,
         radiusKm: _radiusKm,
         connector: _connector,
         minimumPowerKw: _minimumPowerKw,
@@ -168,7 +173,7 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
 
       if (!mounted) return;
       setState(() {
-        _lastPosition = position;
+        _lastLocation = location;
         _offers = result.offers;
         _selectedStationId = selectedStationId;
         _sourceFetchedAt = result.sourceFetchedAt;
@@ -195,15 +200,15 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
   Future<void> _changeSort(String sortBy) async {
     if (_sortBy == sortBy) return;
 
-    final position = _lastPosition;
+    final location = _lastLocation;
     setState(() => _sortBy = sortBy);
-    if (position == null) return;
+    if (location == null) return;
 
     setState(() {
       _searching = true;
       _errorMessage = null;
     });
-    await _searchAt(position, sortBy: sortBy);
+    await _searchAt(location, sortBy: sortBy);
   }
 
   Future<void> _openSettings() async {
@@ -359,29 +364,15 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
                   },
           ),
           const SizedBox(height: 14),
-          DropdownButtonFormField<double>(
-            initialValue: _minimumPowerKw,
-            decoration: const InputDecoration(
-              labelText: 'Puissance minimale',
-              prefixIcon: Icon(Icons.bolt_rounded),
-            ),
-            items: ChargingCatalog.minimumPowersKw
-                .map(
-                  (power) => DropdownMenuItem(
-                    value: power,
-                    child: Text(ChargingCatalog.powerLabel(power)),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: _searching
-                ? null
-                : (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _minimumPowerKw = value;
-                      _resetResults();
-                    });
-                  },
+          _ChargingPowerSlider(
+            value: _minimumPowerKw,
+            enabled: !_searching,
+            onChanged: (value) {
+              setState(() {
+                _minimumPowerKw = value;
+                _resetResults();
+              });
+            },
           ),
           const SizedBox(height: 20),
           Text(
@@ -415,30 +406,21 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
             ],
           ),
           const SizedBox(height: 20),
-          Text(
-            'Rayon de recherche',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final radius in ChargingCatalog.radiusChoicesKm)
-                ChoiceChip(
-                  label: Text('${radius.toInt()} km'),
-                  selected: _radiusKm == radius,
-                  onSelected: _searching
-                      ? null
-                      : (selected) {
-                          if (!selected) return;
-                          setState(() {
-                            _radiusKm = radius;
-                            _resetResults();
-                          });
-                        },
-                ),
-            ],
+          _SearchLocationBanner(location: _locationService.sessionLocation),
+          const SizedBox(height: 14),
+          NearbyRadiusSlider(
+            key: const ValueKey('charging-radius-slider'),
+            value: _radiusKm,
+            min: 5,
+            max: 50,
+            divisions: 9,
+            enabled: !_searching,
+            onChanged: (value) {
+              setState(() {
+                _radiusKm = ((value / 5).round() * 5).toDouble();
+                _resetResults();
+              });
+            },
           ),
           const SizedBox(height: 20),
           FilledButton.icon(
@@ -453,7 +435,11 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
                   )
                 : const Icon(Icons.search_rounded),
             label: Text(
-              _searching ? 'Recherche en cours…' : 'Comparer autour de moi',
+              _searching
+                  ? 'Recherche en cours…'
+                  : _locationService.sessionLocation == null
+                  ? 'Comparer autour de moi'
+                  : 'Comparer autour de ${_locationService.sessionLocation!.label}',
             ),
           ),
         ],
@@ -462,7 +448,7 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
   }
 
   Widget _buildResults(BuildContext context) {
-    if (_searching && _lastPosition == null) {
+    if (_searching && _lastLocation == null) {
       return const _MessagePanel(
         icon: Icons.ev_station_rounded,
         title: 'Recherche des bornes',
@@ -471,7 +457,7 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
       );
     }
 
-    if (_lastPosition == null) {
+    if (_lastLocation == null) {
       return const _MessagePanel(
         icon: Icons.ev_station_outlined,
         title: 'Prêt pour la comparaison',
@@ -598,8 +584,8 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
   }
 
   Widget _buildMapResults(BuildContext context) {
-    final position = _lastPosition;
-    if (position == null || _offers.isEmpty) return const SizedBox.shrink();
+    final location = _lastLocation;
+    if (location == null || _offers.isEmpty) return const SizedBox.shrink();
 
     ChargingStationOffer selectedOffer = _offers.first;
     for (final offer in _offers) {
@@ -624,8 +610,8 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
         key: ValueKey(
           'charging-map-$_connector-${_energyKwh.toInt()}-${_sourceFetchedAt?.millisecondsSinceEpoch ?? 0}',
         ),
-        userLatitude: position.latitude,
-        userLongitude: position.longitude,
+        userLatitude: location.latitude,
+        userLongitude: location.longitude,
         markers: _offers
             .map(
               (offer) => ComparisonMapMarkerData(
@@ -782,6 +768,85 @@ class _ChargingMapSheet extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    );
+  }
+}
+
+class _ChargingPowerSlider extends StatelessWidget {
+  const _ChargingPowerSlider({
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final double value;
+  final bool enabled;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final values = ChargingCatalog.minimumPowersKw;
+    var index = values.indexOf(value);
+    if (index < 0) index = 0;
+    return Container(
+      key: const ValueKey('charging-power-slider'),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 8),
+      decoration: BoxDecoration(
+        color: AppColors.softPrimary,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bolt_rounded, color: AppColors.primary),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  'Puissance minimale',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+              ),
+              Text(
+                ChargingCatalog.powerLabel(value),
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: index.toDouble(),
+            min: 0,
+            max: (values.length - 1).toDouble(),
+            divisions: values.length - 1,
+            label: ChargingCatalog.powerLabel(value),
+            onChanged: enabled ? (raw) => onChanged(values[raw.round()]) : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SearchLocationBanner extends StatelessWidget {
+  const _SearchLocationBanner({required this.location});
+
+  final NearbySearchLocation? location;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = location;
+    return Text(
+      value == null
+          ? 'La position de votre appareil sera utilisée. Une ville peut être choisie depuis Autour de moi.'
+          : 'Zone de recherche : ${value.label}',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: value == null ? null : AppColors.primary,
+        fontWeight: value == null ? null : FontWeight.w800,
+      ),
     );
   }
 }

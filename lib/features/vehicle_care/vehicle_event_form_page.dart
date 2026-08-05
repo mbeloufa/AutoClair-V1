@@ -253,6 +253,7 @@ class _VehicleEventFormPageState extends State<VehicleEventFormPage> {
       if (_status == 'PLANNED' && _reminderEnabled) {
         try {
           await _notificationService.scheduleReminder(
+            vehicleId: widget.vehicleId,
             eventKey: saved.notificationKey,
             vehicleLabel: 'Votre véhicule',
             eventTitle: eventTitle,
@@ -525,6 +526,17 @@ class _VehicleEventFormPageState extends State<VehicleEventFormPage> {
                       const SizedBox(width: 10),
                       Expanded(child: Text(_selectedDocument!.displayLabel)),
                       IconButton(
+                        key: const ValueKey('event-preview-document'),
+                        tooltip: 'Prévisualiser le document',
+                        onPressed: _saving
+                            ? null
+                            : () => context.push<void>(
+                                '/history/${_selectedDocument!.id}/analysis',
+                              ),
+                        icon: const Icon(Icons.visibility_outlined),
+                      ),
+                      IconButton(
+                        key: const ValueKey('event-remove-document'),
                         tooltip: 'Retirer le document',
                         onPressed: _saving
                             ? null

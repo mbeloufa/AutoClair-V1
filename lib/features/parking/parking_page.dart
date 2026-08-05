@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/comparison_map.dart';
+import '../home/nearby_location.dart';
+import '../home/nearby_location_service.dart';
+import '../home/nearby_radius_slider.dart';
 import '../technical_control/technical_control_location_service.dart';
 import 'parking_actions.dart';
 import 'parking_offer.dart';
@@ -16,15 +18,14 @@ class ParkingPage extends StatefulWidget {
 }
 
 class _ParkingPageState extends State<ParkingPage> {
-  static const _radiusChoices = <double>[1, 3, 5, 10, 20];
   static const _arrivalChoices = <int>[0, 15, 30, 60];
 
   final _parkingService = ParkingService();
-  final _locationService = TechnicalControlLocationService();
+  final _locationService = NearbyLocationService.instance;
 
   List<ParkingOffer> _offers = const [];
   List<ParkingProviderSummary> _providers = const [];
-  Position? _position;
+  NearbySearchLocation? _location;
   String? _selectedParkingId;
   String? _recommendedParkingId;
   String _parkingType = 'all';
@@ -59,8 +60,8 @@ class _ParkingPageState extends State<ParkingPage> {
     });
 
     try {
-      final position = await _locationService.determineCurrentPosition();
-      await _searchAt(position);
+      final location = await _locationService.resolveSearchLocation();
+      await _searchAt(location);
     } on TechnicalControlLocationException catch (error) {
       if (!mounted) return;
       setState(() {
@@ -72,11 +73,11 @@ class _ParkingPageState extends State<ParkingPage> {
     }
   }
 
-  Future<void> _searchAt(Position position) async {
+  Future<void> _searchAt(NearbySearchLocation location) async {
     try {
       final result = await _parkingService.searchParking(
-        latitude: position.latitude,
-        longitude: position.longitude,
+        latitude: location.latitude,
+        longitude: location.longitude,
         radiusKm: _radiusKm,
         parkingType: _parkingType,
         sortBy: _sortBy,
@@ -96,7 +97,7 @@ class _ParkingPageState extends State<ParkingPage> {
 
       if (!mounted) return;
       setState(() {
-        _position = position;
+        _location = location;
         _offers = result.offers;
         _providers = result.providers;
         _selectedParkingId = selectedParkingId;
@@ -124,19 +125,19 @@ class _ParkingPageState extends State<ParkingPage> {
   }
 
   Future<void> _refreshSearch() async {
-    final position = _position;
-    if (position == null) return;
+    final location = _location;
+    if (location == null) return;
     setState(() {
       _searching = true;
       _errorMessage = null;
     });
-    await _searchAt(position);
+    await _searchAt(location);
   }
 
   void _resetResults() {
     _offers = const [];
     _providers = const [];
-    _position = null;
+    _location = null;
     _selectedParkingId = null;
     _recommendedParkingId = null;
     _sourceFetchedAt = null;
@@ -379,29 +380,21 @@ class _ParkingPageState extends State<ParkingPage> {
                   },
           ),
           const SizedBox(height: 14),
-          DropdownButtonFormField<double>(
-            initialValue: _radiusKm,
-            decoration: const InputDecoration(
-              labelText: 'Rayon de recherche',
-              prefixIcon: Icon(Icons.radar_rounded),
-            ),
-            items: _radiusChoices
-                .map(
-                  (radius) => DropdownMenuItem(
-                    value: radius,
-                    child: Text('${radius.toInt()} km'),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: _searching
-                ? null
-                : (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _radiusKm = value;
-                      _resetResults();
-                    });
-                  },
+          _SearchLocationBanner(location: _locationService.sessionLocation),
+          const SizedBox(height: 12),
+          NearbyRadiusSlider(
+            key: const ValueKey('parking-radius-slider'),
+            value: _radiusKm,
+            min: 1,
+            max: 20,
+            divisions: 19,
+            enabled: !_searching,
+            onChanged: (value) {
+              setState(() {
+                _radiusKm = value.roundToDouble();
+                _resetResults();
+              });
+            },
           ),
           const SizedBox(height: 10),
           _FilterSwitch(
@@ -450,7 +443,11 @@ class _ParkingPageState extends State<ParkingPage> {
                   )
                 : const Icon(Icons.auto_awesome_rounded),
             label: Text(
-              _searching ? 'Analyse en cours…' : 'Trouver le meilleur parking',
+              _searching
+                  ? 'Analyse en cours…'
+                  : _locationService.sessionLocation == null
+                  ? 'Trouver le meilleur parking'
+                  : 'Rechercher près de ${_locationService.sessionLocation!.label}',
             ),
           ),
         ],
@@ -459,7 +456,7 @@ class _ParkingPageState extends State<ParkingPage> {
   }
 
   Widget _results(BuildContext context) {
-    if (_position == null && !_searching && _errorMessage == null) {
+    if (_location == null && !_searching && _errorMessage == null) {
       return const _MessagePanel(
         icon: Icons.auto_awesome_rounded,
         title: 'Plus qu’une simple recherche',
@@ -604,8 +601,8 @@ class _ParkingPageState extends State<ParkingPage> {
   }
 
   Widget _map(BuildContext context) {
-    final position = _position;
-    if (position == null || _offers.isEmpty) return const SizedBox.shrink();
+    final location = _location;
+    if (location == null || _offers.isEmpty) return const SizedBox.shrink();
 
     var selected = _offers.first;
     for (final offer in _offers) {
@@ -622,8 +619,8 @@ class _ParkingPageState extends State<ParkingPage> {
         key: ValueKey(
           'parking-map-${_sourceFetchedAt?.millisecondsSinceEpoch ?? 0}',
         ),
-        userLatitude: position.latitude,
-        userLongitude: position.longitude,
+        userLatitude: location.latitude,
+        userLongitude: location.longitude,
         markers: _offers
             .map(
               (offer) => ComparisonMapMarkerData(
@@ -688,6 +685,26 @@ class _ParkingPageState extends State<ParkingPage> {
     final hour = local.hour.toString().padLeft(2, '0');
     final minute = local.minute.toString().padLeft(2, '0');
     return '$day/$month/${local.year} à $hour:$minute';
+  }
+}
+
+class _SearchLocationBanner extends StatelessWidget {
+  const _SearchLocationBanner({required this.location});
+
+  final NearbySearchLocation? location;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = location;
+    return Text(
+      value == null
+          ? 'La position de votre appareil sera utilisée. Une autre zone peut être choisie depuis Autour de moi.'
+          : 'Zone de recherche : ${value.label}',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+        color: value == null ? null : AppColors.primary,
+        fontWeight: value == null ? null : FontWeight.w800,
+      ),
+    );
   }
 }
 

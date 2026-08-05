@@ -33,3 +33,45 @@ int vehicleEventNotificationId(String eventKey) {
   }
   return hash == 0 ? 1 : hash;
 }
+
+String vehicleEventNotificationPayload({
+  required String vehicleId,
+  required String eventKey,
+}) => 'vehicle-event:$vehicleId:$eventKey';
+
+String vehicleEventNotificationPayloadPrefix(String vehicleId) =>
+    'vehicle-event:$vehicleId:';
+
+class VehicleEventReminderPlan {
+  const VehicleEventReminderPlan({
+    required this.vehicleId,
+    required this.eventKey,
+    required this.eventTitle,
+    required this.eventDate,
+    required this.daysBefore,
+  });
+
+  final String vehicleId;
+  final String eventKey;
+  final String eventTitle;
+  final DateTime eventDate;
+  final int daysBefore;
+
+  DateTime get reminderAt =>
+      vehicleEventReminderAt(eventDate: eventDate, daysBefore: daysBefore);
+
+  int get notificationId => vehicleEventNotificationId(eventKey);
+
+  bool isFutureAt(DateTime now) => reminderAt.isAfter(now);
+}
+
+Set<int> desiredVehicleEventNotificationIds(
+  Iterable<VehicleEventReminderPlan> plans, {
+  DateTime? now,
+}) {
+  final reference = now ?? DateTime.now();
+  return plans
+      .where((plan) => plan.isFutureAt(reference))
+      .map((plan) => plan.notificationId)
+      .toSet();
+}
