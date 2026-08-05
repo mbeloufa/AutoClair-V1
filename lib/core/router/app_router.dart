@@ -5,6 +5,7 @@ import '../../features/account/delete_account_page.dart';
 import '../../features/auth/forgot_password_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
+import '../../features/breakdown_assistant/breakdown_assistant_page.dart';
 import '../../features/documents/analysis_result_page.dart';
 import '../../features/documents/document_upload_page.dart';
 import '../../features/eco_driving/eco_driving_page.dart';
@@ -201,6 +202,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/maintenance-planner',
         builder: (context, state) => const MaintenancePlannerPage(),
+      ),
+      GoRoute(
+        path: '/breakdown-assistant',
+        builder: (context, state) => const BreakdownAssistantPage(),
       ),
       GoRoute(
         path: '/compliance',

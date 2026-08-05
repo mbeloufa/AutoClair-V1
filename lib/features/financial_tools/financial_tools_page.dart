@@ -51,6 +51,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.info,
       ),
       _FinancialTool(
+        icon: Icons.car_crash_outlined,
+        title: 'Gérer une panne',
+        description:
+            'Sécurisez la situation et préparez un résumé pour l’assistance.',
+        route: '/breakdown-assistant',
+        background: AppColors.errorSoft,
+        foreground: AppColors.error,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',

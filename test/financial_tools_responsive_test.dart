@@ -23,6 +23,7 @@ void main() {
           '/charging-optimizer',
           '/eco-driving',
           '/maintenance-planner',
+          '/breakdown-assistant',
           '/compliance',
           '/quote-comparison',
           '/insurance-review',
@@ -79,6 +80,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Planifier mon entretien'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Gérer une panne'),
+      180,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gérer une panne'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(
