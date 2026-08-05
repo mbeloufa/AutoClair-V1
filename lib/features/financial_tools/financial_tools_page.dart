@@ -26,6 +26,14 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.success,
       ),
       _FinancialTool(
+        icon: Icons.electric_bolt_outlined,
+        title: 'Optimiser ma recharge',
+        description: 'Comparez le tarif, l’accès et la durée théorique.',
+        route: '/charging-optimizer',
+        background: AppColors.softPrimary,
+        foreground: AppColors.primary,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',
