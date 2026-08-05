@@ -21,6 +21,7 @@ void main() {
           '/budget',
           '/fuel-optimizer',
           '/charging-optimizer',
+          '/eco-driving',
           '/compliance',
           '/quote-comparison',
           '/insurance-review',
@@ -57,6 +58,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Optimiser ma recharge'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Améliorer ma conduite'),
+      180,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Améliorer ma conduite'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(

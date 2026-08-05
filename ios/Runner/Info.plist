@@ -69,6 +69,6 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>AutoClair utilise votre position uniquement pour rechercher les centres de contrôle technique proches et calculer leur distance.</string>
+	<string>AutoClair utilise votre position uniquement pendant l’utilisation pour rechercher des services proches ou analyser un trajet demandé par vous. Aucun itinéraire n’est conservé.</string>
 </dict>
 </plist>

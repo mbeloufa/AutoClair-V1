@@ -7,6 +7,7 @@ import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
 import '../../features/documents/analysis_result_page.dart';
 import '../../features/documents/document_upload_page.dart';
+import '../../features/eco_driving/eco_driving_page.dart';
 import '../../features/home/account_page.dart';
 import '../../features/home/history_page.dart';
 import '../../features/home/home_page.dart';
@@ -191,6 +192,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/charging-optimizer',
         builder: (context, state) => const ChargingOptimizerPage(),
+      ),
+      GoRoute(
+        path: '/eco-driving',
+        builder: (context, state) => const EcoDrivingPage(),
       ),
       GoRoute(
         path: '/compliance',

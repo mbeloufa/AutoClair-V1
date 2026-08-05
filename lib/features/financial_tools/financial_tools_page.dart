@@ -34,6 +34,14 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.primary,
       ),
       _FinancialTool(
+        icon: Icons.eco_outlined,
+        title: 'Améliorer ma conduite',
+        description: 'Analysez un trajet sans conserver votre parcours.',
+        route: '/eco-driving',
+        background: AppColors.successSoft,
+        foreground: AppColors.success,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',
