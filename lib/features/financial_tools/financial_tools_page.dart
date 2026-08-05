@@ -1,0 +1,166 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../core/theme/app_theme.dart';
+
+class FinancialToolsPage extends StatelessWidget {
+  const FinancialToolsPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    const tools = <_FinancialTool>[
+      _FinancialTool(
+        icon: Icons.account_balance_wallet_outlined,
+        title: 'Mon budget automobile',
+        description: 'Coût mensuel, coût au kilomètre et économies confirmées.',
+        route: '/budget',
+        background: AppColors.softPrimary,
+        foreground: AppColors.primary,
+      ),
+      _FinancialTool(
+        icon: Icons.local_gas_station_outlined,
+        title: 'Optimiser mon plein',
+        description: 'Comparez les stations après déduction du coût du détour.',
+        route: '/fuel-optimizer',
+        background: AppColors.successSoft,
+        foreground: AppColors.success,
+      ),
+      _FinancialTool(
+        icon: Icons.verified_user_outlined,
+        title: 'À vérifier',
+        description: 'Contrôle technique, assurance, rappels et échéances.',
+        route: '/compliance',
+        background: AppColors.warningSoft,
+        foreground: AppColors.warning,
+      ),
+      _FinancialTool(
+        icon: Icons.compare_arrows_outlined,
+        title: 'Comparer mes devis',
+        description: 'Comparez deux ou trois devis réellement reçus.',
+        route: '/quote-comparison',
+        background: AppColors.infoSoft,
+        foreground: AppColors.info,
+      ),
+      _FinancialTool(
+        icon: Icons.shield_outlined,
+        title: 'Réviser mon assurance',
+        description: 'Suivez la prime, les franchises et les garanties.',
+        route: '/insurance-review',
+        background: AppColors.errorSoft,
+        foreground: AppColors.error,
+      ),
+    ];
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mes économies')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 40),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.savings_outlined,
+                  color: AppColors.primary,
+                  size: 32,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'AutoClair transforme les informations de votre véhicule en décisions financières concrètes.',
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+                ),
+                SizedBox(height: 7),
+                Text(
+                  'Une économie potentielle n’est comptée comme réalisée qu’après votre confirmation.',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          for (final tool in tools) ...[
+            _FinancialToolCard(tool: tool),
+            const SizedBox(height: 12),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FinancialToolCard extends StatelessWidget {
+  const _FinancialToolCard({required this.tool});
+
+  final _FinancialTool tool;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: () => context.push(tool.route),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: tool.background,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(tool.icon, color: tool.foreground),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      tool.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(tool.description),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: AppColors.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FinancialTool {
+  const _FinancialTool({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.route,
+    required this.background,
+    required this.foreground,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String route;
+  final Color background;
+  final Color foreground;
+}

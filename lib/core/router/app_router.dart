@@ -17,6 +17,12 @@ import '../../features/parking/parking_page.dart';
 import '../../features/start/start_page.dart';
 import '../../features/charging_prices/charging_compare_page.dart';
 import '../../features/commercial_offers/commercial_offers_page.dart';
+import '../../features/compliance/vehicle_compliance_page.dart';
+import '../../features/financial_tools/financial_tools_page.dart';
+import '../../features/fuel_optimizer/fuel_optimizer_page.dart';
+import '../../features/insurance_review/insurance_review_page.dart';
+import '../../features/quote_comparison/quote_comparison_page.dart';
+import '../../features/vehicle_budget/vehicle_budget_page.dart';
 import '../../features/fuel_prices/fuel_price_compare_page.dart';
 import '../../features/technical_control/technical_control_compare_page.dart';
 import '../../features/vehicle_care/vehicle_care_page.dart';
@@ -168,6 +174,30 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/charging-prices',
         builder: (context, state) => const ChargingComparePage(),
+      ),
+      GoRoute(
+        path: '/savings',
+        builder: (context, state) => const FinancialToolsPage(),
+      ),
+      GoRoute(
+        path: '/budget',
+        builder: (context, state) => const VehicleBudgetPage(),
+      ),
+      GoRoute(
+        path: '/fuel-optimizer',
+        builder: (context, state) => const FuelOptimizerPage(),
+      ),
+      GoRoute(
+        path: '/compliance',
+        builder: (context, state) => const VehicleCompliancePage(),
+      ),
+      GoRoute(
+        path: '/quote-comparison',
+        builder: (context, state) => const QuoteComparisonPage(),
+      ),
+      GoRoute(
+        path: '/insurance-review',
+        builder: (context, state) => const InsuranceReviewPage(),
       ),
       GoRoute(
         path: '/history',

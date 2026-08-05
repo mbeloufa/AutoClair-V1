@@ -385,6 +385,7 @@ class _HomePageState extends State<HomePage> {
               documentCount: _documents.length,
               onVehicles: () => context.go('/vehicles'),
               onNearby: () => context.go('/nearby'),
+              onSavings: () => context.go('/savings'),
               onAnalyze: _openDocumentUpload,
               onDocuments: () => context.go('/history'),
             ),
@@ -770,6 +771,7 @@ class _HomeMenuGrid extends StatelessWidget {
     required this.documentCount,
     required this.onVehicles,
     required this.onNearby,
+    required this.onSavings,
     required this.onAnalyze,
     required this.onDocuments,
   });
@@ -778,6 +780,7 @@ class _HomeMenuGrid extends StatelessWidget {
   final int documentCount;
   final VoidCallback onVehicles;
   final VoidCallback onNearby;
+  final VoidCallback onSavings;
   final VoidCallback onAnalyze;
   final VoidCallback onDocuments;
 
@@ -807,6 +810,15 @@ class _HomeMenuGrid extends StatelessWidget {
               foreground: AppColors.success,
               background: AppColors.successSoft,
               onTap: onNearby,
+            ),
+            _HomeMenuTile(
+              width: tileWidth,
+              icon: Icons.savings_outlined,
+              title: 'Mes économies',
+              subtitle: 'Budget, plein, devis et assurance',
+              foreground: AppColors.primary,
+              background: AppColors.softPrimary,
+              onTap: onSavings,
             ),
             _HomeMenuTile(
               width: tileWidth,
