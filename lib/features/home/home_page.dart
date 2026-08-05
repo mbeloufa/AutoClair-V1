@@ -148,6 +148,11 @@ class _HomePageState extends State<HomePage> {
     if (changed == true) await _loadDashboard();
   }
 
+  Future<void> _openOffers() async {
+    await context.push<void>('/offers');
+    if (mounted) await _loadDashboard();
+  }
+
   List<_HomeActionItem> _buildPriorityItems() {
     final vehicle = _primaryVehicle;
     if (vehicle == null) {
@@ -393,6 +398,7 @@ class _HomePageState extends State<HomePage> {
               _QuickVehicleActions(
                 onEvent: _openEvent,
                 onMileage: _openMileage,
+                onOffers: _openOffers,
               ),
             ],
           ],
@@ -902,31 +908,56 @@ class _HomeMenuTile extends StatelessWidget {
 }
 
 class _QuickVehicleActions extends StatelessWidget {
-  const _QuickVehicleActions({required this.onEvent, required this.onMileage});
+  const _QuickVehicleActions({
+    required this.onEvent,
+    required this.onMileage,
+    required this.onOffers,
+  });
 
   final VoidCallback onEvent;
   final VoidCallback onMileage;
+  final VoidCallback onOffers;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _CompactAction(
-            icon: Icons.add_task_outlined,
-            label: 'Ajouter au carnet',
-            onTap: onEvent,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _CompactAction(
-            icon: Icons.speed_outlined,
-            label: 'Kilométrage',
-            onTap: onMileage,
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final twoColumns = constraints.maxWidth >= 420;
+        final width = twoColumns
+            ? (constraints.maxWidth - 12) / 2
+            : constraints.maxWidth;
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: width,
+              child: _CompactAction(
+                icon: Icons.add_task_outlined,
+                label: 'Ajouter au carnet',
+                onTap: onEvent,
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _CompactAction(
+                icon: Icons.speed_outlined,
+                label: 'Kilométrage',
+                onTap: onMileage,
+              ),
+            ),
+            SizedBox(
+              width: width,
+              child: _CompactAction(
+                icon: Icons.local_offer_outlined,
+                label: 'Promos en cours',
+                onTap: onOffers,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

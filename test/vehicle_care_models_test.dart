@@ -55,7 +55,8 @@ void main() {
     expect(dashboard.health.maintenanceScore, 82);
     expect(dashboard.health.statusLabel, 'Points à surveiller');
     expect(dashboard.upcomingActions.single.dueMileage, 85000);
-    expect(dashboard.recentEvents.single.typeLabel, 'Entretien');
+    expect(dashboard.recentEvents.single.categoryLabel, 'Entretien');
+    expect(dashboard.recentEvents.single.typeLabel, 'Révision et vidange');
     expect(dashboard.expenses.totalLast12Months, 249.90);
   });
 
@@ -178,5 +179,53 @@ void main() {
     );
 
     expect(ordered.first.id, 'overdue');
+  });
+
+  test('timeline events expose large category and subcategory labels', () {
+    final event = VehicleTimelineEvent.fromMap({
+      'id': 'event-brakes',
+      'event_type': 'REPAIR',
+      'status': 'COMPLETED',
+      'title': 'Plaquettes de freins AV',
+      'occurred_at': '2026-08-01T12:00:00Z',
+      'source_type': 'MANUAL',
+      'user_confirmed': true,
+      'metadata': {'category_code': 'SAFETY', 'subcategory_code': 'BRAKES'},
+    });
+
+    expect(event.categoryLabel, 'Sécurité');
+    expect(event.typeLabel, 'Freinage');
+  });
+
+  test('document suggestion exposes only useful operation fields', () {
+    final suggestion = VehicleDocumentSuggestion.fromMap({
+      'id': 'suggestion-1',
+      'document_id': 'document-1',
+      'suggestion_type': 'EVENT',
+      'title': 'Remplacement filtre à huile',
+      'payload': {'mileage': 84500, 'amount': 89.5},
+      'confidence': 0.91,
+      'status': 'PENDING',
+      'created_at': '2026-08-05T08:00:00Z',
+    });
+
+    expect(suggestion.categoryLabel, 'Entretien');
+    expect(suggestion.typeLabel, 'Filtres et fluides');
+    expect(suggestion.detectedMileage, 84500);
+    expect(suggestion.detectedAmount, 89.5);
+  });
+
+  test('accounting consistency is not proposed as a vehicle operation', () {
+    final suggestion = VehicleDocumentSuggestion.fromMap({
+      'id': 'suggestion-accounting',
+      'document_id': 'document-1',
+      'suggestion_type': 'OBSERVATION',
+      'title': 'TVA et total TTC cohérents',
+      'payload': {'description': 'Vérification comptable'},
+      'status': 'PENDING',
+      'created_at': '2026-08-05T08:00:00Z',
+    });
+
+    expect(suggestion.isUsefulVehicleOperation, isFalse);
   });
 }

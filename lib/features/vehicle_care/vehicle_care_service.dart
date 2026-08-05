@@ -51,10 +51,11 @@ class VehicleCareService {
           .eq('vehicle_id', vehicleId)
           .eq('status', 'completed');
 
+      final dashboardMap = Map<String, dynamic>.from(dashboardRaw);
+      await _mergeEventDetails(dashboardMap, vehicleId);
+
       return VehicleCareBundle(
-        dashboard: VehicleCareDashboard.fromMap(
-          Map<String, dynamic>.from(dashboardRaw),
-        ),
+        dashboard: VehicleCareDashboard.fromMap(dashboardMap),
         schedules: (schedulesRaw as List)
             .map(
               (row) => VehicleMaintenanceSchedule.fromMap(
@@ -68,6 +69,7 @@ class VehicleCareService {
                 Map<String, dynamic>.from(row as Map),
               ),
             )
+            .where((suggestion) => suggestion.isUsefulVehicleOperation)
             .toList(growable: false),
         completedDocumentCount: (documentsRaw as List).length,
       );
@@ -94,17 +96,25 @@ class VehicleCareService {
     }
   }
 
-  Future<void> recordEvent({
+  Future<VehicleEventSaveResult> recordEvent({
     required String vehicleId,
     required String eventType,
+    required String categoryCode,
+    required String subcategoryCode,
     required String title,
     required DateTime occurredAt,
     required String status,
     int? mileage,
     double? amount,
     String? providerName,
+    String? locationText,
     String? description,
+    String? sourceDocumentId,
+    bool reminderEnabled = false,
+    int? reminderDaysBefore,
   }) async {
+    final clientReference =
+        'manual-${DateTime.now().microsecondsSinceEpoch}-$vehicleId';
     try {
       await _client.rpc(
         'record_vehicle_event',
@@ -119,13 +129,19 @@ class VehicleCareService {
           'p_currency': 'EUR',
           'p_provider_name': _nullIfEmpty(providerName),
           'p_description': _nullIfEmpty(description),
-          'p_location_text': null,
+          'p_location_text': _nullIfEmpty(locationText),
           'p_source_type': 'MANUAL',
-          'p_source_document_id': null,
+          'p_source_document_id': _nullIfEmpty(sourceDocumentId),
           'p_source_analysis_id': null,
           'p_confidence': null,
           'p_user_confirmed': true,
           'p_metadata': <String, dynamic>{
+            'category_code': categoryCode,
+            'subcategory_code': subcategoryCode,
+            'client_reference': clientReference,
+            'reminder_enabled': status == 'PLANNED' && reminderEnabled,
+            if (status == 'PLANNED' && reminderEnabled)
+              'reminder_days_before': reminderDaysBefore,
             if (status != 'COMPLETED' && mileage != null)
               'planned_mileage': mileage,
           },
@@ -133,6 +149,59 @@ class VehicleCareService {
               status == 'COMPLETED' && amount != null && amount > 0,
         },
       );
+
+      String? eventId;
+      try {
+        final event = await _client
+            .from('vehicle_events')
+            .select('id')
+            .eq('vehicle_id', vehicleId)
+            .contains('metadata', <String, dynamic>{
+              'client_reference': clientReference,
+            })
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+        eventId = event?['id']?.toString();
+      } catch (_) {
+        // L'événement est bien enregistré même si son identifiant ne peut pas
+        // être relu immédiatement. Le clientReference reste stable pour le rappel.
+      }
+
+      return VehicleEventSaveResult(
+        clientReference: clientReference,
+        eventId: eventId,
+      );
+    } catch (error) {
+      throw VehicleCareException(_message(error));
+    }
+  }
+
+  Future<List<VehicleEventDocumentOption>> fetchLinkableDocuments(
+    String vehicleId,
+  ) async {
+    try {
+      final rows = await _client
+          .from('documents')
+          .select('id,document_type,status,created_at,vehicle_id,comment')
+          .or('vehicle_id.eq.$vehicleId,vehicle_id.is.null')
+          .order('created_at', ascending: false)
+          .limit(60);
+
+      final documents = (rows as List)
+          .map(
+            (row) => VehicleEventDocumentOption.fromMap(
+              Map<String, dynamic>.from(row as Map),
+            ),
+          )
+          .toList(growable: false);
+      documents.sort((left, right) {
+        final leftRank = left.vehicleId == vehicleId ? 0 : 1;
+        final rightRank = right.vehicleId == vehicleId ? 0 : 1;
+        if (leftRank != rightRank) return leftRank.compareTo(rightRank);
+        return right.createdAt.compareTo(left.createdAt);
+      });
+      return documents;
     } catch (error) {
       throw VehicleCareException(_message(error));
     }
@@ -240,14 +309,21 @@ class VehicleCareService {
   Future<void> confirmSuggestion({
     required String suggestionId,
     required String vehicleId,
+    required String categoryCode,
+    required String subcategoryCode,
+    int? mileage,
+    double? amount,
   }) async {
     try {
       await _client.rpc(
-        'confirm_document_suggestion',
+        'confirm_document_suggestion_v2',
         params: {
           'p_suggestion_id': suggestionId,
           'p_vehicle_id': vehicleId,
-          'p_overrides': <String, dynamic>{},
+          'p_mileage': mileage,
+          'p_amount': amount,
+          'p_category_code': categoryCode,
+          'p_subcategory_code': subcategoryCode,
         },
       );
     } catch (error) {
@@ -280,6 +356,45 @@ class VehicleCareService {
           .eq('id', matchId);
     } catch (error) {
       throw VehicleCareException(_message(error));
+    }
+  }
+
+  Future<void> _mergeEventDetails(
+    Map<String, dynamic> dashboard,
+    String vehicleId,
+  ) async {
+    final rawEvents = dashboard['recent_events'];
+    if (rawEvents is! List || rawEvents.isEmpty) return;
+
+    try {
+      final rows = await _client
+          .from('vehicle_events')
+          .select(
+            'id,location_text,source_document_id,reminder_enabled,'
+            'reminder_days_before,reminder_at',
+          )
+          .eq('vehicle_id', vehicleId)
+          .order('occurred_at', ascending: false)
+          .limit(80);
+
+      final detailsById = <String, Map<String, dynamic>>{
+        for (final row in rows as List)
+          if ((row as Map)['id'] != null)
+            row['id'].toString(): Map<String, dynamic>.from(row),
+      };
+
+      dashboard['recent_events'] = rawEvents
+          .map((rawEvent) {
+            if (rawEvent is! Map) return rawEvent;
+            final event = Map<String, dynamic>.from(rawEvent);
+            final details = detailsById[event['id']?.toString()];
+            if (details != null) event.addAll(details);
+            return event;
+          })
+          .toList(growable: false);
+    } catch (_) {
+      // Les champs enrichis restent facultatifs. Le tableau de bord principal
+      // ne doit pas échouer si une ancienne base ne les expose pas encore.
     }
   }
 
@@ -337,8 +452,20 @@ class VehicleCareService {
     if (raw.contains('EVENT_AMOUNT_INVALID')) {
       return 'Le montant doit être positif.';
     }
+    if (raw.contains('EVENT_VEHICLE_FORBIDDEN')) {
+      return "Vous n’êtes pas autorisé à modifier ce véhicule.";
+    }
+    if (raw.contains('EVENT_DOCUMENT_NOT_ALLOWED')) {
+      return "Ce document ne peut pas être lié à ce véhicule.";
+    }
+    if (raw.contains('EVENT_REMINDER_INVALID')) {
+      return 'Le délai de rappel est invalide.';
+    }
     if (raw.contains('DOCUMENT_SUGGESTION_ALREADY_REVIEWED')) {
       return 'Cette suggestion a déjà été traitée.';
+    }
+    if (raw.contains('DOCUMENT_OPERATION_V2_NOT_INSTALLED')) {
+      return 'La mise à jour simplifiée du carnet doit être installée.';
     }
     if (raw.contains('DOCUMENT_SUGGESTION_NOT_FOUND')) {
       return "Cette suggestion n'est plus disponible.";

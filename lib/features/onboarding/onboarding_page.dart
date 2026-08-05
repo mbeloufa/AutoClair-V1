@@ -30,261 +30,141 @@ class _OnboardingPageState extends State<OnboardingPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 24, 22, 28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Center(child: AppLogo()),
-                  const SizedBox(height: 30),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 26),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [AppColors.primaryDark, AppColors.primary],
-                      ),
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 7,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: const Text(
-                            'VOTRE ASSISTANT AUTOMOBILE',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.7,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 22),
-                        Text(
-                          'Comprenez vos documents auto, sans jargon',
-                          style: Theme.of(context).textTheme.headlineLarge
-                              ?.copyWith(color: Colors.white),
-                        ),
-                        const SizedBox(height: 14),
-                        Text(
-                          'Importez un devis, une facture ou un ordre de '
-                          'réparation. AutoClair vous aide à lire les '
-                          'informations importantes et à préparer vos '
-                          'questions.',
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.86),
-                              ),
-                        ),
-                        const SizedBox(height: 24),
-                        const Row(
-                          children: [
-                            _HeroMetric(
-                              icon: Icons.document_scanner_outlined,
-                              label: 'Documents',
-                            ),
-                            SizedBox(width: 10),
-                            _HeroMetric(
-                              icon: Icons.auto_awesome_outlined,
-                              label: 'Analyse claire',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 26),
-                  Text(
-                    'Avec AutoClair, vous pouvez',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 14),
-                  const _BenefitCard(
-                    icon: Icons.menu_book_rounded,
-                    title: 'Comprendre chaque opération',
-                    description:
-                        'Les termes techniques sont reformulés pour rendre '
-                        'le document plus simple à lire.',
-                  ),
-                  const SizedBox(height: 12),
-                  const _BenefitCard(
-                    icon: Icons.fact_check_outlined,
-                    title: 'Repérer les points à vérifier',
-                    description:
-                        'Les zones incertaines, informations manquantes et '
-                        'éléments de vigilance sont clairement signalés.',
-                  ),
-                  const SizedBox(height: 12),
-                  const _BenefitCard(
-                    icon: Icons.question_answer_outlined,
-                    title: 'Préparer les bonnes questions',
-                    description:
-                        'Vous repartez avec une synthèse utile pour échanger '
-                        'plus sereinement avec le garage.',
-                  ),
-                  const SizedBox(height: 18),
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: AppColors.successSoft,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppColors.success.withValues(alpha: 0.18),
-                      ),
-                    ),
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.lock_outline, color: AppColors.success),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Vos documents restent privés',
-                                style: TextStyle(
-                                  color: AppColors.text,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Ils sont stockés dans votre espace sécurisé '
-                                'et restent rattachés à votre compte.',
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: _isFinishing ? null : _finish,
-                    icon: _isFinishing
-                        ? const SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2.4,
-                            ),
-                          )
-                        : const Icon(Icons.arrow_forward),
-                    label: Text(
-                      _isFinishing ? 'Préparation…' : 'Découvrir AutoClair',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'AutoClair fournit une aide informative et ne remplace '
-                    'pas un diagnostic ou une expertise professionnelle.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 360;
+            return SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                compact ? 16 : 22,
+                20,
+                compact ? 16 : 22,
+                28,
               ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HeroMetric extends StatelessWidget {
-  const _HeroMetric({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.11),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Center(child: AppLogo(compact: true)),
+                      const SizedBox(height: 24),
+                      Text(
+                        'La vie d’une voiture n’est pas toujours simple',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'AutoClair vous aide à chaque étape.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      SizedBox(height: compact ? 22 : 30),
+                      const DriverJourney(),
+                      const SizedBox(height: 26),
+                      FilledButton.icon(
+                        onPressed: _isFinishing ? null : _finish,
+                        icon: _isFinishing
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2.4,
+                                ),
+                              )
+                            : const Icon(Icons.arrow_forward_rounded),
+                        label: Text(
+                          _isFinishing ? 'Préparation…' : 'Commencer',
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Vos données restent dans votre espace sécurisé.',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _BenefitCard extends StatelessWidget {
-  const _BenefitCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
+class DriverJourney extends StatelessWidget {
+  const DriverJourney({super.key});
 
-  final IconData icon;
-  final String title;
-  final String description;
+  static const _steps = <_JourneyStepData>[
+    _JourneyStepData(
+      icon: Icons.key_rounded,
+      title: 'Acheter',
+      subtitle: 'Choisir et comprendre',
+    ),
+    _JourneyStepData(
+      icon: Icons.build_circle_outlined,
+      title: 'Entretenir',
+      subtitle: 'Savoir quoi faire',
+    ),
+    _JourneyStepData(
+      icon: Icons.car_repair_outlined,
+      title: 'Réparer',
+      subtitle: 'Lire devis et factures',
+    ),
+    _JourneyStepData(
+      icon: Icons.fact_check_outlined,
+      title: 'Contrôler',
+      subtitle: 'Suivre les échéances',
+    ),
+    _JourneyStepData(
+      icon: Icons.sell_outlined,
+      title: 'Revendre',
+      subtitle: 'Préparer le bon moment',
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(26),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
         children: [
+          for (var index = 0; index < _steps.length; index++) ...[
+            _JourneyStep(data: _steps[index], alignRight: index.isOdd),
+            if (index < _steps.length - 1)
+              _JourneyConnector(alignRight: index.isEven),
+          ],
+          const SizedBox(height: 8),
           Container(
-            width: 46,
-            height: 46,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
               color: AppColors.softPrimary,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(18),
             ),
-            child: Icon(icon, color: AppColors.primary),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(title, style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 5),
-                Text(
-                  description,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                Icon(Icons.auto_awesome_rounded, color: AppColors.primary),
+                SizedBox(width: 9),
+                Flexible(
+                  child: Text(
+                    'AutoClair reste à vos côtés',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: AppColors.primaryDark,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -293,4 +173,145 @@ class _BenefitCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _JourneyStep extends StatelessWidget {
+  const _JourneyStep({required this.data, required this.alignRight});
+
+  final _JourneyStepData data;
+  final bool alignRight;
+
+  @override
+  Widget build(BuildContext context) {
+    final card = Container(
+      constraints: const BoxConstraints(maxWidth: 260),
+      padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.14),
+            blurRadius: 16,
+            offset: const Offset(0, 7),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(data.icon, color: Colors.white),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  data.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  data.subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.80),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Align(
+      alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+      child: card,
+    );
+  }
+}
+
+class _JourneyConnector extends StatelessWidget {
+  const _JourneyConnector({required this.alignRight});
+
+  final bool alignRight;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 34,
+      child: CustomPaint(
+        painter: _JourneyConnectorPainter(
+          alignRight: alignRight,
+          color: AppColors.primary.withValues(alpha: 0.38),
+        ),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _JourneyConnectorPainter extends CustomPainter {
+  const _JourneyConnectorPainter({
+    required this.alignRight,
+    required this.color,
+  });
+
+  final bool alignRight;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path();
+    final startX = alignRight ? size.width * 0.30 : size.width * 0.70;
+    final endX = alignRight ? size.width * 0.70 : size.width * 0.30;
+    path.moveTo(startX, 0);
+    path.cubicTo(
+      startX,
+      size.height * 0.50,
+      endX,
+      size.height * 0.50,
+      endX,
+      size.height,
+    );
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _JourneyConnectorPainter oldDelegate) {
+    return oldDelegate.alignRight != alignRight || oldDelegate.color != color;
+  }
+}
+
+class _JourneyStepData {
+  const _JourneyStepData({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
 }

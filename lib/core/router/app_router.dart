@@ -109,6 +109,10 @@ GoRouter createAppRouter(AppController controller) {
         ),
       ),
       GoRoute(
+        path: '/offers',
+        builder: (context, state) => const CommercialOffersPage(),
+      ),
+      GoRoute(
         path: '/vehicles/:vehicleId/offers',
         builder: (context, state) => CommercialOffersPage(
           vehicleId: state.pathParameters['vehicleId'] ?? '',

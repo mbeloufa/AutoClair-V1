@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
 import 'commercial_offer_actions.dart';
+import 'commercial_offer_vehicle_selector.dart';
 import 'commercial_offer_models.dart';
 import 'commercial_offers_service.dart';
 
@@ -12,9 +13,9 @@ enum _OfferScope { currentVehicle, purchase }
 enum _OfferView { relevant, all, saved }
 
 class CommercialOffersPage extends StatefulWidget {
-  const CommercialOffersPage({required this.vehicleId, super.key});
+  const CommercialOffersPage({this.vehicleId, super.key});
 
-  final String vehicleId;
+  final String? vehicleId;
 
   @override
   State<CommercialOffersPage> createState() => _CommercialOffersPageState();
@@ -24,6 +25,8 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
   final _vehicleService = VehicleService();
   final _offersService = CommercialOffersService();
 
+  List<Vehicle> _vehicles = const [];
+  String? _selectedVehicleId;
   Vehicle? _vehicle;
   CommercialOfferBundle? _bundle;
   bool _loading = true;
@@ -49,12 +52,42 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
     }
 
     try {
-      final vehicle = await _vehicleService.fetchVehicle(widget.vehicleId);
-      final bundle = await _offersService.fetchVehicleOffers(widget.vehicleId);
+      final vehicles = _vehicles.isEmpty
+          ? await _vehicleService.fetchVehicles()
+          : _vehicles;
+
+      if (vehicles.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _vehicles = const [];
+          _selectedVehicleId = null;
+          _vehicle = null;
+          _bundle = null;
+          _loading = false;
+        });
+        return;
+      }
+
+      final requestedId = _selectedVehicleId ?? widget.vehicleId;
+      final selectedId = vehicles.any((vehicle) => vehicle.id == requestedId)
+          ? requestedId!
+          : vehicles
+                .firstWhere(
+                  (vehicle) => vehicle.isPrimary,
+                  orElse: () => vehicles.first,
+                )
+                .id;
+
+      final vehicle = vehicles.firstWhere(
+        (candidate) => candidate.id == selectedId,
+      );
+      final bundle = await _offersService.fetchVehicleOffers(selectedId);
 
       if (!mounted) return;
 
       setState(() {
+        _vehicles = vehicles;
+        _selectedVehicleId = selectedId;
         _vehicle = vehicle;
         _bundle = bundle;
 
@@ -138,16 +171,32 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
     });
   }
 
+  Future<void> _selectVehicle(String vehicleId) async {
+    if (vehicleId == _selectedVehicleId || _loading) return;
+
+    setState(() {
+      _selectedVehicleId = vehicleId;
+      _vehicle = null;
+      _bundle = null;
+      _category = 'ALL';
+      _scope = _OfferScope.currentVehicle;
+      _view = _OfferView.relevant;
+      _initialSelectionResolved = false;
+    });
+
+    await _load();
+  }
+
   Future<void> _toggleSaved(CommercialOffer offer) async {
     await _runAction(() async {
       if (offer.isSaved) {
         await _offersService.unsaveOffer(
-          vehicleId: widget.vehicleId,
+          vehicleId: _selectedVehicleId!,
           offerId: offer.id,
         );
       } else {
         await _offersService.saveOffer(
-          vehicleId: widget.vehicleId,
+          vehicleId: _selectedVehicleId!,
           offerId: offer.id,
         );
       }
@@ -191,11 +240,11 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     await _runAction(() async {
       await _offersService.dismissOffer(
-        vehicleId: widget.vehicleId,
+        vehicleId: _selectedVehicleId!,
         offerId: offer.id,
       );
       await _load();
@@ -224,10 +273,10 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     await _runAction(() async {
-      await _offersService.resetDismissedOffers(widget.vehicleId);
+      await _offersService.resetDismissedOffers(_selectedVehicleId!);
       await _load();
 
       if (mounted) {
@@ -320,6 +369,10 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
       return _ErrorState(message: _errorMessage!, onRetry: _load);
     }
 
+    if (_vehicles.isEmpty) {
+      return const _NoVehicleOffersState();
+    }
+
     final vehicle = _vehicle!;
     final bundle = _bundle!;
     final scopeOffers = _offersForScope(bundle);
@@ -335,6 +388,15 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
         children: [
+          if (_vehicles.length > 1 || widget.vehicleId == null) ...[
+            CommercialOfferVehicleSelector(
+              vehicles: _vehicles,
+              selectedVehicleId: _selectedVehicleId,
+              enabled: !_loading && !_actionInProgress,
+              onChanged: _selectVehicle,
+            ),
+            const SizedBox(height: 14),
+          ],
           _OffersHero(vehicle: vehicle, scope: _scope, offers: scopeOffers),
           const SizedBox(height: 16),
           _ScopeSelector(
@@ -389,6 +451,35 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
           const SizedBox(height: 14),
           const _DisclaimerPanel(),
         ],
+      ),
+    );
+  }
+}
+
+class _NoVehicleOffersState extends StatelessWidget {
+  const _NoVehicleOffersState();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.directions_car_outlined,
+              size: 58,
+              color: AppColors.primary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Ajoutez un véhicule pour voir les promotions compatibles.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -577,11 +668,8 @@ class _GoodSensePanel extends StatelessWidget {
           Expanded(
             child: Text(
               isPurchase
-                  ? 'AutoClair ne montre ici que les campagnes dans '
-                        'lesquelles le même modèle est réellement identifié. '
-                        'Le coût total et les conditions restent à confirmer.'
-                  : 'Les offres sont filtrées selon le véhicule et remontent '
-                        'en priorité lorsqu’une échéance du carnet correspond.',
+                  ? 'Même modèle identifié. Vérifiez le prix final et les conditions.'
+                  : 'Offres filtrées selon ce véhicule et ses prochaines échéances.',
             ),
           ),
         ],
@@ -828,13 +916,6 @@ class _CommercialOfferCard extends StatelessWidget {
                       color: compatibilityColor,
                       fontWeight: FontWeight.w800,
                     ),
-                  ),
-                ),
-                Text(
-                  '${offer.relevanceScore}/100',
-                  style: TextStyle(
-                    color: compatibilityColor,
-                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ],

@@ -3,8 +3,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'document_analysis_result.dart';
-import 'document_carnet_sync_result.dart';
 import 'document_analysis_service.dart';
+import 'document_carnet_sync_result.dart';
 
 class AnalysisResultPage extends StatefulWidget {
   const AnalysisResultPage({required this.documentId, super.key});
@@ -24,7 +24,6 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
   String? _carnetSyncError;
   bool _loading = true;
   bool _syncingCarnet = false;
-  bool _confirmingCarnetEvent = false;
 
   @override
   void initState() {
@@ -42,27 +41,17 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
     try {
       final result = await _service.fetchAnalysis(widget.documentId);
       if (!mounted) return;
-
-      setState(() {
-        _result = result;
-        _loading = false;
-      });
-
+      setState(() => _result = result);
       await _syncCarnet();
     } on DocumentAnalysisException catch (error) {
-      if (mounted) {
-        setState(() => _errorMessage = error.message);
-      }
+      if (mounted) setState(() => _errorMessage = error.message);
     } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _syncCarnet() async {
     if (_syncingCarnet) return;
-
     setState(() {
       _syncingCarnet = true;
       _carnetSyncError = null;
@@ -70,86 +59,94 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
 
     try {
       final sync = await _service.syncDocumentToCarnet(widget.documentId);
-      if (mounted) {
-        setState(() => _carnetSync = sync);
-      }
+      if (mounted) setState(() => _carnetSync = sync);
     } on DocumentAnalysisException catch (error) {
-      if (mounted) {
-        setState(() => _carnetSyncError = error.message);
-      }
+      if (mounted) setState(() => _carnetSyncError = error.message);
     } finally {
-      if (mounted) {
-        setState(() => _syncingCarnet = false);
-      }
+      if (mounted) setState(() => _syncingCarnet = false);
     }
   }
 
   Future<void> _confirmCarnetEvent() async {
-    if (_confirmingCarnetEvent) return;
+    final result = _result;
+    if (result == null || _syncingCarnet) return;
+
+    final operation = result.detectedOperation;
+    final details = await showModalBottomSheet<_OperationConfirmationData>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _OperationConfirmationSheet(operation: operation),
+    );
+    if (details == null || !mounted) return;
 
     setState(() {
-      _confirmingCarnetEvent = true;
+      _syncingCarnet = true;
       _carnetSyncError = null;
     });
 
     try {
       final confirmed = await _service.confirmDocumentCarnetEvent(
         widget.documentId,
+        mileage: details.mileage,
+        amount: details.amount,
+        categoryCode: operation.categoryCode,
+        subcategoryCode: operation.subcategoryCode,
       );
-
       if (!mounted) return;
-
       setState(() => _carnetSync = confirmed);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Événement confirmé dans le carnet.')),
+        SnackBar(content: Text('${operation.title} ajouté au carnet.')),
       );
     } on DocumentAnalysisException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
+      if (mounted) setState(() => _carnetSyncError = error.message);
     } finally {
-      if (mounted) {
-        setState(() => _confirmingCarnetEvent = false);
-      }
+      if (mounted) setState(() => _syncingCarnet = false);
     }
   }
 
-  void _openVehicleCarnet(DocumentCarnetSyncResult sync) {
-    final vehicleId = sync.vehicleId;
+  void _openVehicleCarnet() {
+    final vehicleId = _carnetSync?.vehicleId;
     if (vehicleId == null || vehicleId.isEmpty) return;
-
-    final section = sync.wasAutomaticallyAdded ? 'timeline' : 'overview';
-    context.push('/vehicles/$vehicleId/care?section=$section');
+    context.push<void>('/vehicles/$vehicleId/care?section=timeline');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Résultat de l'analyse")),
-      body: _buildBody(context),
+      appBar: AppBar(
+        title: const Text('Résultat de l’analyse'),
+        actions: [
+          IconButton(
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Actualiser',
+          ),
+        ],
+      ),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildBody(BuildContext context) {
-    if (_loading) {
+  Widget _buildBody() {
+    if (_loading && _result == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_errorMessage != null) {
+    if (_errorMessage != null && _result == null) {
       return Center(
         child: Padding(
-          padding: const EdgeInsets.all(28),
+          padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Icon(
-                Icons.error_outline,
-                size: 52,
-                color: AppColors.primary,
+                Icons.error_outline_rounded,
+                size: 54,
+                color: AppColors.error,
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 16),
               Text(_errorMessage!, textAlign: TextAlign.center),
               const SizedBox(height: 18),
               FilledButton(onPressed: _load, child: const Text('Réessayer')),
@@ -160,283 +157,47 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
     }
 
     final result = _result!;
+    final operation = result.detectedOperation;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 36),
-      children: [
-        _SummaryCard(result: result),
-        const SizedBox(height: 18),
-        _CarnetSyncCard(
-          sync: _carnetSync,
-          errorMessage: _carnetSyncError,
-          loading: _syncingCarnet,
-          confirming: _confirmingCarnetEvent,
-          onRetry: _syncCarnet,
-          onConfirm:
-              _carnetSync?.wasAutomaticallyAdded == true &&
-                  _carnetSync?.userConfirmed == false
-              ? _confirmCarnetEvent
-              : null,
-          onOpenCarnet: _carnetSync?.canOpenCarnet == true
-              ? () => _openVehicleCarnet(_carnetSync!)
-              : null,
-        ),
-        const SizedBox(height: 18),
-        _DocumentInformationSection(result: result),
-        const SizedBox(height: 18),
-        _AmountsSection(result: result),
-        const SizedBox(height: 18),
-        _LineItemsSection(result: result),
-        const SizedBox(height: 18),
-        _ObservationsSection(result: result),
-        const SizedBox(height: 18),
-        _StringListSection(
-          title: 'Questions à poser au garage',
-          icon: Icons.help_outline,
-          accentColor: AppColors.success,
-          accentBackground: AppColors.successSoft,
-          values: result.stringListAt('questions_to_ask'),
-          emptyMessage: 'Aucune question particulière proposée.',
-        ),
-        const SizedBox(height: 18),
-        _StringListSection(
-          title: 'Points à vérifier',
-          icon: Icons.warning_amber_outlined,
-          accentColor: AppColors.warning,
-          accentBackground: AppColors.warningSoft,
-          values: result.stringListAt('uncertainties'),
-          emptyMessage: 'Aucune incertitude particulière signalée.',
-        ),
-        const SizedBox(height: 18),
-        _DisclaimerCard(
-          text:
-              result.stringAt('disclaimer') ??
-              "Cette analyse ne remplace pas un diagnostic mécanique "
-                  'ou une expertise professionnelle.',
-        ),
-        const SizedBox(height: 18),
-        const _ResultNavigation(),
-      ],
-    );
-  }
-}
-
-class _CarnetSyncCard extends StatelessWidget {
-  const _CarnetSyncCard({
-    required this.sync,
-    required this.errorMessage,
-    required this.loading,
-    required this.confirming,
-    required this.onRetry,
-    required this.onConfirm,
-    required this.onOpenCarnet,
-  });
-
-  final DocumentCarnetSyncResult? sync;
-  final String? errorMessage;
-  final bool loading;
-  final bool confirming;
-  final VoidCallback onRetry;
-  final VoidCallback? onConfirm;
-  final VoidCallback? onOpenCarnet;
-
-  @override
-  Widget build(BuildContext context) {
-    if (loading && sync == null) {
-      return const _CarnetSyncContainer(
-        icon: Icons.sync_rounded,
-        color: AppColors.info,
-        background: AppColors.infoSoft,
-        title: 'Mise à jour du carnet',
-        message:
-            'AutoClair vérifie si ce document peut créer un événement fiable.',
-        trailing: SizedBox.square(
-          dimension: 22,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      );
-    }
-
-    if (errorMessage != null) {
-      return _CarnetSyncContainer(
-        icon: Icons.sync_problem_rounded,
-        color: AppColors.warning,
-        background: AppColors.warningSoft,
-        title: 'Carnet non mis à jour',
-        message:
-            '$errorMessage Le résultat de l’analyse reste disponible et '
-            'aucune donnée incertaine n’a été ajoutée.',
-        action: OutlinedButton.icon(
-          onPressed: loading ? null : onRetry,
-          icon: const Icon(Icons.refresh_rounded),
-          label: const Text('Réessayer'),
-        ),
-      );
-    }
-
-    final value = sync;
-    if (value == null) {
-      return _CarnetSyncContainer(
-        icon: Icons.shield_outlined,
-        color: AppColors.info,
-        background: AppColors.infoSoft,
-        title: 'Protection du carnet active',
-        message:
-            'L’ajout automatique est limité aux documents suffisamment '
-            'fiables et clairement rattachés au véhicule.',
-        action: OutlinedButton.icon(
-          onPressed: loading ? null : onRetry,
-          icon: const Icon(Icons.sync_rounded),
-          label: const Text('Vérifier maintenant'),
-        ),
-      );
-    }
-
-    if (value.wasAutomaticallyAdded) {
-      return _CarnetSyncContainer(
-        icon: value.userConfirmed
-            ? Icons.library_add_check_rounded
-            : Icons.pending_actions_rounded,
-        color: value.userConfirmed ? AppColors.success : AppColors.warning,
-        background: value.userConfirmed
-            ? AppColors.successSoft
-            : AppColors.warningSoft,
-        title: value.userConfirmed
-            ? 'Événement confirmé dans le carnet'
-            : value.status == 'AUTO_CREATED'
-            ? 'Événement ajouté — à vérifier'
-            : 'Événement déjà présent — à vérifier',
-        message:
-            '${value.eventTitle ?? value.message}\n'
-            '${value.matchLabel}'
-            '${value.matchScore == null ? '' : ' • confiance de rapprochement ${(value.matchScore! * 100).round()} %'}'
-            '${value.suggestionCount > 0 ? '\n${value.suggestionCount} autre(s) information(s) restent à vérifier.' : ''}',
-        action: value.userConfirmed
-            ? FilledButton.tonalIcon(
-                onPressed: onOpenCarnet,
-                icon: const Icon(Icons.verified_rounded),
-                label: const Text('Voir l’événement confirmé'),
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FilledButton.icon(
-                    onPressed: confirming ? null : onConfirm,
-                    icon: confirming
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.verified_user_outlined),
-                    label: Text(
-                      confirming ? 'Confirmation…' : 'Confirmer cet événement',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: onOpenCarnet,
-                    icon: const Icon(Icons.timeline_rounded),
-                    label: const Text('Voir avant de confirmer'),
-                  ),
-                ],
-              ),
-      );
-    }
-
-    if (value.needsReview) {
-      return _CarnetSyncContainer(
-        icon: Icons.fact_check_outlined,
-        color: AppColors.warning,
-        background: AppColors.warningSoft,
-        title: 'Vérification nécessaire',
-        message:
-            '${value.message}'
-            '${value.suggestionCount > 0 ? '\n${value.suggestionCount} proposition(s) sont prêtes dans le carnet.' : ''}'
-            '${value.suggestionPreparationFailed ? '\nLa préparation automatique pourra être relancée depuis le carnet.' : ''}',
-        action: FilledButton.tonalIcon(
-          onPressed: onOpenCarnet,
-          icon: const Icon(Icons.rule_rounded),
-          label: const Text('Vérifier dans le carnet'),
-        ),
-      );
-    }
-
-    return _CarnetSyncContainer(
-      icon: Icons.info_outline_rounded,
-      color: AppColors.info,
-      background: AppColors.infoSoft,
-      title: 'Aucun événement ajouté automatiquement',
-      message: value.message,
-      action: onOpenCarnet == null
-          ? null
-          : OutlinedButton.icon(
-              onPressed: onOpenCarnet,
-              icon: const Icon(Icons.directions_car_outlined),
-              label: const Text('Ouvrir le carnet'),
-            ),
-    );
-  }
-}
-
-class _CarnetSyncContainer extends StatelessWidget {
-  const _CarnetSyncContainer({
-    required this.icon,
-    required this.color,
-    required this.background,
-    required this.title,
-    required this.message,
-    this.action,
-    this.trailing,
-  });
-
-  final IconData icon;
-  final Color color;
-  final Color background;
-  final String title;
-  final String message;
-  final Widget? action;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: background,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: color),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              ?trailing,
-            ],
+          _OperationHero(result: result, operation: operation),
+          const SizedBox(height: 14),
+          _CarnetOperationCard(
+            operation: operation,
+            sync: _carnetSync,
+            loading: _syncingCarnet,
+            errorMessage: _carnetSyncError,
+            onConfirm: _confirmCarnetEvent,
+            onOpenCarnet: _openVehicleCarnet,
+            onRetry: _syncCarnet,
           ),
-          const SizedBox(height: 9),
-          Text(message, style: Theme.of(context).textTheme.bodyMedium),
-          if (action != null) ...[const SizedBox(height: 14), action!],
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
+          _UsefulDetailsCard(result: result, operation: operation),
+          if (result.objectListAt('line_items').isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _OperationsListCard(result: result),
+          ],
+          if (result.usefulObservations.isNotEmpty ||
+              result.usefulQuestions.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _OptionalAdviceCard(result: result),
+          ],
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed: () => context.go('/history'),
+            icon: const Icon(Icons.folder_outlined),
+            label: const Text('Mes documents'),
+          ),
+          const SizedBox(height: 8),
           Text(
-            'Sécurité : aucun ajout automatique en cas de conflit VIN ou '
-            'immatriculation, de devis, de date incertaine ou de confiance '
-            'insuffisante.',
+            'AutoClair utilise uniquement les informations utiles au véhicule. '
+            'Le nom du client n’est pas affiché ni utilisé dans le carnet.',
+            textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
@@ -445,440 +206,23 @@ class _CarnetSyncContainer extends StatelessWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.result});
+class _OperationHero extends StatelessWidget {
+  const _OperationHero({required this.result, required this.operation});
 
   final DocumentAnalysisResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primaryDark, AppColors.primary],
-        ),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.15),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(Icons.auto_awesome_outlined, color: Colors.white),
-              SizedBox(width: 10),
-              Text(
-                'Synthèse AutoClair',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            result.summary,
-            style: const TextStyle(
-              color: Colors.white,
-              height: 1.45,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 18),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _WhiteChip(label: result.detectedTypeLabel),
-              _WhiteChip(label: 'Confiance ${result.confidenceLabel}'),
-              _WhiteChip(label: 'Lisibilité ${result.readabilityLabel}'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WhiteChip extends StatelessWidget {
-  const _WhiteChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(30),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _DocumentInformationSection extends StatelessWidget {
-  const _DocumentInformationSection({required this.result});
-
-  final DocumentAnalysisResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final parties = result.objectAt('parties');
-    final vehicle = result.objectAt('vehicle');
-    final dates = result.objectAt('dates');
-
-    final rows = <MapEntry<String, String?>>[
-      MapEntry('Garage', _text(parties['garage_name'])),
-      MapEntry('Adresse', _text(parties['garage_address'])),
-      MapEntry('Véhicule', _vehicleLabel(vehicle)),
-      MapEntry('Immatriculation', _text(vehicle['registration_number'])),
-      MapEntry('VIN', _text(vehicle['vin'])),
-      MapEntry('Kilométrage', _numberLabel(vehicle['mileage'], suffix: ' km')),
-      MapEntry('Date du document', _text(dates['document_date'])),
-      MapEntry('Fin de validité', _text(dates['validity_end_date'])),
-    ].where((row) => row.value != null).toList();
-
-    return _SectionCard(
-      title: 'Informations relevées',
-      icon: Icons.description_outlined,
-      accentColor: AppColors.info,
-      accentBackground: AppColors.infoSoft,
-      child: rows.isEmpty
-          ? const Text("Aucune information certaine n'a été relevée.")
-          : Column(
-              children: rows
-                  .map((row) => _KeyValueRow(label: row.key, value: row.value!))
-                  .toList(growable: false),
-            ),
-    );
-  }
-
-  static String? _vehicleLabel(Map<String, dynamic> vehicle) {
-    final make = _text(vehicle['make']);
-    final model = _text(vehicle['model']);
-
-    final parts = [make, model].whereType<String>().toList();
-    return parts.isEmpty ? null : parts.join(' ');
-  }
-}
-
-class _AmountsSection extends StatelessWidget {
-  const _AmountsSection({required this.result});
-
-  final DocumentAnalysisResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final amounts = result.objectAt('amounts');
-    final currency = _text(amounts['currency']) ?? 'EUR';
-
-    final rows = <MapEntry<String, String?>>[
-      MapEntry('Total HT', _money(amounts['subtotal_excluding_tax'], currency)),
-      MapEntry('TVA', _money(amounts['tax_amount'], currency)),
-      MapEntry('Total TTC', _money(amounts['total_including_tax'], currency)),
-    ].where((row) => row.value != null).toList();
-
-    return _SectionCard(
-      title: 'Montants',
-      icon: Icons.euro_outlined,
-      accentColor: AppColors.success,
-      accentBackground: AppColors.successSoft,
-      child: rows.isEmpty
-          ? const Text("Aucun montant suffisamment lisible n'a été relevé.")
-          : Column(
-              children: rows
-                  .map(
-                    (row) => _KeyValueRow(
-                      label: row.key,
-                      value: row.value!,
-                      emphasize: row.key == 'Total TTC',
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-    );
-  }
-}
-
-class _LineItemsSection extends StatelessWidget {
-  const _LineItemsSection({required this.result});
-
-  final DocumentAnalysisResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = result.objectListAt('line_items');
-
-    return _SectionCard(
-      title: 'Prestations et pièces',
-      icon: Icons.build_outlined,
-      child: items.isEmpty
-          ? const Text("Aucune ligne exploitable n'a été identifiée.")
-          : Column(
-              children: [
-                for (var index = 0; index < items.length; index++) ...[
-                  if (index > 0) const Divider(height: 28),
-                  _LineItem(item: items[index]),
-                ],
-              ],
-            ),
-    );
-  }
-}
-
-class _LineItem extends StatelessWidget {
-  const _LineItem({required this.item});
-
-  final Map<String, dynamic> item;
-
-  @override
-  Widget build(BuildContext context) {
-    final description = _text(item['description']) ?? 'Ligne non nommée';
-    final explanation = _text(item['explanation']);
-    final total = _money(item['total_excluding_tax'], 'EUR');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Text(
-                description,
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ),
-            if (total != null) ...[
-              const SizedBox(width: 12),
-              Text(
-                '$total HT',
-                style: const TextStyle(fontWeight: FontWeight.w800),
-              ),
-            ],
-          ],
-        ),
-        const SizedBox(height: 7),
-        Text(
-          _necessityLabel(item['necessity_assessment']?.toString()),
-          style: const TextStyle(
-            color: AppColors.primary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        if (explanation != null) ...[
-          const SizedBox(height: 7),
-          Text(explanation, style: Theme.of(context).textTheme.bodyMedium),
-        ],
-      ],
-    );
-  }
-
-  static String _necessityLabel(String? value) {
-    return switch (value) {
-      'explicitly_required' => 'Présentée comme nécessaire',
-      'recommended' => 'Recommandée',
-      'optional' => 'Optionnelle',
-      _ => 'Nécessité à clarifier',
-    };
-  }
-}
-
-class _ObservationsSection extends StatelessWidget {
-  const _ObservationsSection({required this.result});
-
-  final DocumentAnalysisResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final observations = result.objectListAt('observations');
-
-    return _SectionCard(
-      title: 'Points à retenir',
-      icon: Icons.fact_check_outlined,
-      accentColor: AppColors.warning,
-      accentBackground: AppColors.warningSoft,
-      child: observations.isEmpty
-          ? const Text('Aucun point particulier signalé.')
-          : Column(
-              children: [
-                for (var index = 0; index < observations.length; index++) ...[
-                  if (index > 0) const Divider(height: 28),
-                  _Observation(item: observations[index]),
-                ],
-              ],
-            ),
-    );
-  }
-}
-
-class _Observation extends StatelessWidget {
-  const _Observation({required this.item});
-
-  final Map<String, dynamic> item;
-
-  @override
-  Widget build(BuildContext context) {
-    final title = _text(item['title']) ?? 'Observation';
-    final explanation = _text(item['explanation']) ?? '';
-    final level = item['level']?.toString();
-    final (label, icon, color, background) = switch (level) {
-      'important' => (
-        'Alerte',
-        Icons.priority_high_rounded,
-        AppColors.error,
-        AppColors.errorSoft,
-      ),
-      'attention' => (
-        'À surveiller',
-        Icons.warning_amber_outlined,
-        AppColors.warning,
-        AppColors.warningSoft,
-      ),
-      _ => (
-        'Information',
-        Icons.info_outline,
-        AppColors.info,
-        AppColors.infoSoft,
-      ),
-    };
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: color, size: 21),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: TextStyle(
-                  color: color,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.45,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-              if (explanation.isNotEmpty) ...[
-                const SizedBox(height: 5),
-                Text(explanation),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StringListSection extends StatelessWidget {
-  const _StringListSection({
-    required this.title,
-    required this.icon,
-    required this.values,
-    required this.emptyMessage,
-    this.accentColor = AppColors.primary,
-    this.accentBackground = AppColors.softPrimary,
-  });
-
-  final String title;
-  final IconData icon;
-  final List<String> values;
-  final String emptyMessage;
-  final Color accentColor;
-  final Color accentBackground;
-
-  @override
-  Widget build(BuildContext context) {
-    return _SectionCard(
-      title: title,
-      icon: icon,
-      accentColor: accentColor,
-      accentBackground: accentBackground,
-      child: values.isEmpty
-          ? Text(emptyMessage)
-          : Column(
-              children: values
-                  .map(
-                    (value) => Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(top: 7),
-                            child: Icon(
-                              Icons.circle,
-                              size: 7,
-                              color: accentColor,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text(value)),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(growable: false),
-            ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.icon,
-    required this.child,
-    this.accentColor = AppColors.primary,
-    this.accentBackground = AppColors.softPrimary,
-  });
-
-  final String title;
-  final IconData icon;
-  final Widget child;
-  final Color accentColor;
-  final Color accentBackground;
+  final DetectedVehicleOperation operation;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primaryDark, AppColors.primary],
+        ),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -886,154 +230,575 @@ class _SectionCard extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 42,
-                height: 42,
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: accentBackground,
-                  borderRadius: BorderRadius.circular(13),
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(15),
                 ),
-                child: Icon(icon, color: accentColor, size: 22),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  operation.heading,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(color: Colors.white),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
-          child,
+          const SizedBox(height: 16),
+          Text(
+            operation.title,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            operation.categoryPath,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.82),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _HeroTag(label: result.detectedTypeLabel),
+              _HeroTag(label: 'Lisibilité ${result.readabilityLabel}'),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _KeyValueRow extends StatelessWidget {
-  const _KeyValueRow({
-    required this.label,
-    required this.value,
-    this.emphasize = false,
-  });
+class _HeroTag extends StatelessWidget {
+  const _HeroTag({required this.label});
 
   final String label;
-  final String value;
-  final bool emphasize;
 
   @override
   Widget build(BuildContext context) {
-    final style = TextStyle(
-      fontWeight: emphasize ? FontWeight.w900 : FontWeight.w700,
-      fontSize: emphasize ? 17 : null,
-      color: emphasize ? AppColors.primary : AppColors.text,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.13),
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
+  }
+}
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+class _CarnetOperationCard extends StatelessWidget {
+  const _CarnetOperationCard({
+    required this.operation,
+    required this.sync,
+    required this.loading,
+    required this.errorMessage,
+    required this.onConfirm,
+    required this.onOpenCarnet,
+    required this.onRetry,
+  });
+
+  final DetectedVehicleOperation operation;
+  final DocumentCarnetSyncResult? sync;
+  final bool loading;
+  final String? errorMessage;
+  final VoidCallback onConfirm;
+  final VoidCallback onOpenCarnet;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading && sync == null) {
+      return const _SimpleCard(
+        icon: Icons.sync_rounded,
+        title: 'Mise à jour du carnet…',
+        message: 'AutoClair vérifie le véhicule et l’opération.',
+        child: LinearProgressIndicator(),
+      );
+    }
+
+    if (errorMessage != null) {
+      return _SimpleCard(
+        icon: Icons.sync_problem_rounded,
+        title: 'Carnet non mis à jour',
+        message: errorMessage!,
+        child: OutlinedButton.icon(
+          onPressed: onRetry,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Réessayer'),
+        ),
+      );
+    }
+
+    final value = sync;
+    if (value == null) {
+      return _SimpleCard(
+        icon: Icons.menu_book_outlined,
+        title: 'Ajouter cette opération au carnet',
+        message: operation.title,
+        child: FilledButton.icon(
+          onPressed: onConfirm,
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Vérifier et ajouter'),
+        ),
+      );
+    }
+
+    if (value.wasAutomaticallyAdded) {
+      final eventTitle = operation.title;
+      return _SimpleCard(
+        icon: value.userConfirmed
+            ? Icons.check_circle_rounded
+            : Icons.edit_note_rounded,
+        title: value.userConfirmed
+            ? 'Ajouté au carnet'
+            : 'Opération prête à confirmer',
+        message: eventTitle,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (!value.userConfirmed)
+              FilledButton.icon(
+                onPressed: loading ? null : onConfirm,
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Vérifier et confirmer'),
+              ),
+            if (value.canOpenCarnet)
+              OutlinedButton.icon(
+                onPressed: onOpenCarnet,
+                icon: const Icon(Icons.menu_book_outlined),
+                label: const Text('Voir dans le carnet'),
+              ),
+          ],
+        ),
+      );
+    }
+
+    if (value.needsReview) {
+      return _SimpleCard(
+        icon: Icons.rule_rounded,
+        title: 'À vérifier avant ajout',
+        message: value.suggestionCount > 0
+            ? '${value.suggestionCount} opération(s) sont prêtes dans le carnet.'
+            : 'Ouvrez le carnet pour vérifier l’opération détectée.',
+        child: FilledButton.icon(
+          onPressed: value.canOpenCarnet ? onOpenCarnet : onRetry,
+          icon: const Icon(Icons.arrow_forward_rounded),
+          label: const Text('Vérifier dans le carnet'),
+        ),
+      );
+    }
+
+    return _SimpleCard(
+      icon: Icons.info_outline_rounded,
+      title: 'Aucun événement ajouté',
+      message: value.message,
+      child: value.canOpenCarnet
+          ? OutlinedButton.icon(
+              onPressed: onOpenCarnet,
+              icon: const Icon(Icons.menu_book_outlined),
+              label: const Text('Ouvrir le carnet'),
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+}
+
+class _UsefulDetailsCard extends StatelessWidget {
+  const _UsefulDetailsCard({required this.result, required this.operation});
+
+  final DocumentAnalysisResult result;
+  final DetectedVehicleOperation operation;
+
+  @override
+  Widget build(BuildContext context) {
+    final vehicle = result.objectAt('vehicle');
+    final make = vehicle['make']?.toString().trim();
+    final model = vehicle['model']?.toString().trim();
+    final vehicleName = [
+      make,
+      model,
+    ].whereType<String>().where((value) => value.isNotEmpty).join(' ');
+
+    final rows = <(String, String)>[
+      if (vehicleName.isNotEmpty) ('Véhicule', vehicleName),
+      if (operation.documentDate != null) ('Date', operation.documentDate!),
+      if (operation.providerName != null) ('Garage', operation.providerName!),
+      if (operation.mileage != null)
+        ('Kilométrage', '${_integer(operation.mileage!)} km'),
+      if (operation.amount != null)
+        ('Prix', '${_money(operation.amount!)} ${operation.currency}'),
+    ];
+
+    return _SimpleCard(
+      icon: Icons.fact_check_outlined,
+      title: 'Informations utiles',
+      message: rows.isEmpty
+          ? 'Le kilométrage et le prix pourront être ajoutés au carnet.'
+          : 'Vérifiez uniquement les informations utiles au suivi.',
+      child: rows.isEmpty
+          ? const SizedBox.shrink()
+          : Column(
+              children: [
+                for (var index = 0; index < rows.length; index++) ...[
+                  if (index > 0) const Divider(height: 20),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: 98,
+                        child: Text(
+                          rows[index].$1,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          rows[index].$2,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+}
+
+class _OperationsListCard extends StatelessWidget {
+  const _OperationsListCard({required this.result});
+
+  final DocumentAnalysisResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = result.objectListAt('line_items');
+    return _SimpleCard(
+      icon: Icons.build_outlined,
+      title: items.length == 1 ? 'Opération relevée' : 'Opérations relevées',
+      message: 'Les contrôles comptables restent en arrière-plan.',
+      child: Column(
         children: [
-          Expanded(
-            child: Text(label, style: Theme.of(context).textTheme.bodyMedium),
-          ),
-          const SizedBox(width: 16),
-          Flexible(
-            child: Text(value, textAlign: TextAlign.right, style: style),
-          ),
+          for (var index = 0; index < items.length; index++) ...[
+            if (index > 0) const Divider(height: 22),
+            _OperationLine(item: items[index]),
+          ],
         ],
       ),
     );
   }
 }
 
-class _ResultNavigation extends StatelessWidget {
-  const _ResultNavigation();
+class _OperationLine extends StatelessWidget {
+  const _OperationLine({required this.item});
+
+  final Map<String, dynamic> item;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    final title = item['description']?.toString().trim();
+    final amount = _asDouble(
+      item['total_including_tax'] ?? item['total_excluding_tax'],
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        FilledButton.icon(
-          onPressed: () => context.go('/history'),
-          icon: const Icon(Icons.history_outlined),
-          label: const Text('Retour à l’historique'),
+        const Icon(Icons.check_circle_outline_rounded, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            title == null || title.isEmpty ? 'Opération non nommée' : title,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
         ),
-        const SizedBox(height: 10),
-        OutlinedButton.icon(
-          onPressed: () => context.go('/home'),
-          icon: const Icon(Icons.home_outlined),
-          label: const Text('Retour à l’accueil'),
-        ),
+        if (amount != null) ...[
+          const SizedBox(width: 10),
+          Text('${_money(amount)} €'),
+        ],
       ],
     );
   }
 }
 
-class _DisclaimerCard extends StatelessWidget {
-  const _DisclaimerCard({required this.text});
+class _OptionalAdviceCard extends StatelessWidget {
+  const _OptionalAdviceCard({required this.result});
 
-  final String text;
+  final DocumentAnalysisResult result;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.softPrimary,
-        borderRadius: BorderRadius.circular(18),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: ExpansionTile(
+        leading: const Icon(Icons.help_outline_rounded),
+        title: const Text('À vérifier si nécessaire'),
+        subtitle: const Text('Conseils complémentaires'),
+        childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
         children: [
-          const Icon(Icons.info_outline, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
-          ),
+          for (final observation in result.usefulObservations)
+            _AdviceLine(
+              text: [
+                observation['title'],
+                observation['explanation'],
+              ].whereType<Object>().join(' — '),
+            ),
+          for (final question in result.usefulQuestions)
+            _AdviceLine(text: question),
         ],
       ),
     );
   }
 }
 
-String? _text(dynamic value) {
-  final text = value?.toString().trim();
-  return text == null || text.isEmpty ? null : text;
+class _AdviceLine extends StatelessWidget {
+  const _AdviceLine({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 3),
+            child: Icon(Icons.circle, size: 7, color: AppColors.primary),
+          ),
+          const SizedBox(width: 9),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+  }
 }
 
-String? _numberLabel(dynamic value, {String suffix = ''}) {
-  if (value == null) {
-    return null;
+class _SimpleCard extends StatelessWidget {
+  const _SimpleCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.child,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(17),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.softPrimary,
+                  borderRadius: BorderRadius.circular(13),
+                ),
+                child: Icon(icon, color: AppColors.primary),
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(message),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (child is! SizedBox) ...[
+            const SizedBox(height: 14),
+            child,
+          ] else
+            child,
+        ],
+      ),
+    );
   }
-
-  final number = value is num ? value : num.tryParse(value.toString());
-
-  if (number == null) {
-    return null;
-  }
-
-  final display = number % 1 == 0
-      ? number.toInt().toString()
-      : number.toStringAsFixed(2);
-
-  return '$display$suffix';
 }
 
-String? _money(dynamic value, String currency) {
-  if (value == null) {
-    return null;
+class _OperationConfirmationData {
+  const _OperationConfirmationData({this.mileage, this.amount});
+
+  final int? mileage;
+  final double? amount;
+}
+
+class _OperationConfirmationSheet extends StatefulWidget {
+  const _OperationConfirmationSheet({required this.operation});
+
+  final DetectedVehicleOperation operation;
+
+  @override
+  State<_OperationConfirmationSheet> createState() =>
+      _OperationConfirmationSheetState();
+}
+
+class _OperationConfirmationSheetState
+    extends State<_OperationConfirmationSheet> {
+  late final TextEditingController _mileageController;
+  late final TextEditingController _amountController;
+
+  @override
+  void initState() {
+    super.initState();
+    _mileageController = TextEditingController(
+      text: widget.operation.mileage?.toString() ?? '',
+    );
+    _amountController = TextEditingController(
+      text: widget.operation.amount == null
+          ? ''
+          : widget.operation.amount!.toStringAsFixed(2).replaceAll('.', ','),
+    );
   }
 
-  final number = value is num
-      ? value.toDouble()
-      : double.tryParse(value.toString());
-
-  if (number == null) {
-    return null;
+  @override
+  void dispose() {
+    _mileageController.dispose();
+    _amountController.dispose();
+    super.dispose();
   }
 
-  final symbol = currency == 'EUR' ? '€' : currency;
-  return '${number.toStringAsFixed(2).replaceAll('.', ',')} $symbol';
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(20, 4, 20, 24 + bottom),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.operation.title,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 5),
+          Text(widget.operation.categoryPath),
+          const SizedBox(height: 18),
+          TextFormField(
+            controller: _mileageController,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: 'Kilométrage (facultatif)',
+              suffixText: 'km',
+              prefixIcon: Icon(Icons.speed_outlined),
+            ),
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            controller: _amountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Prix (facultatif)',
+              suffixText: '€',
+              prefixIcon: Icon(Icons.euro_outlined),
+            ),
+          ),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: () {
+              final mileageText = _mileageController.text.trim();
+              final amountText = _amountController.text.trim().replaceAll(
+                ',',
+                '.',
+              );
+              final mileage = mileageText.isEmpty
+                  ? null
+                  : int.tryParse(mileageText);
+              final amount = amountText.isEmpty
+                  ? null
+                  : double.tryParse(amountText);
+
+              if (mileageText.isNotEmpty && (mileage == null || mileage < 0)) {
+                _message(context, 'Kilométrage invalide.');
+                return;
+              }
+              if (amountText.isNotEmpty && (amount == null || amount < 0)) {
+                _message(context, 'Prix invalide.');
+                return;
+              }
+
+              Navigator.of(context).pop(
+                _OperationConfirmationData(mileage: mileage, amount: amount),
+              );
+            },
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Ajouter au carnet'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _message(BuildContext context, String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+}
+
+String _integer(int value) {
+  final chars = value.toString().split('').reversed.toList();
+  final groups = <String>[];
+  for (var index = 0; index < chars.length; index += 3) {
+    groups.add(chars.skip(index).take(3).toList().reversed.join());
+  }
+  return groups.reversed.join(' ');
+}
+
+String _money(double value) {
+  final fixed = value.truncateToDouble() == value
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+  return fixed.replaceAll('.', ',');
+}
+
+double? _asDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString().replaceAll(',', '.') ?? '');
 }

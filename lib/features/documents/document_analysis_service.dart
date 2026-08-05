@@ -161,12 +161,22 @@ class DocumentAnalysisService {
   }
 
   Future<DocumentCarnetSyncResult> confirmDocumentCarnetEvent(
-    String documentId,
-  ) async {
+    String documentId, {
+    int? mileage,
+    double? amount,
+    String? categoryCode,
+    String? subcategoryCode,
+  }) async {
     try {
       final rawResult = await _client.rpc(
-        'confirm_document_carnet_event',
-        params: {'p_document_id': documentId},
+        'confirm_document_carnet_event_v2',
+        params: {
+          'p_document_id': documentId,
+          'p_mileage': mileage,
+          'p_amount': amount,
+          'p_category_code': categoryCode,
+          'p_subcategory_code': subcategoryCode,
+        },
       );
 
       return DocumentCarnetSyncResult.fromMap(
@@ -178,6 +188,17 @@ class DocumentAnalysisService {
     } on PostgrestException catch (error) {
       final raw = error.message;
 
+      if (raw.contains('DOCUMENT_OPERATION_MILEAGE_INVALID')) {
+        throw const DocumentAnalysisException('Le kilométrage est invalide.');
+      }
+      if (raw.contains('DOCUMENT_OPERATION_AMOUNT_INVALID')) {
+        throw const DocumentAnalysisException('Le prix est invalide.');
+      }
+      if (raw.toLowerCase().contains('confirm_document_carnet_event_v2')) {
+        throw const DocumentAnalysisException(
+          'La confirmation simplifiée doit être installée sur Supabase.',
+        );
+      }
       if (raw.contains('DOCUMENT_CARNET_CONFIRM_NOT_FOUND')) {
         throw const DocumentAnalysisException(
           "L'événement automatique n'existe plus.",

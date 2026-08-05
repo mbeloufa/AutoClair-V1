@@ -1,3 +1,5 @@
+import 'vehicle_event_catalog.dart';
+
 class VehicleCareDashboard {
   const VehicleCareDashboard({
     required this.health,
@@ -234,6 +236,68 @@ class VehicleRiskAlert {
   }
 }
 
+class VehicleEventDocumentOption {
+  const VehicleEventDocumentOption({
+    required this.id,
+    required this.documentType,
+    required this.status,
+    required this.createdAt,
+    this.vehicleId,
+    this.comment,
+  });
+
+  final String id;
+  final String documentType;
+  final String status;
+  final DateTime createdAt;
+  final String? vehicleId;
+  final String? comment;
+
+  factory VehicleEventDocumentOption.fromMap(Map<String, dynamic> map) {
+    return VehicleEventDocumentOption(
+      id: _text(map['id']),
+      documentType: _text(map['document_type'], fallback: 'other'),
+      status: _text(map['status'], fallback: 'uploaded'),
+      createdAt: _dateTime(map['created_at']) ?? DateTime.now(),
+      vehicleId: _nullableText(map['vehicle_id']),
+      comment: _nullableText(map['comment']),
+    );
+  }
+
+  String get typeLabel => switch (documentType.toLowerCase()) {
+    'invoice' || 'maintenance_invoice' || 'repair_invoice' => 'Facture',
+    'estimate' || 'quote' => 'Devis',
+    'technical_inspection_report' ||
+    'technical_control' => 'Contrôle technique',
+    'insurance' || 'insurance_certificate' => 'Assurance',
+    'registration' || 'registration_certificate' => 'Carte grise',
+    _ => 'Document automobile',
+  };
+
+  String get statusLabel => switch (status.toLowerCase()) {
+    'completed' => 'Analysé',
+    'processing' || 'analyzing' => 'Analyse en cours',
+    'failed' => 'Analyse à reprendre',
+    _ => 'Ajouté',
+  };
+
+  String get displayLabel {
+    final suffix = comment?.trim();
+    return suffix == null || suffix.isEmpty
+        ? typeLabel
+        : '$typeLabel · $suffix';
+  }
+}
+
+class VehicleEventSaveResult {
+  const VehicleEventSaveResult({required this.clientReference, this.eventId});
+
+  final String clientReference;
+  final String? eventId;
+
+  String get notificationKey => eventId ?? clientReference;
+}
+
 class VehicleTimelineEvent {
   const VehicleTimelineEvent({
     required this.id,
@@ -248,6 +312,12 @@ class VehicleTimelineEvent {
     this.amount,
     this.currency,
     this.providerName,
+    this.locationText,
+    this.sourceDocumentId,
+    this.reminderEnabled = false,
+    this.reminderDaysBefore,
+    this.reminderAt,
+    this.metadata = const {},
   });
 
   final String id;
@@ -262,6 +332,12 @@ class VehicleTimelineEvent {
   final double? amount;
   final String? currency;
   final String? providerName;
+  final String? locationText;
+  final String? sourceDocumentId;
+  final bool reminderEnabled;
+  final int? reminderDaysBefore;
+  final DateTime? reminderAt;
+  final Map<String, dynamic> metadata;
 
   factory VehicleTimelineEvent.fromMap(Map<String, dynamic> map) {
     return VehicleTimelineEvent(
@@ -279,10 +355,40 @@ class VehicleTimelineEvent {
       amount: _nullableDecimal(map['amount']),
       currency: _nullableText(map['currency']),
       providerName: _nullableText(map['provider_name']),
+      locationText: _nullableText(map['location_text']),
+      sourceDocumentId: _nullableText(map['source_document_id']),
+      reminderEnabled:
+          map['reminder_enabled'] as bool? ??
+          _map(map['metadata'])['reminder_enabled'] == true,
+      reminderDaysBefore: _nullableInteger(
+        map['reminder_days_before'] ??
+            _map(map['metadata'])['reminder_days_before'],
+      ),
+      reminderAt: _dateTime(map['reminder_at']),
+      metadata: _map(map['metadata']),
     );
   }
 
-  String get typeLabel => eventTypeLabel(eventType);
+  VehicleEventClassification get classification {
+    final categoryCode = metadata['category_code']?.toString();
+    final subcategoryCode = metadata['subcategory_code']?.toString();
+    if (categoryCode != null && subcategoryCode != null) {
+      final category = VehicleEventCatalog.categoryByCode(categoryCode);
+      final subcategory = VehicleEventCatalog.subcategoryByCode(
+        subcategoryCode,
+        categoryCode: category.code,
+      );
+      return VehicleEventClassification(
+        category: category,
+        subcategory: subcategory,
+      );
+    }
+    return VehicleEventCatalog.fromEventType(eventType, title: title);
+  }
+
+  String get typeLabel => classification.subcategory.label;
+
+  String get categoryLabel => classification.category.label;
 }
 
 class VehicleExpenseSummary {
@@ -415,14 +521,62 @@ class VehicleDocumentSuggestion {
     );
   }
 
-  String get typeLabel => switch (suggestionType) {
-    'ODOMETER' => 'Kilométrage',
-    'EXPENSE' => 'Dépense',
-    'MAINTENANCE' => 'Entretien',
-    'WARRANTY' => 'Garantie',
-    'ADVICE' => 'Conseil',
-    _ => 'Événement',
-  };
+  VehicleEventClassification get classification {
+    final eventType = payload['event_type']?.toString();
+    final descriptions = <String>[
+      title,
+      payload['title']?.toString() ?? '',
+      payload['description']?.toString() ?? '',
+      payload['operation']?.toString() ?? '',
+      payload['subcategory_label']?.toString() ?? '',
+    ].where((value) => value.trim().isNotEmpty).join(' ');
+
+    return VehicleEventCatalog.classify(
+      descriptions,
+      fallbackEventType: eventType ?? suggestionType,
+    );
+  }
+
+  String get typeLabel => classification.subcategory.label;
+
+  String get categoryLabel => classification.category.label;
+
+  String get operationTitle {
+    final payloadTitle = payload['title']?.toString().trim();
+    if (payloadTitle != null && payloadTitle.isNotEmpty) return payloadTitle;
+    return title.trim().isEmpty
+        ? classification.subcategory.defaultTitle
+        : title;
+  }
+
+  int? get detectedMileage => _nullableInteger(
+    payload['mileage'] ?? payload['odometer'] ?? payload['vehicle_mileage'],
+  );
+
+  double? get detectedAmount => _nullableDecimal(
+    payload['amount'] ?? payload['total_amount'] ?? payload['price'],
+  );
+
+  bool get isUsefulVehicleOperation {
+    final text = [
+      title,
+      payload['title'],
+      payload['description'],
+      payload['operation'],
+    ].whereType<Object>().join(' ').toLowerCase();
+
+    final accounting = RegExp(
+      r'((tva|total ttc|total ht).*(cohérent|cohérence|coherence|vérifier|verification))|'
+      r'((cohérent|cohérence|coherence|vérifier|verification).*(tva|total ttc|total ht))',
+      caseSensitive: false,
+    ).hasMatch(text);
+    final identity = RegExp(
+      r'\b(client|customer|nom du client|propriétaire|destinataire)\b',
+      caseSensitive: false,
+    ).hasMatch(text);
+
+    return !accounting && !identity;
+  }
 }
 
 class VehicleCareBundle {

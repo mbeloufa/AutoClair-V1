@@ -1,4 +1,5 @@
 import Flutter
+import UserNotifications
 import UIKit
 import VisionKit
 
@@ -24,6 +25,10 @@ import VisionKit
     didFinishLaunchingWithOptions launchOptions:
       [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    if #available(iOS 10.0, *) {
+      UNUserNotificationCenter.current().delegate =
+        self as? UNUserNotificationCenterDelegate
+    }
     return super.application(
       application,
       didFinishLaunchingWithOptions: launchOptions

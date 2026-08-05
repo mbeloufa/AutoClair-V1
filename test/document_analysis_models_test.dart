@@ -127,6 +127,59 @@ void main() {
     });
   });
 
+  test('retient l’opération automobile et masque le nom du client', () {
+    final result = DocumentAnalysisResult.fromMap({
+      'id': 'analysis-operation',
+      'document_id': 'document-operation',
+      'summary': 'Nom du client : Jean Dupont\nFiltre à huile remplacé',
+      'overall_confidence': 0.94,
+      'result_json': {
+        'document_type_detected': 'invoice',
+        'parties': {
+          'client_name': 'Jean Dupont',
+          'client_address': '1 rue Exemple',
+          'customer_email': 'jean@example.fr',
+          'garage_name': 'Garage Central',
+          'garage_address': '10 avenue du Garage',
+        },
+        'recipient': {'owner_name': 'Jean Dupont', 'address': '1 rue Exemple'},
+        'vehicle': {'mileage': 82450},
+        'amounts': {'total_including_tax': 129.9, 'currency': 'EUR'},
+        'line_items': [
+          {'description': 'Main d’œuvre'},
+          {'description': 'Filtre à huile'},
+        ],
+        'observations': [
+          {
+            'title': 'TVA et total TTC cohérents',
+            'explanation': 'Vérification comptable',
+          },
+          {'title': 'Filtre remplacé', 'explanation': 'Entretien courant'},
+        ],
+        'questions_to_ask': [
+          'Le total TTC est-il cohérent avec la TVA ?',
+          'Quand prévoir la prochaine vidange ?',
+        ],
+      },
+    });
+
+    expect(result.summary, isNot(contains('Jean Dupont')));
+    expect(result.resultJson.toString(), isNot(contains('Jean Dupont')));
+    expect(result.resultJson.toString(), isNot(contains('owner_name')));
+    expect(result.resultJson.toString(), isNot(contains('jean@example.fr')));
+    expect(result.resultJson.toString(), isNot(contains('1 rue Exemple')));
+    expect(result.resultJson.toString(), contains('Garage Central'));
+    expect(result.resultJson.toString(), contains('10 avenue du Garage'));
+    expect(result.detectedOperation.heading, 'Opération détectée');
+    expect(result.detectedOperation.categoryLabel, 'Entretien');
+    expect(result.detectedOperation.subcategoryLabel, 'Filtres et fluides');
+    expect(result.detectedOperation.title, 'Filtre à huile');
+    expect(result.detectedOperation.mileage, 82450);
+    expect(result.detectedOperation.amount, 129.9);
+    expect(result.usefulObservations.single['title'], 'Filtre remplacé');
+    expect(result.usefulQuestions, ['Quand prévoir la prochaine vidange ?']);
+  });
+
   group('DocumentTypeCatalog', () {
     test('propose les cinq catégories utilisateur', () {
       expect(
