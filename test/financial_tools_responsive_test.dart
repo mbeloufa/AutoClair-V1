@@ -26,6 +26,7 @@ void main() {
           '/breakdown-assistant',
           '/sale-preparation',
           '/used-purchase',
+          '/accident-assistant',
           '/compliance',
           '/quote-comparison',
           '/insurance-review',
@@ -112,6 +113,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Sécuriser mon achat'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Gérer un accident'),
+      180,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gérer un accident'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(

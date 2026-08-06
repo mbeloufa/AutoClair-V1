@@ -78,6 +78,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.info,
       ),
       _FinancialTool(
+        icon: Icons.car_crash_outlined,
+        title: 'Gérer un accident',
+        description:
+            'Sécurisez les personnes, préparez le constat et le dossier assureur.',
+        route: '/accident-assistant',
+        background: AppColors.errorSoft,
+        foreground: AppColors.error,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',

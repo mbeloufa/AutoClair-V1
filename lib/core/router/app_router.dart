@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/delete_account_page.dart';
+import '../../features/accident_assistant/accident_assistant_page.dart';
 import '../../features/auth/forgot_password_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
@@ -216,6 +217,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/used-purchase',
         builder: (context, state) => const UsedPurchasePage(),
+      ),
+      GoRoute(
+        path: '/accident-assistant',
+        builder: (context, state) => const AccidentAssistantPage(),
       ),
       GoRoute(
         path: '/compliance',
