@@ -87,6 +87,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.error,
       ),
       _FinancialTool(
+        icon: Icons.lock_open_outlined,
+        title: 'Réagir à un vol',
+        description:
+            'Organisez la plainte, les preuves et la déclaration à l’assureur.',
+        route: '/theft-assistant',
+        background: AppColors.warningSoft,
+        foreground: AppColors.warning,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',

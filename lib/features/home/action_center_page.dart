@@ -27,6 +27,12 @@ class ActionCenterPage extends StatelessWidget {
           icon: Icons.car_crash_outlined,
           route: '/accident-assistant',
         ),
+        _ActionTool(
+          title: 'Réagir à un vol',
+          subtitle: 'Fourrière, plainte, preuves et déclaration à l’assureur.',
+          icon: Icons.lock_open_outlined,
+          route: '/theft-assistant',
+        ),
       ],
     ),
     _ActionSection(

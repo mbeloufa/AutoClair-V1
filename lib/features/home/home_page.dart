@@ -462,7 +462,7 @@ class _ActionCenterBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Ouvrir les 12 outils',
+                      'Ouvrir les 13 outils',
                       style: Theme.of(
                         context,
                       ).textTheme.labelLarge?.copyWith(color: Colors.white),
@@ -872,7 +872,7 @@ class _HomeMenuGrid extends StatelessWidget {
               width: tileWidth,
               icon: Icons.apps_rounded,
               title: 'Tous les outils',
-              subtitle: 'Panne, accident, achat, vente et budget',
+              subtitle: 'Panne, accident, vol, achat, vente et budget',
               foreground: AppColors.error,
               background: AppColors.errorSoft,
               onTap: onActions,
