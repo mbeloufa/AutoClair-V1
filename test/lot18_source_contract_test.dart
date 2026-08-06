@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Préparer ma visite au garage'"));
       expect(source, contains("route: '/workshop-visit'"));
     }
-    expect(home, contains("'Ouvrir les 19 outils'"));
+    expect(home, contains("'Ouvrir les 20 outils'"));
     for (final label in ['contrôle technique', 'garage', 'inspection']) {
       expect(home, contains(label));
     }
@@ -124,16 +124,16 @@ void main() {
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
     final controlContract = _read('test/lot17_source_contract_test.dart');
 
-    expect(actionTest, contains('Lot 4 to Lot 18'));
+    expect(actionTest, contains('Lot 4 to Lot 19'));
     expect(actionTest, contains('action-tool-/workshop-visit'));
     expect(actionTest, contains('Préparation visite garage ouverte'));
     expect(actionTest, contains('tester.scrollUntilVisible'));
     expect(financialTest, contains("'/workshop-visit'"));
     expect(financialTest, contains("'Préparer ma visite au garage'"));
-    expect(navigationContract, contains('every Lot 4 to Lot 18 module'));
-    expect(navigationContract, contains('allMatches(center).length, 19'));
-    expect(controlContract, contains("'Ouvrir les 19 outils'"));
-    expect(controlContract, contains('Lot 4 to Lot 18'));
+    expect(navigationContract, contains('every Lot 4 to Lot 19 module'));
+    expect(navigationContract, contains('allMatches(center).length, 20'));
+    expect(controlContract, contains("'Ouvrir les 20 outils'"));
+    expect(controlContract, contains('Lot 4 to Lot 19'));
   });
 
   test('lot 18 dart sources avoid known regressions', () {

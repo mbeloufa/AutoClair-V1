@@ -109,6 +109,13 @@ class ActionCenterPage extends StatelessWidget {
           route: '/workshop-visit',
         ),
         _ActionTool(
+          title: 'Suivre mes pneus',
+          subtitle:
+              'Pression, usure visible, flancs et sécurité avant de rouler.',
+          icon: Icons.tire_repair_outlined,
+          route: '/tire-care',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

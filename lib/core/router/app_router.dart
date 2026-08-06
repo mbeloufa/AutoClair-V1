@@ -44,6 +44,7 @@ import '../../features/trip_readiness/trip_readiness_page.dart';
 import '../../features/vehicle_storage/vehicle_storage_page.dart';
 import '../../features/technical_control_readiness/technical_control_readiness_page.dart';
 import '../../features/workshop_visit/workshop_visit_preparation_page.dart';
+import '../../features/tire_care/tire_care_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
@@ -261,6 +262,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/workshop-visit',
         builder: (context, state) => const WorkshopVisitPreparationPage(),
+      ),
+      GoRoute(
+        path: '/tire-care',
+        builder: (context, state) => const TireCarePage(),
       ),
       GoRoute(
         path: '/compliance',

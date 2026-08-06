@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 18 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 19 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -23,6 +23,7 @@ void main() {
       '/vehicle-storage',
       '/technical-control-readiness',
       '/workshop-visit',
+      '/tire-care',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -74,6 +75,7 @@ void main() {
       'Gérer une immobilisation',
       'Préparer mon contrôle technique',
       'Préparer ma visite au garage',
+      'Suivre mes pneus',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -392,6 +394,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Préparation visite garage ouverte'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tire care action opens its direct route', (tester) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/tire-care',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Suivi pneus ouvert')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final tireButton = find.byKey(const ValueKey('action-tool-/tire-care'));
+    await tester.scrollUntilVisible(tireButton, 220, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(tireButton, findsOneWidget);
+
+    await tester.tap(tireButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Suivi pneus ouvert'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

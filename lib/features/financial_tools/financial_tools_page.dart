@@ -105,6 +105,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.primary,
       ),
       _FinancialTool(
+        icon: Icons.tire_repair_outlined,
+        title: 'Suivre mes pneus',
+        description:
+            'Vérifiez les signes visibles et préparez les actions utiles.',
+        route: '/tire-care',
+        background: AppColors.warningSoft,
+        foreground: AppColors.warning,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:
