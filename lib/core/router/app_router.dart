@@ -46,6 +46,7 @@ import '../../features/technical_control_readiness/technical_control_readiness_p
 import '../../features/workshop_visit/workshop_visit_preparation_page.dart';
 import '../../features/tire_care/tire_care_page.dart';
 import '../../features/battery_care/battery_care_page.dart';
+import '../../features/fluid_care/fluid_care_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
@@ -271,6 +272,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/battery-care',
         builder: (context, state) => const BatteryCarePage(),
+      ),
+      GoRoute(
+        path: '/fluid-care',
+        builder: (context, state) => const FluidCarePage(),
       ),
       GoRoute(
         path: '/compliance',

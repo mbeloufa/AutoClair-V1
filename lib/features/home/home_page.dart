@@ -454,7 +454,7 @@ class _ActionCenterBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      'Panne, accident, vol, départ, immobilisation, contrôle technique, garage, pneus, batterie, inspection, risques, achat, vente, entretien, conduite, '
+                      'Panne, accident, vol, départ, immobilisation, contrôle technique, garage, pneus, batterie, niveaux, inspection, risques, achat, vente, entretien, conduite, '
                       'budget et économies.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.white.withValues(alpha: 0.82),
@@ -462,7 +462,7 @@ class _ActionCenterBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Ouvrir les 21 outils',
+                      'Ouvrir les 22 outils',
                       style: Theme.of(
                         context,
                       ).textTheme.labelLarge?.copyWith(color: Colors.white),
@@ -873,7 +873,7 @@ class _HomeMenuGrid extends StatelessWidget {
               icon: Icons.apps_rounded,
               title: 'Tous les outils',
               subtitle:
-                  'Panne, accident, vol, départ, immobilisation, contrôle technique, garage, pneus, batterie, inspection, risques, achat, vente et budget',
+                  'Panne, accident, vol, départ, immobilisation, contrôle technique, garage, pneus, batterie, niveaux, inspection, risques, achat, vente et budget',
               foreground: AppColors.error,
               background: AppColors.errorSoft,
               onTap: onActions,

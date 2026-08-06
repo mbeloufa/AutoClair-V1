@@ -123,6 +123,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.info,
       ),
       _FinancialTool(
+        icon: Icons.water_drop_outlined,
+        title: 'Suivre mes niveaux',
+        description:
+            'Repérez les écarts visibles sans utiliser de valeur générique.',
+        route: '/fluid-care',
+        background: AppColors.successSoft,
+        foreground: AppColors.success,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

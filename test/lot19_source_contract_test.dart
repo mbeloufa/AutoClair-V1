@@ -21,7 +21,7 @@ void main() {
       expect(source, contains("title: 'Suivre mes pneus'"));
       expect(source, contains("route: '/tire-care'"));
     }
-    expect(home, contains("'Ouvrir les 21 outils'"));
+    expect(home, contains("'Ouvrir les 22 outils'"));
     expect(home, contains('pneus'));
   });
 
@@ -84,14 +84,14 @@ void main() {
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
     final workshopContract = _read('test/lot18_source_contract_test.dart');
 
-    expect(actionTest, contains('Lot 4 to Lot 20'));
+    expect(actionTest, contains('Lot 4 to Lot 21'));
     expect(actionTest, contains('action-tool-/tire-care'));
     expect(actionTest, contains('tire care action opens its direct route'));
     expect(financialTest, contains("'/tire-care'"));
-    expect(navigationContract, contains('every Lot 4 to Lot 20 module'));
+    expect(navigationContract, contains('every Lot 4 to Lot 21 module'));
     expect(navigationContract, contains("'Suivre mes pneus': '/tire-care'"));
-    expect(workshopContract, contains("'Ouvrir les 21 outils'"));
-    expect(workshopContract, contains('Lot 4 to Lot 20'));
+    expect(workshopContract, contains("'Ouvrir les 22 outils'"));
+    expect(workshopContract, contains('Lot 4 to Lot 21'));
   });
 
   test('lot 19 dart sources avoid known regressions', () {

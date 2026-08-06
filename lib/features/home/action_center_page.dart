@@ -123,6 +123,13 @@ class ActionCenterPage extends StatelessWidget {
           route: '/battery-care',
         ),
         _ActionTool(
+          title: 'Suivre mes niveaux',
+          subtitle:
+              'Fluides, fuites visibles, voyants et contrôle avant de rouler.',
+          icon: Icons.water_drop_outlined,
+          route: '/fluid-care',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,
