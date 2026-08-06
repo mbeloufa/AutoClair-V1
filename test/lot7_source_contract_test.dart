@@ -58,7 +58,7 @@ void main() {
     final responsiveTest = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsiveTest, contains("'/maintenance-planner'"));
-    expect(responsiveTest, contains("find.text('Planifier mon entretien')"));
+    expect(responsiveTest, contains("find.text(label)"));
     expect(responsiveTest, contains('tester.scrollUntilVisible'));
   });
 

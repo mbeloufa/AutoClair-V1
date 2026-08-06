@@ -21,7 +21,8 @@ void main() {
     expect(hub, contains("route: '/theft-assistant'"));
     expect(center, contains("title: 'Réagir à un vol'"));
     expect(center, contains("route: '/theft-assistant'"));
-    expect(home, contains("'Ouvrir les 13 outils'"));
+    expect(home, contains("'Tous les outils AutoClair'"));
+    expect(home, contains("context.push<void>('/actions')"));
   });
 
   test('lot 12 applies police, impound and insurer rules', () {
@@ -116,18 +117,17 @@ void main() {
     final actionResponsive = _read('test/action_center_responsive_test.dart');
 
     expect(financialResponsive, contains("'/theft-assistant'"));
-    expect(financialResponsive, contains("find.text('Réagir à un vol')"));
+    expect(financialResponsive, contains("'Réagir à un vol'"));
+    expect(financialResponsive, contains('find.text(label)'));
     expect(financialResponsive, contains('tester.scrollUntilVisible'));
     expect(financialResponsive, contains('scrollable: scrollable'));
-    expect(financialResponsive, contains("find.text('Réviser mon assurance')"));
+    expect(financialResponsive, contains("'Réviser mon assurance'"));
 
     expect(actionResponsive, contains("'/theft-assistant'"));
-    expect(actionResponsive, contains("action-tool-/theft-assistant"));
-    expect(actionResponsive, contains('Assistant vol ouvert'));
-    expect(
-      actionResponsive,
-      contains('action center exposes every Lot 4 to Lot 12 tool at 280 px'),
-    );
+    expect(actionResponsive, contains("'Réagir à un vol'"));
+    expect(actionResponsive, contains('find.text(label)'));
+    expect(actionResponsive, contains('tester.scrollUntilVisible'));
+    expect(actionResponsive, contains('scrollable: scrollable'));
   });
 
   test('lot 12 dart sources avoid known regressions', () {

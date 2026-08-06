@@ -23,6 +23,7 @@ void main() {
           '/charging-optimizer',
           '/eco-driving',
           '/maintenance-planner',
+          '/risk-forecast',
           '/breakdown-assistant',
           '/sale-preparation',
           '/used-purchase',
@@ -35,115 +36,38 @@ void main() {
           GoRoute(path: path, builder: (context, state) => const Scaffold()),
       ],
     );
+    addTearDown(router.dispose);
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
 
     final scrollable = find.byType(Scrollable);
     expect(scrollable, findsOneWidget);
-
     expect(find.text('Mes économies'), findsOneWidget);
     expect(find.text('Mon budget automobile'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    await tester.scrollUntilVisible(
-      find.text('Optimiser mon plein'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Optimiser mon plein'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Optimiser ma recharge'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Optimiser ma recharge'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Améliorer ma conduite'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Améliorer ma conduite'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Planifier mon entretien'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Planifier mon entretien'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Gérer une panne'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Gérer une panne'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Préparer ma vente'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Préparer ma vente'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Sécuriser mon achat'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Sécuriser mon achat'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Gérer un accident'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Gérer un accident'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Réagir à un vol'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Réagir à un vol'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-
-    await tester.scrollUntilVisible(
-      find.text('Réviser mon assurance'),
-      180,
-      scrollable: scrollable,
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Réviser mon assurance'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    for (final label in [
+      'Optimiser mon plein',
+      'Optimiser ma recharge',
+      'Améliorer ma conduite',
+      'Planifier mon entretien',
+      'Anticiper les risques',
+      'Gérer une panne',
+      'Préparer ma vente',
+      'Sécuriser mon achat',
+      'Gérer un accident',
+      'Réagir à un vol',
+      'Réviser mon assurance',
+    ]) {
+      await tester.scrollUntilVisible(
+        find.text(label),
+        180,
+        scrollable: scrollable,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(label), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
   });
 }

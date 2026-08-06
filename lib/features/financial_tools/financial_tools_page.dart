@@ -51,6 +51,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.info,
       ),
       _FinancialTool(
+        icon: Icons.query_stats_outlined,
+        title: 'Anticiper les risques',
+        description:
+            'Repérez les facteurs de panne sans prétendre établir un diagnostic.',
+        route: '/risk-forecast',
+        background: AppColors.warningSoft,
+        foreground: AppColors.warning,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

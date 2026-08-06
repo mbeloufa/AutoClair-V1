@@ -72,6 +72,13 @@ class ActionCenterPage extends StatelessWidget {
           route: '/maintenance-planner',
         ),
         _ActionTool(
+          title: 'Anticiper les risques',
+          subtitle:
+              'Repérer les facteurs de panne et les contrôles prioritaires.',
+          icon: Icons.query_stats_outlined,
+          route: '/risk-forecast',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

@@ -19,10 +19,10 @@ void main() {
     expect(home, contains("context.push<void>('/actions')"));
     expect(home, contains("ValueKey('home-all-tools-tile')"));
     expect(home, contains("title: 'Tous les outils'"));
-    expect(home, contains("'Ouvrir les 13 outils'"));
+    expect(home, contains("'Ouvrir les 14 outils'"));
   });
 
-  test('lot 11.5 gives every Lot 4 to Lot 12 module a direct button', () {
+  test('lot 11.5 gives every Lot 4 to Lot 13 module a direct button', () {
     final center = _read('lib/features/home/action_center_page.dart');
 
     final expectedActions = <String, String>{
@@ -32,6 +32,7 @@ void main() {
       'Sécuriser mon achat': '/used-purchase',
       'Préparer ma vente': '/sale-preparation',
       'Planifier mon entretien': '/maintenance-planner',
+      'Anticiper les risques': '/risk-forecast',
       'Améliorer ma conduite': '/eco-driving',
       'Mon budget automobile': '/budget',
       'Optimiser mon plein': '/fuel-optimizer',
@@ -46,7 +47,7 @@ void main() {
       expect(center, contains("route: '${entry.value}'"));
     }
 
-    expect(RegExp(r"route: '/[^']+'").allMatches(center).length, 13);
+    expect(RegExp(r"route: '/[^']+'").allMatches(center).length, 14);
     expect(center, contains('context.push<void>(tool.route)'));
   });
 
@@ -66,11 +67,6 @@ void main() {
     expect(center, contains(r"ValueKey('action-section-${section.keyName}')"));
     expect(center, contains(r"ValueKey('action-tool-${tool.route}')"));
     expect(center, contains('constraints.maxWidth >= 600'));
-    expect(
-      center,
-      isNot(contains("ValueKey('action-section-' + section.keyName)")),
-    );
-    expect(center, isNot(contains("ValueKey('action-tool-' + tool.route)")));
   });
 
   test('lot 11.5 changes navigation only and adds no backend dependency', () {

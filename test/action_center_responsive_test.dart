@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 12 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 13 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -17,6 +17,7 @@ void main() {
       '/used-purchase',
       '/sale-preparation',
       '/maintenance-planner',
+      '/risk-forecast',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -37,6 +38,7 @@ void main() {
           GoRoute(path: path, builder: (context, state) => const Scaffold()),
       ],
     );
+    addTearDown(router.dispose);
 
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
@@ -61,6 +63,7 @@ void main() {
       'Sécuriser mon achat',
       'Préparer ma vente',
       'Planifier mon entretien',
+      'Anticiper les risques',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -113,7 +116,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('theft action opens its direct route', (tester) async {
+  testWidgets('risk forecast action opens its direct route', (tester) async {
     final router = GoRouter(
       initialLocation: '/actions',
       routes: [
@@ -122,9 +125,9 @@ void main() {
           builder: (context, state) => const ActionCenterPage(),
         ),
         GoRoute(
-          path: '/theft-assistant',
+          path: '/risk-forecast',
           builder: (context, state) =>
-              const Scaffold(body: Text('Assistant vol ouvert')),
+              const Scaffold(body: Text('Analyse des risques ouverte')),
         ),
       ],
     );
@@ -133,15 +136,24 @@ void main() {
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
 
-    final theftButton = find.byKey(
-      const ValueKey('action-tool-/theft-assistant'),
-    );
-    expect(theftButton, findsOneWidget);
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    expect(listView, findsOneWidget);
 
-    await tester.tap(theftButton);
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final riskButton = find.byKey(const ValueKey('action-tool-/risk-forecast'));
+    await tester.scrollUntilVisible(riskButton, 220, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(riskButton, findsOneWidget);
+
+    await tester.tap(riskButton);
     await tester.pumpAndSettle();
 
-    expect(find.text('Assistant vol ouvert'), findsOneWidget);
+    expect(find.text('Analyse des risques ouverte'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

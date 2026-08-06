@@ -28,6 +28,7 @@ import '../../features/fuel_optimizer/fuel_optimizer_page.dart';
 import '../../features/insurance_review/insurance_review_page.dart';
 import '../../features/maintenance_planner/maintenance_planner_page.dart';
 import '../../features/quote_comparison/quote_comparison_page.dart';
+import '../../features/risk_forecast/risk_forecast_page.dart';
 import '../../features/sale_preparation/sale_preparation_page.dart';
 import '../../features/used_purchase/used_purchase_page.dart';
 import '../../features/vehicle_budget/vehicle_budget_page.dart';
@@ -231,6 +232,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/theft-assistant',
         builder: (context, state) => const TheftAssistantPage(),
+      ),
+      GoRoute(
+        path: '/risk-forecast',
+        builder: (context, state) => const RiskForecastPage(),
       ),
       GoRoute(
         path: '/compliance',
