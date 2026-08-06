@@ -148,6 +148,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.warning,
       ),
       _FinancialTool(
+        icon: Icons.health_and_safety_outlined,
+        title: 'Vérifier carrosserie et sécurité',
+        description:
+            'Structurez un contrôle des ouvrants et équipements visibles.',
+        route: '/body-safety-care',
+        background: AppColors.successSoft,
+        foreground: AppColors.success,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

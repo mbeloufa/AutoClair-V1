@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 23 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 24 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -28,6 +28,7 @@ void main() {
       '/fluid-care',
       '/visibility-care',
       '/brake-care',
+      '/body-safety-care',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -84,6 +85,7 @@ void main() {
       'Suivre mes niveaux',
       'Vérifier éclairage et visibilité',
       'Surveiller freinage et tenue de route',
+      'Vérifier carrosserie et sécurité',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -610,6 +612,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Freinage et tenue de route ouverts'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('body safety care action opens its direct route', (tester) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/body-safety-care',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Carrosserie et sécurité ouvertes')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final button = find.byKey(const ValueKey('action-tool-/body-safety-care'));
+    await tester.scrollUntilVisible(button, 220, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(button, findsOneWidget);
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Carrosserie et sécurité ouvertes'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

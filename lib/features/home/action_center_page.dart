@@ -144,6 +144,13 @@ class ActionCenterPage extends StatelessWidget {
           route: '/brake-care',
         ),
         _ActionTool(
+          title: 'Vérifier carrosserie et sécurité',
+          subtitle:
+              'Ouvrants, ceintures, sièges, plaques et fixations visibles.',
+          icon: Icons.health_and_safety_outlined,
+          route: '/body-safety-care',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

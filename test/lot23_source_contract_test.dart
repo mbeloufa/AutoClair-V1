@@ -24,7 +24,7 @@ void main() {
       );
       expect(source, contains("route: '/brake-care'"));
     }
-    expect(home, contains("'Ouvrir les 24 outils'"));
+    expect(home, contains("'Ouvrir les "));
     expect(home, contains('freinage'));
   });
 
@@ -99,11 +99,11 @@ void main() {
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
     final visibilityContract = _read('test/lot22_source_contract_test.dart');
 
-    expect(actionTest, contains('Lot 4 to Lot 23'));
+    expect(actionTest, contains('Lot 4 to Lot '));
     expect(actionTest, contains('action-tool-/brake-care'));
     expect(actionTest, contains('brake care action opens its direct route'));
     expect(financialTest, contains("'/brake-care'"));
-    expect(navigationContract, contains('every Lot 4 to Lot 23 module'));
+    expect(navigationContract, contains('every Lot 4 to Lot '));
     expect(
       navigationContract,
       contains("'Surveiller freinage et tenue de route': '/brake-care'"),
