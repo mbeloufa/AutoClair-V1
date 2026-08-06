@@ -78,6 +78,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.success,
       ),
       _FinancialTool(
+        icon: Icons.pause_circle_outline,
+        title: 'Gérer une immobilisation',
+        description:
+            'Préparez le véhicule avant une pause et sa remise en service.',
+        route: '/vehicle-storage',
+        background: AppColors.warningSoft,
+        foreground: AppColors.warning,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

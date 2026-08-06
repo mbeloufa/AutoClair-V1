@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 15 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 16 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -20,6 +20,7 @@ void main() {
       '/risk-forecast',
       '/vehicle-inspection',
       '/trip-readiness',
+      '/vehicle-storage',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -68,6 +69,7 @@ void main() {
       'Anticiper les risques',
       'Inspecter mon véhicule',
       'Préparer mon départ',
+      'Gérer une immobilisation',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -250,6 +252,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Préparation du départ ouverte'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('vehicle storage action opens its direct route', (tester) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/vehicle-storage',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Immobilisation ouverte')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    expect(listView, findsOneWidget);
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final storageButton = find.byKey(
+      const ValueKey('action-tool-/vehicle-storage'),
+    );
+    await tester.scrollUntilVisible(storageButton, 220, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(storageButton, findsOneWidget);
+
+    await tester.tap(storageButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Immobilisation ouverte'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

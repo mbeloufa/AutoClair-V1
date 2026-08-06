@@ -91,6 +91,12 @@ class ActionCenterPage extends StatelessWidget {
           route: '/trip-readiness',
         ),
         _ActionTool(
+          title: 'Gérer une immobilisation',
+          subtitle: 'Préparer une pause, un hivernage ou une remise en route.',
+          icon: Icons.pause_circle_outline,
+          route: '/vehicle-storage',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,
