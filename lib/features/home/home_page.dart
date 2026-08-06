@@ -343,7 +343,9 @@ class _HomePageState extends State<HomePage> {
                 context,
               ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
             ),
-            const SizedBox(height: 22),
+            const SizedBox(height: 16),
+            _ActionCenterBanner(onTap: () => context.push<void>('/actions')),
+            const SizedBox(height: 20),
             if (_loading && vehicle == null)
               const _LoadingCard(height: 132)
             else if (priorityItems.isNotEmpty)
@@ -384,6 +386,7 @@ class _HomePageState extends State<HomePage> {
               hasVehicle: vehicle != null,
               documentCount: _documents.length,
               onVehicles: () => context.go('/vehicles'),
+              onActions: () => context.push<void>('/actions'),
               onNearby: () => context.go('/nearby'),
               onSavings: () => context.go('/savings'),
               onAnalyze: _openDocumentUpload,
@@ -406,6 +409,75 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
       bottomNavigationBar: const AppBottomNav(currentIndex: 0),
+    );
+  }
+}
+
+class _ActionCenterBanner extends StatelessWidget {
+  const _ActionCenterBanner({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: const ValueKey('home-action-center-banner'),
+      color: AppColors.primaryDark,
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(Icons.apps_rounded, color: Colors.white),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tous les outils AutoClair',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.titleLarge?.copyWith(color: Colors.white),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Panne, accident, achat, vente, entretien, conduite, '
+                      'budget et économies.',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.82),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Ouvrir les 12 outils',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelLarge?.copyWith(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 12),
+                child: Icon(Icons.chevron_right_rounded, color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -770,6 +842,7 @@ class _HomeMenuGrid extends StatelessWidget {
     required this.hasVehicle,
     required this.documentCount,
     required this.onVehicles,
+    required this.onActions,
     required this.onNearby,
     required this.onSavings,
     required this.onAnalyze,
@@ -779,6 +852,7 @@ class _HomeMenuGrid extends StatelessWidget {
   final bool hasVehicle;
   final int documentCount;
   final VoidCallback onVehicles;
+  final VoidCallback onActions;
   final VoidCallback onNearby;
   final VoidCallback onSavings;
   final VoidCallback onAnalyze;
@@ -793,6 +867,16 @@ class _HomeMenuGrid extends StatelessWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
+            _HomeMenuTile(
+              key: const ValueKey('home-all-tools-tile'),
+              width: tileWidth,
+              icon: Icons.apps_rounded,
+              title: 'Tous les outils',
+              subtitle: 'Panne, accident, achat, vente et budget',
+              foreground: AppColors.error,
+              background: AppColors.errorSoft,
+              onTap: onActions,
+            ),
             _HomeMenuTile(
               width: tileWidth,
               icon: Icons.directions_car_outlined,
@@ -851,6 +935,7 @@ class _HomeMenuGrid extends StatelessWidget {
 
 class _HomeMenuTile extends StatelessWidget {
   const _HomeMenuTile({
+    super.key,
     required this.width,
     required this.icon,
     required this.title,

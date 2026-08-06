@@ -11,6 +11,7 @@ import '../../features/documents/analysis_result_page.dart';
 import '../../features/documents/document_upload_page.dart';
 import '../../features/eco_driving/eco_driving_page.dart';
 import '../../features/home/account_page.dart';
+import '../../features/home/action_center_page.dart';
 import '../../features/home/history_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/home/nearby_page.dart';
@@ -101,6 +102,10 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => const ForgotPasswordPage(),
       ),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+      GoRoute(
+        path: '/actions',
+        builder: (context, state) => const ActionCenterPage(),
+      ),
       GoRoute(
         path: '/vehicles',
         builder: (context, state) => const VehiclesPage(),
