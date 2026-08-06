@@ -132,6 +132,14 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.success,
       ),
       _FinancialTool(
+        icon: Icons.visibility_outlined,
+        title: 'Vérifier éclairage et visibilité',
+        description: 'Structurez un contrôle visuel avant de circuler.',
+        route: '/visibility-care',
+        background: AppColors.infoSoft,
+        foreground: AppColors.info,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

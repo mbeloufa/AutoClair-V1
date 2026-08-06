@@ -130,6 +130,13 @@ class ActionCenterPage extends StatelessWidget {
           route: '/fluid-care',
         ),
         _ActionTool(
+          title: 'Vérifier éclairage et visibilité',
+          subtitle:
+              'Feux, vitrages, essuie-glaces, rétroviseurs et désembuage.',
+          icon: Icons.visibility_outlined,
+          route: '/visibility-care',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

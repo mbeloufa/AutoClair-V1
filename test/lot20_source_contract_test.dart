@@ -21,7 +21,7 @@ void main() {
       expect(source, contains("title: 'Suivre ma batterie'"));
       expect(source, contains("route: '/battery-care'"));
     }
-    expect(home, contains("'Ouvrir les 22 outils'"));
+    expect(home, contains("'Ouvrir les 23 outils'"));
     expect(home, contains('batterie'));
   });
 
@@ -87,18 +87,18 @@ void main() {
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
     final tireContract = _read('test/lot19_source_contract_test.dart');
 
-    expect(actionTest, contains('Lot 4 to Lot 21'));
+    expect(actionTest, contains('Lot 4 to Lot 22'));
     expect(actionTest, contains('action-tool-/battery-care'));
     expect(actionTest, contains('action-tool-/fluid-care'));
     expect(actionTest, contains('battery care action opens its direct route'));
     expect(financialTest, contains("'/battery-care'"));
-    expect(navigationContract, contains('every Lot 4 to Lot 21 module'));
+    expect(navigationContract, contains('every Lot 4 to Lot 22 module'));
     expect(
       navigationContract,
       contains("'Suivre ma batterie': '/battery-care'"),
     );
-    expect(tireContract, contains("'Ouvrir les 22 outils'"));
-    expect(tireContract, contains('Lot 4 to Lot 21'));
+    expect(tireContract, contains("'Ouvrir les 23 outils'"));
+    expect(tireContract, contains('Lot 4 to Lot 22'));
   });
 
   test('lot 20 dart sources avoid known regressions', () {

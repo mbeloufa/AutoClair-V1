@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 21 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 22 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -26,6 +26,7 @@ void main() {
       '/tire-care',
       '/battery-care',
       '/fluid-care',
+      '/visibility-care',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -80,6 +81,7 @@ void main() {
       'Suivre mes pneus',
       'Suivre ma batterie',
       'Suivre mes niveaux',
+      'Vérifier éclairage et visibilité',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -520,6 +522,52 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Suivi niveaux ouvert'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('visibility care action opens its direct route', (tester) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/visibility-care',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Éclairage et visibilité ouverts')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final visibilityButton = find.byKey(
+      const ValueKey('action-tool-/visibility-care'),
+    );
+    await tester.scrollUntilVisible(
+      visibilityButton,
+      220,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(visibilityButton, findsOneWidget);
+
+    await tester.tap(visibilityButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Éclairage et visibilité ouverts'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });
