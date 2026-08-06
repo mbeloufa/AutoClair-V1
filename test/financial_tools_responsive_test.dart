@@ -25,6 +25,7 @@ void main() {
           '/maintenance-planner',
           '/breakdown-assistant',
           '/sale-preparation',
+          '/used-purchase',
           '/compliance',
           '/quote-comparison',
           '/insurance-review',
@@ -101,6 +102,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Préparer ma vente'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Sécuriser mon achat'),
+      180,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sécuriser mon achat'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.scrollUntilVisible(

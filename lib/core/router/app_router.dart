@@ -27,6 +27,7 @@ import '../../features/insurance_review/insurance_review_page.dart';
 import '../../features/maintenance_planner/maintenance_planner_page.dart';
 import '../../features/quote_comparison/quote_comparison_page.dart';
 import '../../features/sale_preparation/sale_preparation_page.dart';
+import '../../features/used_purchase/used_purchase_page.dart';
 import '../../features/vehicle_budget/vehicle_budget_page.dart';
 import '../../features/fuel_prices/fuel_price_compare_page.dart';
 import '../../features/technical_control/technical_control_compare_page.dart';
@@ -211,6 +212,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/sale-preparation',
         builder: (context, state) => const SalePreparationPage(),
+      ),
+      GoRoute(
+        path: '/used-purchase',
+        builder: (context, state) => const UsedPurchasePage(),
       ),
       GoRoute(
         path: '/compliance',

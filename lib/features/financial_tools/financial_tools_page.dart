@@ -69,6 +69,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.warning,
       ),
       _FinancialTool(
+        icon: Icons.car_rental_outlined,
+        title: 'Sécuriser mon achat',
+        description:
+            'Vérifiez les documents, l’essai et le budget total avant de payer.',
+        route: '/used-purchase',
+        background: AppColors.infoSoft,
+        foreground: AppColors.info,
+      ),
+      _FinancialTool(
         icon: Icons.verified_user_outlined,
         title: 'À vérifier',
         description: 'Contrôle technique, assurance, rappels et échéances.',
