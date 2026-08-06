@@ -16,7 +16,7 @@ class CommercialOffersService {
   }) async {
     try {
       final raw = await _client.rpc(
-        'get_vehicle_commercial_offers',
+        'get_vehicle_commercial_offers_v4',
         params: {
           'p_vehicle_id': vehicleId,
           'p_limit': limit.clamp(1, 150).toInt(),
@@ -77,7 +77,7 @@ class CommercialOffersService {
   Future<void> resetDismissedOffers(String vehicleId) async {
     try {
       await _client.rpc(
-        'reset_vehicle_offer_dismissals',
+        'reset_vehicle_offer_dismissals_v4',
         params: {'p_vehicle_id': vehicleId},
       );
     } on PostgrestException catch (error) {
@@ -96,7 +96,7 @@ class CommercialOffersService {
   }) async {
     try {
       await _client.rpc(
-        'set_vehicle_commercial_offer_preference',
+        'set_vehicle_commercial_offer_preference_v4',
         params: {
           'p_vehicle_id': vehicleId,
           'p_offer_id': offerId,
@@ -127,7 +127,8 @@ class CommercialOffersService {
     if (raw.contains('COMMERCIAL_OFFERS_STATUS_INVALID')) {
       return 'Le statut demandé est invalide.';
     }
-    if (raw.toLowerCase().contains('get_vehicle_commercial_offers')) {
+    if (raw.toLowerCase().contains('get_vehicle_commercial_offers_v4') ||
+        raw.toLowerCase().contains('get_vehicle_commercial_offers')) {
       return 'Le module Offres utiles doit être installé sur Supabase.';
     }
 
