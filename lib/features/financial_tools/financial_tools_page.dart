@@ -69,6 +69,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.info,
       ),
       _FinancialTool(
+        icon: Icons.route_outlined,
+        title: 'Préparer mon départ',
+        description:
+            'Vérifiez les points essentiels avant un trajet important.',
+        route: '/trip-readiness',
+        background: AppColors.successSoft,
+        foreground: AppColors.success,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

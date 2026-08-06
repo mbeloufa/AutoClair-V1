@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 14 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 15 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -19,6 +19,7 @@ void main() {
       '/maintenance-planner',
       '/risk-forecast',
       '/vehicle-inspection',
+      '/trip-readiness',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -66,6 +67,7 @@ void main() {
       'Planifier mon entretien',
       'Anticiper les risques',
       'Inspecter mon véhicule',
+      'Préparer mon départ',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -205,6 +207,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Inspection ouverte'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('trip readiness action opens its direct route', (tester) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/trip-readiness',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Préparation du départ ouverte')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    expect(listView, findsOneWidget);
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final tripButton = find.byKey(
+      const ValueKey('action-tool-/trip-readiness'),
+    );
+    await tester.scrollUntilVisible(tripButton, 220, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(tripButton, findsOneWidget);
+
+    await tester.tap(tripButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Préparation du départ ouverte'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

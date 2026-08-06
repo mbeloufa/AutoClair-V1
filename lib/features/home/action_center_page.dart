@@ -85,6 +85,12 @@ class ActionCenterPage extends StatelessWidget {
           route: '/vehicle-inspection',
         ),
         _ActionTool(
+          title: 'Préparer mon départ',
+          subtitle: 'Checklist véhicule, documents, chargement et vigilance.',
+          icon: Icons.route_outlined,
+          route: '/trip-readiness',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,
