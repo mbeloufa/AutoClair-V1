@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 24 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 25 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -29,6 +29,7 @@ void main() {
       '/visibility-care',
       '/brake-care',
       '/body-safety-care',
+      '/lease-return',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -73,6 +74,7 @@ void main() {
       'Réagir à un vol',
       'Sécuriser mon achat',
       'Préparer ma vente',
+      'Préparer ma restitution',
       'Planifier mon entretien',
       'Anticiper les risques',
       'Inspecter mon véhicule',
@@ -652,6 +654,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Carrosserie et sécurité ouvertes'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('lease return action opens its direct route', (tester) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/lease-return',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Préparation de restitution ouverte')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final button = find.byKey(const ValueKey('action-tool-/lease-return'));
+    await tester.scrollUntilVisible(button, 220, scrollable: scrollable);
+    await tester.pumpAndSettle();
+    expect(button, findsOneWidget);
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Préparation de restitution ouverte'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

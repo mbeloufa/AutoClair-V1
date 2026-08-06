@@ -55,6 +55,13 @@ class ActionCenterPage extends StatelessWidget {
           icon: Icons.sell_outlined,
           route: '/sale-preparation',
         ),
+        _ActionTool(
+          title: 'Préparer ma restitution',
+          subtitle:
+              'Contrat, kilométrage, accessoires, état visible et remise du véhicule.',
+          icon: Icons.assignment_outlined,
+          route: '/lease-return',
+        ),
       ],
     ),
     _ActionSection(

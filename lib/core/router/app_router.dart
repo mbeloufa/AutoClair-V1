@@ -50,6 +50,7 @@ import '../../features/fluid_care/fluid_care_page.dart';
 import '../../features/visibility_care/visibility_care_page.dart';
 import '../../features/brake_care/brake_care_page.dart';
 import '../../features/body_safety_care/body_safety_care_page.dart';
+import '../../features/lease_return/lease_return_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
@@ -291,6 +292,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/body-safety-care',
         builder: (context, state) => const BodySafetyCarePage(),
+      ),
+      GoRoute(
+        path: '/lease-return',
+        builder: (context, state) => const LeaseReturnPage(),
       ),
       GoRoute(
         path: '/compliance',

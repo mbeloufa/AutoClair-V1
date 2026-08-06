@@ -157,6 +157,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.success,
       ),
       _FinancialTool(
+        icon: Icons.assignment_outlined,
+        title: 'Préparer ma restitution',
+        description:
+            'Préparez une restitution LOA ou LLD sans estimer les frais.',
+        route: '/lease-return',
+        background: AppColors.softPrimary,
+        foreground: AppColors.primary,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

@@ -462,7 +462,7 @@ class _ActionCenterBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Ouvrir les 25 outils',
+                      'Ouvrir les 26 outils',
                       style: Theme.of(
                         context,
                       ).textTheme.labelLarge?.copyWith(color: Colors.white),
