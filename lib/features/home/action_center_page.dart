@@ -97,6 +97,12 @@ class ActionCenterPage extends StatelessWidget {
           route: '/vehicle-storage',
         ),
         _ActionTool(
+          title: 'Préparer mon contrôle technique',
+          subtitle: 'Vérifications visibles avant visite ou contre-visite.',
+          icon: Icons.fact_check_outlined,
+          route: '/technical-control-readiness',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

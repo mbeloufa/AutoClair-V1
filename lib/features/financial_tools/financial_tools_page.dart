@@ -87,6 +87,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.warning,
       ),
       _FinancialTool(
+        icon: Icons.fact_check_outlined,
+        title: 'Préparer mon contrôle technique',
+        description:
+            'Passez en revue les points visibles avant le rendez-vous.',
+        route: '/technical-control-readiness',
+        background: AppColors.infoSoft,
+        foreground: AppColors.info,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:
