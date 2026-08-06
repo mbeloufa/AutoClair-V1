@@ -79,6 +79,12 @@ class ActionCenterPage extends StatelessWidget {
           route: '/risk-forecast',
         ),
         _ActionTool(
+          title: 'Inspecter mon véhicule',
+          subtitle: 'État des lieux guidé avant achat, vente ou restitution.',
+          icon: Icons.checklist_rounded,
+          route: '/vehicle-inspection',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

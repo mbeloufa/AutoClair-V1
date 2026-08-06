@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 13 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 14 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -18,6 +18,7 @@ void main() {
       '/sale-preparation',
       '/maintenance-planner',
       '/risk-forecast',
+      '/vehicle-inspection',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -64,6 +65,7 @@ void main() {
       'Préparer ma vente',
       'Planifier mon entretien',
       'Anticiper les risques',
+      'Inspecter mon véhicule',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -154,6 +156,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Analyse des risques ouverte'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('vehicle inspection action opens its direct route', (
+    tester,
+  ) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/vehicle-inspection',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Inspection ouverte')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    expect(listView, findsOneWidget);
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final inspectionButton = find.byKey(
+      const ValueKey('action-tool-/vehicle-inspection'),
+    );
+    await tester.scrollUntilVisible(
+      inspectionButton,
+      220,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(inspectionButton, findsOneWidget);
+
+    await tester.tap(inspectionButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Inspection ouverte'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

@@ -60,6 +60,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.warning,
       ),
       _FinancialTool(
+        icon: Icons.checklist_rounded,
+        title: 'Inspecter mon véhicule',
+        description:
+            'Réalisez un état des lieux structuré sans expertise automatique.',
+        route: '/vehicle-inspection',
+        background: AppColors.infoSoft,
+        foreground: AppColors.info,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

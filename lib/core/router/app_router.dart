@@ -39,6 +39,7 @@ import '../../features/vehicle_care/vehicle_care_page.dart';
 import '../../features/vehicle_care/vehicle_event_form_page.dart';
 import '../../features/vehicle_care/vehicle_odometer_page.dart';
 import '../../features/vehicle_insights/vehicle_360_page.dart';
+import '../../features/vehicle_inspection/vehicle_inspection_page.dart';
 import '../../features/vehicles/vehicle_form_page.dart';
 import '../app_controller.dart';
 
@@ -236,6 +237,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/risk-forecast',
         builder: (context, state) => const RiskForecastPage(),
+      ),
+      GoRoute(
+        path: '/vehicle-inspection',
+        builder: (context, state) => const VehicleInspectionPage(),
       ),
       GoRoute(
         path: '/compliance',
