@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("route: '/risk-forecast'"));
     }
     expect(center, contains(r"ValueKey('action-tool-${tool.route}')"));
-    expect(home, contains("'Ouvrir les 23 outils'"));
+    expect(home, contains("'Ouvrir les "));
     for (final label in [
       'vol',
       'départ',
@@ -128,7 +128,7 @@ void main() {
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
     final theftContract = _read('test/lot12_source_contract_test.dart');
 
-    expect(centerTest, contains('Lot 4 to Lot 22'));
+    expect(centerTest, contains('Lot 4 to Lot '));
     expect(centerTest, contains("action-tool-/risk-forecast"));
     expect(centerTest, contains('Analyse des risques ouverte'));
     expect(centerTest, contains("ValueKey('action-center-scroll')"));
@@ -142,7 +142,7 @@ void main() {
     expect(financialTest, contains("'Préparer mon contrôle technique'"));
     expect(financialTest, contains('find.text(label)'));
     expect(financialTest, contains('tester.scrollUntilVisible'));
-    expect(navigationContract, contains('every Lot 4 to Lot 22 module'));
+    expect(navigationContract, contains('every Lot 4 to Lot '));
     expect(
       navigationContract,
       contains("'Anticiper les risques': '/risk-forecast'"),

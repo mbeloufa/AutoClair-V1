@@ -137,6 +137,13 @@ class ActionCenterPage extends StatelessWidget {
           route: '/visibility-care',
         ),
         _ActionTool(
+          title: 'Surveiller freinage et tenue de route',
+          subtitle:
+              'Freinage, direction, vibrations, bruits et stabilité déclarés.',
+          icon: Icons.speed_outlined,
+          route: '/brake-care',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

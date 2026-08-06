@@ -140,6 +140,14 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.info,
       ),
       _FinancialTool(
+        icon: Icons.speed_outlined,
+        title: 'Surveiller freinage et tenue de route',
+        description: 'Structurez les sensations et signes à faire contrôler.',
+        route: '/brake-care',
+        background: AppColors.warningSoft,
+        foreground: AppColors.warning,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:

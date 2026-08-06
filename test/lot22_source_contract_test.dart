@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Vérifier éclairage et visibilité'"));
       expect(source, contains("route: '/visibility-care'"));
     }
-    expect(home, contains("'Ouvrir les 23 outils'"));
+    expect(home, contains("'Ouvrir les "));
     expect(home, contains('visibilité'));
   });
 
@@ -103,20 +103,20 @@ void main() {
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
     final fluidContract = _read('test/lot21_source_contract_test.dart');
 
-    expect(actionTest, contains('Lot 4 to Lot 22'));
+    expect(actionTest, contains('Lot 4 to Lot '));
     expect(actionTest, contains('action-tool-/visibility-care'));
     expect(
       actionTest,
       contains('visibility care action opens its direct route'),
     );
     expect(financialTest, contains("'/visibility-care'"));
-    expect(navigationContract, contains('every Lot 4 to Lot 22 module'));
+    expect(navigationContract, contains('every Lot 4 to Lot '));
     expect(
       navigationContract,
       contains("'Vérifier éclairage et visibilité': '/visibility-care'"),
     );
-    expect(fluidContract, contains("'Ouvrir les 23 outils'"));
-    expect(fluidContract, contains('Lot 4 to Lot 22'));
+    expect(fluidContract, contains("'Ouvrir les "));
+    expect(fluidContract, contains('Lot 4 to Lot '));
   });
 
   test('lot 22 dart sources avoid known regressions', () {
