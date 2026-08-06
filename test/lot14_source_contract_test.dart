@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Inspecter mon véhicule'"));
       expect(source, contains("route: '/vehicle-inspection'"));
     }
-    expect(home, contains("'Ouvrir les 20 outils'"));
+    expect(home, contains("'Ouvrir les 21 outils'"));
     for (final label in [
       'vol',
       'départ',
@@ -113,7 +113,7 @@ void main() {
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
     final riskContract = _read('test/lot13_source_contract_test.dart');
 
-    expect(actionTest, contains('Lot 4 to Lot 19'));
+    expect(actionTest, contains('Lot 4 to Lot 20'));
     expect(actionTest, contains("action-tool-/vehicle-inspection"));
     expect(actionTest, contains('Inspection ouverte'));
     expect(financialTest, contains("'/vehicle-inspection'"));
@@ -121,10 +121,10 @@ void main() {
     expect(financialTest, contains("'Préparer mon départ'"));
     expect(financialTest, contains("'Gérer une immobilisation'"));
     expect(financialTest, contains("'Préparer mon contrôle technique'"));
-    expect(navigationContract, contains('every Lot 4 to Lot 19 module'));
-    expect(navigationContract, contains('allMatches(center).length, 20'));
-    expect(riskContract, contains("'Ouvrir les 20 outils'"));
-    expect(riskContract, contains('every Lot 4 to Lot 19 module'));
+    expect(navigationContract, contains('every Lot 4 to Lot 20 module'));
+    expect(navigationContract, contains('allMatches(center).length, 21'));
+    expect(riskContract, contains("'Ouvrir les 21 outils'"));
+    expect(riskContract, contains('every Lot 4 to Lot 20 module'));
   });
 
   test('lot 14 dart sources avoid known regressions', () {

@@ -116,6 +116,13 @@ class ActionCenterPage extends StatelessWidget {
           route: '/tire-care',
         ),
         _ActionTool(
+          title: 'Suivre ma batterie',
+          subtitle:
+              'Démarrage, décharge récente et signes électriques à surveiller.',
+          icon: Icons.battery_charging_full,
+          route: '/battery-care',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

@@ -114,6 +114,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.warning,
       ),
       _FinancialTool(
+        icon: Icons.battery_charging_full,
+        title: 'Suivre ma batterie',
+        description:
+            'Repérez les signes de faiblesse et préparez un contrôle adapté.',
+        route: '/battery-care',
+        background: AppColors.infoSoft,
+        foreground: AppColors.info,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:
