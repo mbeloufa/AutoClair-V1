@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('action center exposes every Lot 4 to Lot 17 tool at 280 px', (
+  testWidgets('action center exposes every Lot 4 to Lot 18 tool at 280 px', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(280, 720));
@@ -22,6 +22,7 @@ void main() {
       '/trip-readiness',
       '/vehicle-storage',
       '/technical-control-readiness',
+      '/workshop-visit',
       '/eco-driving',
       '/budget',
       '/fuel-optimizer',
@@ -72,6 +73,7 @@ void main() {
       'Préparer mon départ',
       'Gérer une immobilisation',
       'Préparer mon contrôle technique',
+      'Préparer ma visite au garage',
       'Améliorer ma conduite',
       'Mon budget automobile',
       'Optimiser mon plein',
@@ -343,6 +345,53 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Préparation contrôle technique ouverte'), findsOneWidget);
+    expect(find.byType(ActionCenterPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('workshop visit action opens its direct route', (tester) async {
+    final router = GoRouter(
+      initialLocation: '/actions',
+      routes: [
+        GoRoute(
+          path: '/actions',
+          builder: (context, state) => const ActionCenterPage(),
+        ),
+        GoRoute(
+          path: '/workshop-visit',
+          builder: (context, state) =>
+              const Scaffold(body: Text('Préparation visite garage ouverte')),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    final listView = find.byKey(const ValueKey('action-center-scroll'));
+    expect(listView, findsOneWidget);
+    final scrollable = find.descendant(
+      of: listView,
+      matching: find.byType(Scrollable),
+    );
+    expect(scrollable, findsOneWidget);
+
+    final workshopButton = find.byKey(
+      const ValueKey('action-tool-/workshop-visit'),
+    );
+    await tester.scrollUntilVisible(
+      workshopButton,
+      220,
+      scrollable: scrollable,
+    );
+    await tester.pumpAndSettle();
+    expect(workshopButton, findsOneWidget);
+
+    await tester.tap(workshopButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Préparation visite garage ouverte'), findsOneWidget);
     expect(find.byType(ActionCenterPage), findsNothing);
     expect(tester.takeException(), isNull);
   });

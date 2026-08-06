@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Préparer mon départ'"));
       expect(source, contains("route: '/trip-readiness'"));
     }
-    expect(home, contains("'Ouvrir les 18 outils'"));
+    expect(home, contains("'Ouvrir les 19 outils'"));
     for (final label in [
       'vol',
       'départ',
@@ -124,17 +124,17 @@ void main() {
       final riskContract = _read('test/lot13_source_contract_test.dart');
       final inspectionContract = _read('test/lot14_source_contract_test.dart');
 
-      expect(actionTest, contains('Lot 4 to Lot 17'));
+      expect(actionTest, contains('Lot 4 to Lot 18'));
       expect(actionTest, contains('action-tool-/trip-readiness'));
       expect(actionTest, contains('Préparation du départ ouverte'));
       expect(financialTest, contains("'/trip-readiness'"));
       expect(financialTest, contains("'Préparer mon départ'"));
       expect(financialTest, contains("'Gérer une immobilisation'"));
       expect(financialTest, contains("'Préparer mon contrôle technique'"));
-      expect(navigationContract, contains('every Lot 4 to Lot 17 module'));
-      expect(navigationContract, contains('allMatches(center).length, 18'));
-      expect(riskContract, contains("'Ouvrir les 18 outils'"));
-      expect(inspectionContract, contains('Lot 4 to Lot 17'));
+      expect(navigationContract, contains('every Lot 4 to Lot 18 module'));
+      expect(navigationContract, contains('allMatches(center).length, 19'));
+      expect(riskContract, contains("'Ouvrir les 19 outils'"));
+      expect(inspectionContract, contains('Lot 4 to Lot 18'));
     },
   );
 

@@ -103,6 +103,12 @@ class ActionCenterPage extends StatelessWidget {
           route: '/technical-control-readiness',
         ),
         _ActionTool(
+          title: 'Préparer ma visite au garage',
+          subtitle: 'Rassembler les informations utiles avant le rendez-vous.',
+          icon: Icons.car_repair_outlined,
+          route: '/workshop-visit',
+        ),
+        _ActionTool(
           title: 'Améliorer ma conduite',
           subtitle: 'Bilan volontaire d’écoconduite après le trajet.',
           icon: Icons.eco_outlined,

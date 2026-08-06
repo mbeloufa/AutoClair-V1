@@ -19,10 +19,10 @@ void main() {
     expect(home, contains("context.push<void>('/actions')"));
     expect(home, contains("ValueKey('home-all-tools-tile')"));
     expect(home, contains("title: 'Tous les outils'"));
-    expect(home, contains("'Ouvrir les 18 outils'"));
+    expect(home, contains("'Ouvrir les 19 outils'"));
   });
 
-  test('lot 11.5 gives every Lot 4 to Lot 17 module a direct button', () {
+  test('lot 11.5 gives every Lot 4 to Lot 18 module a direct button', () {
     final center = _read('lib/features/home/action_center_page.dart');
 
     final expectedActions = <String, String>{
@@ -37,6 +37,7 @@ void main() {
       'Préparer mon départ': '/trip-readiness',
       'Gérer une immobilisation': '/vehicle-storage',
       'Préparer mon contrôle technique': '/technical-control-readiness',
+      'Préparer ma visite au garage': '/workshop-visit',
       'Améliorer ma conduite': '/eco-driving',
       'Mon budget automobile': '/budget',
       'Optimiser mon plein': '/fuel-optimizer',
@@ -51,7 +52,7 @@ void main() {
       expect(center, contains("route: '${entry.value}'"));
     }
 
-    expect(RegExp(r"route: '/[^']+'").allMatches(center).length, 18);
+    expect(RegExp(r"route: '/[^']+'").allMatches(center).length, 19);
     expect(center, contains('context.push<void>(tool.route)'));
   });
 

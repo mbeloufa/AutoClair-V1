@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('lot 16 exposes vehicle storage from both navigation hubs', () {
+  test('lot 18 exposes workshop visit preparation from both navigation hubs', () {
     final router = _read('lib/core/router/app_router.dart');
     final center = _read('lib/features/home/action_center_page.dart');
     final financial = _read(
@@ -14,51 +14,54 @@ void main() {
     expect(
       router,
       contains(
-        "import '../../features/vehicle_storage/vehicle_storage_page.dart';",
+        "import '../../features/workshop_visit/workshop_visit_preparation_page.dart';",
       ),
     );
-    expect(router, contains("path: '/vehicle-storage'"));
-    expect(router, contains('const VehicleStoragePage()'));
+    expect(router, contains("path: '/workshop-visit'"));
+    expect(router, contains('const WorkshopVisitPreparationPage()'));
     for (final source in [center, financial]) {
-      expect(source, contains("title: 'Gérer une immobilisation'"));
-      expect(source, contains("route: '/vehicle-storage'"));
+      expect(source, contains("title: 'Préparer ma visite au garage'"));
+      expect(source, contains("route: '/workshop-visit'"));
     }
     expect(home, contains("'Ouvrir les 19 outils'"));
-    for (final label in [
-      'départ',
-      'immobilisation',
-      'contrôle technique',
-      'inspection',
-    ]) {
+    for (final label in ['contrôle technique', 'garage', 'inspection']) {
       expect(home, contains(label));
     }
   });
 
-  test('lot 16 remains structured and stores no storage location', () {
+  test('lot 18 remains structured and never claims a diagnosis', () {
     final models = _read(
-      'lib/features/vehicle_storage/vehicle_storage_models.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_models.dart',
     );
     final calculator = _read(
-      'lib/features/vehicle_storage/vehicle_storage_calculator.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_calculator.dart',
     );
     final page = _read(
-      'lib/features/vehicle_storage/vehicle_storage_page.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_page.dart',
     );
 
-    expect(models, contains('enum VehicleStorageArea'));
-    expect(models, contains('Map<VehicleStorageArea, VehicleStorageStatus>'));
-    expect(models, contains('n’enregistre aucun lieu de stockage'));
-    expect(calculator, contains('VehicleStorageLevel.blocked'));
-    expect(page, contains("ValueKey('vehicle-storage-evaluate')"));
-    expect(page, contains("'/vehicle-inspection'"));
+    expect(models, contains('enum WorkshopPreparationArea'));
+    expect(
+      models,
+      contains('Map<WorkshopPreparationArea, WorkshopPreparationStatus>'),
+    );
+    expect(models, contains('Il ne pose '));
+    expect(models, contains('pas de diagnostic'));
+    expect(models, contains('ni autorisation de travaux'));
+    expect(calculator, contains('WorkshopPreparationLevel.urgent'));
+    expect(calculator, contains('completeness < 100 || score < 85'));
+    expect(page, contains("ValueKey('workshop-visit-evaluate')"));
+    expect(page, contains('showDatePicker('));
+    expect(page, contains('context: context,'));
+    expect(page, contains("'/quote-comparison'"));
+    expect(page, contains("'/history'"));
     expect(page, contains("'/maintenance-planner'"));
-    expect(page, contains("'/insurance-review'"));
     for (final forbidden in [
       'geolocator',
       'latitude',
       'longitude',
       'addressController',
-      'storageLocation',
+      'garageNameController',
       'functions.invoke',
       'storage.from',
     ]) {
@@ -71,22 +74,22 @@ void main() {
     }
   });
 
-  test('lot 16 stores only a protected structured preparation', () {
+  test('lot 18 stores only a protected structured preparation', () {
     final service = _read(
-      'lib/features/vehicle_storage/vehicle_storage_service.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_service.dart',
     );
     final migration = _read(
-      'supabase/migrations/20260806133000_vehicle_storage_v1.sql',
+      'supabase/migrations/20260806140000_workshop_visit_preparation_v1.sql',
     );
 
     expect(service, contains('VehicleService'));
-    expect(service, contains("from('vehicle_storage_checks')"));
-    expect(service, contains("'vehicle-storage-v1'"));
+    expect(service, contains("from('workshop_visit_preparations')"));
+    expect(service, contains("'workshop-visit-preparation-v1'"));
     expect(service, isNot(contains('functions.invoke')));
     expect(service, isNot(contains('storage.from')));
 
     for (final value in [
-      'vehicle_storage_checks',
+      'workshop_visit_preparations',
       'enable row level security',
       'user_id = auth.uid()',
       'public.autoclair_user_owns_vehicle(vehicle_id)',
@@ -104,7 +107,8 @@ void main() {
       'latitude',
       'longitude',
       'street_address',
-      'storage_location',
+      'garage_name',
+      'contact_name',
       'photo_url',
       'third_party',
       'vin',
@@ -114,34 +118,33 @@ void main() {
     }
   });
 
-  test('lot 16 cumulative navigation exposes and tests storage', () {
+  test('lot 18 cumulative navigation exposes and tests workshop visit', () {
     final actionTest = _read('test/action_center_responsive_test.dart');
     final financialTest = _read('test/financial_tools_responsive_test.dart');
     final navigationContract = _read('test/lot11_5_source_contract_test.dart');
-    final tripContract = _read('test/lot15_source_contract_test.dart');
+    final controlContract = _read('test/lot17_source_contract_test.dart');
 
     expect(actionTest, contains('Lot 4 to Lot 18'));
-    expect(actionTest, contains('action-tool-/vehicle-storage'));
-    expect(actionTest, contains('Immobilisation ouverte'));
+    expect(actionTest, contains('action-tool-/workshop-visit'));
+    expect(actionTest, contains('Préparation visite garage ouverte'));
     expect(actionTest, contains('tester.scrollUntilVisible'));
-    expect(financialTest, contains("'/vehicle-storage'"));
-    expect(financialTest, contains("'Gérer une immobilisation'"));
-    expect(financialTest, contains("'Préparer mon contrôle technique'"));
+    expect(financialTest, contains("'/workshop-visit'"));
+    expect(financialTest, contains("'Préparer ma visite au garage'"));
     expect(navigationContract, contains('every Lot 4 to Lot 18 module'));
     expect(navigationContract, contains('allMatches(center).length, 19'));
-    expect(tripContract, contains("'Ouvrir les 19 outils'"));
-    expect(tripContract, contains('Lot 4 to Lot 18'));
+    expect(controlContract, contains("'Ouvrir les 19 outils'"));
+    expect(controlContract, contains('Lot 4 to Lot 18'));
   });
 
-  test('lot 16 dart sources avoid known regressions', () {
+  test('lot 18 dart sources avoid known regressions', () {
     for (final path in [
       'lib/core/router/app_router.dart',
       'lib/features/home/action_center_page.dart',
       'lib/features/financial_tools/financial_tools_page.dart',
-      'lib/features/vehicle_storage/vehicle_storage_models.dart',
-      'lib/features/vehicle_storage/vehicle_storage_calculator.dart',
-      'lib/features/vehicle_storage/vehicle_storage_service.dart',
-      'lib/features/vehicle_storage/vehicle_storage_page.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_models.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_calculator.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_service.dart',
+      'lib/features/workshop_visit/workshop_visit_preparation_page.dart',
     ]) {
       final source = _read(path);
       expect(RegExp(r'\$\{[A-Za-z_][A-Za-z0-9_]*\}').hasMatch(source), isFalse);

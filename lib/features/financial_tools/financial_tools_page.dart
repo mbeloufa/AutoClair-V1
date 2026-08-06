@@ -96,6 +96,15 @@ class FinancialToolsPage extends StatelessWidget {
         foreground: AppColors.info,
       ),
       _FinancialTool(
+        icon: Icons.car_repair_outlined,
+        title: 'Préparer ma visite au garage',
+        description:
+            'Préparez les symptômes, documents, devis et décisions à clarifier.',
+        route: '/workshop-visit',
+        background: AppColors.softPrimary,
+        foreground: AppColors.primary,
+      ),
+      _FinancialTool(
         icon: Icons.car_crash_outlined,
         title: 'Gérer une panne',
         description:
