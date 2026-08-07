@@ -97,9 +97,6 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
             _view = bundle.relevantNowCount > 0
                 ? _OfferView.relevant
                 : _OfferView.all;
-          } else if (bundle.purchaseCount > 0) {
-            _scope = _OfferScope.purchase;
-            _view = _OfferView.all;
           }
           _initialSelectionResolved = true;
         }
@@ -122,12 +119,7 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
 
   List<CommercialOffer> _offersForScope(CommercialOfferBundle bundle) {
     return bundle.offers
-        .where((offer) {
-          if (_scope == _OfferScope.purchase) {
-            return offer.isPurchaseOffer;
-          }
-          return !offer.isPurchaseOffer;
-        })
+        .where((offer) => !offer.isPurchaseOffer)
         .toList(growable: false);
   }
 
@@ -149,26 +141,6 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
           return true;
         })
         .toList(growable: false);
-  }
-
-  void _selectScope(_OfferScope scope) {
-    if (_scope == scope) return;
-
-    setState(() {
-      _scope = scope;
-      _category = 'ALL';
-
-      if (scope == _OfferScope.purchase && _view == _OfferView.relevant) {
-        _view = _OfferView.all;
-      }
-
-      if (scope == _OfferScope.currentVehicle) {
-        final bundle = _bundle;
-        if (bundle != null && bundle.relevantNowCount > 0) {
-          _view = _OfferView.relevant;
-        }
-      }
-    });
   }
 
   Future<void> _selectVehicle(String vehicleId) async {
@@ -330,7 +302,7 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Offres utiles'),
+        title: const Text('Offres après-vente'),
         actions: [
           IconButton(
             onPressed: _loading ? null : _load,
@@ -399,12 +371,7 @@ class _CommercialOffersPageState extends State<CommercialOffersPage> {
           ],
           _OffersHero(vehicle: vehicle, scope: _scope, offers: scopeOffers),
           const SizedBox(height: 16),
-          _ScopeSelector(
-            selected: _scope,
-            currentVehicleCount: bundle.currentVehicleCount,
-            purchaseCount: bundle.purchaseCount,
-            onSelected: _selectScope,
-          ),
+          _ScopeSelector(currentVehicleCount: bundle.currentVehicleCount),
           const SizedBox(height: 14),
           _GoodSensePanel(scope: _scope),
           const SizedBox(height: 18),
@@ -610,37 +577,22 @@ class _OffersHero extends StatelessWidget {
 }
 
 class _ScopeSelector extends StatelessWidget {
-  const _ScopeSelector({
-    required this.selected,
-    required this.currentVehicleCount,
-    required this.purchaseCount,
-    required this.onSelected,
-  });
+  const _ScopeSelector({required this.currentVehicleCount});
 
-  final _OfferScope selected;
   final int currentVehicleCount;
-  final int purchaseCount;
-  final ValueChanged<_OfferScope> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        ChoiceChip(
-          selected: selected == _OfferScope.currentVehicle,
-          onSelected: (_) => onSelected(_OfferScope.currentVehicle),
-          avatar: const Icon(Icons.build_circle_outlined, size: 18),
-          label: Text('Ma voiture ($currentVehicleCount)'),
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Chip(
+        avatar: const Icon(Icons.build_circle_outlined, size: 18),
+        label: Text(
+          currentVehicleCount == 1
+              ? 'Après-vente · 1 offre'
+              : 'Après-vente · $currentVehicleCount offres',
         ),
-        ChoiceChip(
-          selected: selected == _OfferScope.purchase,
-          onSelected: (_) => onSelected(_OfferScope.purchase),
-          avatar: const Icon(Icons.swap_horiz_rounded, size: 18),
-          label: Text('Changer ($purchaseCount)'),
-        ),
-      ],
+      ),
     );
   }
 }

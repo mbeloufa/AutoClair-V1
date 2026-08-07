@@ -1049,7 +1049,7 @@ class _QuickVehicleActions extends StatelessWidget {
               width: width,
               child: _CompactAction(
                 icon: Icons.local_offer_outlined,
-                label: 'Promos en cours',
+                label: "Offres d'achat",
                 onTap: onOffers,
               ),
             ),

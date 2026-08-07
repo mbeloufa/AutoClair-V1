@@ -16,7 +16,7 @@ class CommercialOffersService {
   }) async {
     try {
       final raw = await _client.rpc(
-        'get_vehicle_commercial_offers_v4',
+        'get_vehicle_after_sales_offers_v4',
         params: {
           'p_vehicle_id': vehicleId,
           'p_limit': limit.clamp(1, 150).toInt(),
@@ -127,7 +127,8 @@ class CommercialOffersService {
     if (raw.contains('COMMERCIAL_OFFERS_STATUS_INVALID')) {
       return 'Le statut demandé est invalide.';
     }
-    if (raw.toLowerCase().contains('get_vehicle_commercial_offers_v4') ||
+    if (raw.toLowerCase().contains('get_vehicle_after_sales_offers_v4') ||
+        raw.toLowerCase().contains('get_vehicle_commercial_offers_v4') ||
         raw.toLowerCase().contains('get_vehicle_commercial_offers')) {
       return 'Le module Offres utiles doit être installé sur Supabase.';
     }

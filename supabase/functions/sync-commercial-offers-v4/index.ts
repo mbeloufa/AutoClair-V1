@@ -137,6 +137,7 @@ async function storeCandidate(source: OfferSource, offer: ExtractedOffer, conten
     title: offer.title,
     summary: offer.summary,
     category: offer.category,
+    offer_context: offer.offerContext,
     benefit_kind: offer.benefitKind,
     benefit_label: offer.benefitLabel,
     benefit_value: offer.benefitValue,
@@ -183,6 +184,7 @@ async function publishOffer(source: OfferSource, offer: ExtractedOffer, isFallba
     title: offer.title,
     summary: offer.summary,
     category: offer.category,
+    offer_context: offer.offerContext,
     benefit_kind: offer.benefitKind,
     benefit_label: offer.benefitLabel,
     benefit_value: offer.benefitValue,
@@ -240,6 +242,7 @@ function fallbackOffer(source: OfferSource): ExtractedOffer {
       ? `Consultez les promotions et services actuellement publiés par ${brandLabel}. AutoClair continue l’analyse détaillée de cette source officielle.`
       : `Consultez les promotions et services recensés pour ${brandLabel}. La source et les conditions doivent être confirmées.`,
     category: "MAINTENANCE",
+    offerContext: "CURRENT_VEHICLE",
     benefitKind: "FIXED_PRICE",
     benefitLabel: "Conditions sur le site officiel",
     benefitValue: null,

@@ -22,6 +22,7 @@ import '../../features/start/start_page.dart';
 import '../../features/charging_prices/charging_compare_page.dart';
 import '../../features/charging_optimizer/charging_optimizer_page.dart';
 import '../../features/commercial_offers/commercial_offers_page.dart';
+import '../../features/commercial_offers/purchase_offer_search_page.dart';
 import '../../features/compliance/vehicle_compliance_page.dart';
 import '../../features/financial_tools/financial_tools_page.dart';
 import '../../features/fuel_optimizer/fuel_optimizer_page.dart';
@@ -142,7 +143,7 @@ GoRouter createAppRouter(AppController controller) {
       ),
       GoRoute(
         path: '/offers',
-        builder: (context, state) => const CommercialOffersPage(),
+        builder: (context, state) => const PurchaseOfferSearchPage(),
       ),
       GoRoute(
         path: '/vehicles/:vehicleId/offers',

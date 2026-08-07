@@ -11,6 +11,7 @@ export type ExtractedOffer = {
   title: string;
   summary: string;
   category: string;
+  offerContext: 'CURRENT_VEHICLE' | 'VEHICLE_PURCHASE';
   benefitKind: string;
   benefitLabel: string;
   benefitValue: number | null;
@@ -170,10 +171,39 @@ function parseDates(text: string): { startsAt: string | null; endsAt: string | n
   return { startsAt: dates[0], endsAt: dates[dates.length - 1] };
 }
 
-function categoryFor(text: string): string {
+function offerContextFor(text: string): 'CURRENT_VEHICLE' | 'VEHICLE_PURCHASE' {
   const value = normalizeToken(text);
+  const explicitPurchase = /location longue duree|\blld\b|location avec option d achat|\bloa\b|premier loyer|1er loyer|apport|credit auto|financement vehicule|offre de reprise|prime reprise|reprise de votre vehicule|vehicule neuf|voiture neuve|vehicule d occasion|voiture d occasion|commandez votre|a l achat d un vehicule/.test(value);
+  return explicitPurchase ? 'VEHICLE_PURCHASE' : 'CURRENT_VEHICLE';
+}
+
+function categoryFor(text: string, offerContext: 'CURRENT_VEHICLE' | 'VEHICLE_PURCHASE'): string {
+  const value = normalizeToken(text);
+  if (offerContext === 'VEHICLE_PURCHASE') {
+    if (/occasion|vehicule d occasion|voiture d occasion/.test(value)) return 'USED_VEHICLE';
+    return 'NEW_VEHICLE';
+  }
   if (/controle technique|pre controle|inspection|bilan securite/.test(value)) return 'INSPECTION';
+  if (/pneu|pneumatique|roue complete/.test(value)) return 'TYRES';
+  if (/pare brise|pare-brise|vitrage|bris de glace/.test(value)) return 'WINDSCREEN';
+  if (/climatisation|clim|recharge de gaz/.test(value)) return 'CLIMATE';
+  if (/batterie/.test(value)) return 'BATTERY';
+  if (/carrosserie|debosselage|peinture/.test(value)) return 'BODYWORK';
+  if (/accessoire/.test(value)) return 'ACCESSORIES';
+  if (/contrat d entretien|contrat entretien/.test(value)) return 'CONTRACT';
+  if (/assistance|depannage/.test(value)) return 'ASSISTANCE';
   return 'MAINTENANCE';
+}
+
+function fuelTypesFor(text: string): string[] {
+  const value = normalizeToken(text);
+  const fuels: string[] = [];
+  if (/electrique|\bev\b/.test(value)) fuels.push('electric');
+  if (/hybride rechargeable|plug in|phev/.test(value)) fuels.push('plug_in_hybrid');
+  else if (/hybride/.test(value)) fuels.push('hybrid');
+  if (/essence|\btsi\b|\btfsi\b/.test(value)) fuels.push('petrol');
+  if (/diesel|\btdi\b|\bdci\b|bluehdi/.test(value)) fuels.push('diesel');
+  return [...new Set(fuels)];
 }
 
 function extractAge(text: string): { ageMin: number | null; ageMax: number | null } {
@@ -205,7 +235,7 @@ function candidateSegments(text: string): string[] {
     const window = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 5)).join('\n');
     const normalized = normalizeToken(window);
     const hasBenefit = /\d{1,4}(?:[,.]\d{1,2})?\s*€|\d{1,2}\s*%|offert|gratuit|remise|promotion|a partir de|à partir de/.test(normalized);
-    const hasVehicleContext = /entretien|revision|controle|pneu|pare brise|carrosserie|climatisation|frein|amortisseur|accessoire|atelier|service|vehicule/.test(normalized);
+    const hasVehicleContext = /entretien|revision|controle|pneu|pare brise|carrosserie|climatisation|frein|amortisseur|accessoire|atelier|service|vehicule|voiture|location longue duree|\blld\b|\bloa\b|loyer|apport|reprise|occasion|neuf/.test(normalized);
     if (hasBenefit && hasVehicleContext) segments.push(window.slice(0, 1800));
   }
   return [...new Set(segments)].slice(0, 40);
@@ -233,6 +263,8 @@ export function extractOffersFromHtml(html: string, source: OfferSource): Extrac
     const network = /r[eé]seau.{0,60}participant|point de vente.{0,40}participant|atelier.{0,40}participant/i.test(segment);
     const contract = /contrat d['’ ]entretien|contrat valide|souscription/.test(segment.toLowerCase());
     const title = titleFromSegment(segment, benefitLabel);
+    const offerContext = offerContextFor(segment);
+    const fuelTypes = fuelTypesFor(segment);
     let confidence = source.official ? 0.48 : 0.34;
     if (percent !== null || money !== null) confidence += 0.20;
     if (dates.endsAt) confidence += 0.10;
@@ -247,7 +279,8 @@ export function extractOffersFromHtml(html: string, source: OfferSource): Extrac
       offerKey,
       title: title.slice(0, 180),
       summary: segment.replace(/\n+/g, ' ').slice(0, 700),
-      category: categoryFor(segment),
+      category: categoryFor(segment, offerContext),
+      offerContext,
       benefitKind,
       benefitLabel,
       benefitValue,
@@ -256,7 +289,7 @@ export function extractOffersFromHtml(html: string, source: OfferSource): Extrac
       endsAt: dates.endsAt,
       modelPatterns: [],
       excludedModelPatterns: [],
-      fuelTypes: [],
+      fuelTypes,
       excludedFuelTypes: [],
       yearMin: null,
       yearMax: null,
