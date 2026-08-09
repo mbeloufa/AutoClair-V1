@@ -6,6 +6,8 @@ import '../../core/theme/app_theme.dart';
 import 'vehicle.dart';
 import 'vehicle_brand_catalog.dart';
 import 'vehicle_brand_picker.dart';
+import 'vehicle_identification_result.dart';
+import 'vehicle_registration_identification_card.dart';
 import 'vehicle_service.dart';
 
 class VehicleFormPage extends StatefulWidget {
@@ -154,6 +156,22 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
     return value.isEmpty ? null : int.parse(value);
   }
 
+  void _applyIdentifiedVehicle(VehicleIdentificationResult result) {
+    setState(() {
+      _makeController.text = VehicleBrandCatalog.canonicalValue(result.make);
+      _modelController.text = result.model;
+
+      if (result.vehicleYear != null) {
+        _yearController.text = result.vehicleYear.toString();
+      }
+
+      final fuelType = result.fuelType;
+      if (fuelType != null && _fuelTypes.contains(fuelType)) {
+        _fuelType = fuelType;
+      }
+    });
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate() || _saving) {
       return;
@@ -246,6 +264,14 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
         children: [
+          Text('Ajout rapide', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+          VehicleRegistrationIdentificationCard(
+            controller: _registrationController,
+            enabled: !_saving,
+            onIdentified: _applyIdentifiedVehicle,
+          ),
+          const SizedBox(height: 28),
           Text(
             'Informations principales',
             style: Theme.of(context).textTheme.titleLarge,
@@ -330,20 +356,9 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
             ),
           ),
           const SizedBox(height: 28),
-          Text('Identification', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _registrationController,
-            textInputAction: TextInputAction.next,
-            textCapitalization: TextCapitalization.characters,
-            autocorrect: false,
-            inputFormatters: [LengthLimitingTextInputFormatter(15)],
-            decoration: const InputDecoration(
-              labelText: 'Immatriculation',
-              hintText: 'Ex. AB-123-CD',
-              prefixIcon: Icon(Icons.pin_outlined),
-              helperText: 'Facultatif',
-            ),
+          Text(
+            'Identification complémentaire',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),
           TextFormField(
@@ -396,7 +411,9 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
               Expanded(
                 child: Text(
                   "L'immatriculation et le VIN sont facultatifs. "
-                  'Ne les renseignez que si cela vous est utile.',
+                  "Lors d'une identification, AutoClair ne conserve que "
+                  'les données techniques que vous choisissez ensuite '
+                  "d'enregistrer dans la fiche véhicule.",
                 ),
               ),
             ],
