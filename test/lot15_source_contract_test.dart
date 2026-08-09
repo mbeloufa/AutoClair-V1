@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Préparer mon départ'"));
       expect(source, contains("route: '/trip-readiness'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     for (final label in [
       'vol',
       'départ',
@@ -136,7 +136,7 @@ void main() {
         navigationContract,
         contains("'Préparer mon départ': '/trip-readiness'"),
       );
-      expect(riskContract, contains("'Ouvrir les "));
+      expect(riskContract, contains("'Choisir une situation'"));
       expect(inspectionContract, contains('Lot 4 to Lot '));
     },
   );

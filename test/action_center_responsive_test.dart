@@ -55,7 +55,7 @@ void main() {
     await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
 
-    expect(find.text('Tous les outils AutoClair'), findsOneWidget);
+    expect(find.text('Moments clés'), findsOneWidget);
     expect(find.byKey(const ValueKey('action-center-intro')), findsOneWidget);
     expect(tester.takeException(), isNull);
 

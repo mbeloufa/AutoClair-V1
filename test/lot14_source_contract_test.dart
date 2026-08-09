@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Inspecter mon véhicule'"));
       expect(source, contains("route: '/vehicle-inspection'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     for (final label in [
       'vol',
       'départ',
@@ -126,7 +126,7 @@ void main() {
       navigationContract,
       contains("'Inspecter mon véhicule': '/vehicle-inspection'"),
     );
-    expect(riskContract, contains("'Ouvrir les "));
+    expect(riskContract, contains("'Choisir une situation'"));
     expect(riskContract, contains('every Lot 4 to Lot '));
   });
 

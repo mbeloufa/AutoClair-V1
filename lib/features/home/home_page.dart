@@ -338,7 +338,7 @@ class _HomePageState extends State<HomePage> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Que souhaitez-vous faire aujourd’hui ?',
+              'De quoi avez-vous besoin aujourd’hui ?',
               style: Theme.of(
                 context,
               ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
@@ -380,7 +380,7 @@ class _HomePageState extends State<HomePage> {
                 onTap: () => _openVehicleCare(),
               ),
             const SizedBox(height: 26),
-            Text('Vos espaces', style: Theme.of(context).textTheme.titleLarge),
+            Text('Essentiel', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
             _HomeMenuGrid(
               hasVehicle: vehicle != null,
@@ -447,7 +447,7 @@ class _ActionCenterBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Tous les outils AutoClair',
+                      'Moments clés',
                       style: Theme.of(
                         context,
                       ).textTheme.titleLarge?.copyWith(color: Colors.white),
@@ -462,7 +462,7 @@ class _ActionCenterBanner extends StatelessWidget {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Ouvrir les 26 outils',
+                      'Choisir une situation',
                       style: Theme.of(
                         context,
                       ).textTheme.labelLarge?.copyWith(color: Colors.white),

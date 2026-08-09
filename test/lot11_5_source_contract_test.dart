@@ -15,11 +15,11 @@ void main() {
     expect(router, contains('const ActionCenterPage()'));
 
     expect(home, contains("ValueKey('home-action-center-banner')"));
-    expect(home, contains("'Tous les outils AutoClair'"));
+    expect(home, contains("'Moments clés'"));
     expect(home, contains("context.push<void>('/actions')"));
     expect(home, contains("ValueKey('home-all-tools-tile')"));
     expect(home, contains("title: 'Tous les outils'"));
-    expect(home, contains("'Ouvrir les 26 outils'"));
+    expect(home, contains("'Choisir une situation'"));
   });
 
   test('lot 11.5 gives every Lot 4 to Lot 25 module a direct button', () {
@@ -67,10 +67,10 @@ void main() {
     final center = _read('lib/features/home/action_center_page.dart');
 
     for (final section in [
-      'Urgence et imprévus',
-      'Acheter et vendre',
-      'Entretenir et conduire',
-      'Budget et économies',
+      'J’ai un imprévu',
+      'J’achète ou je vends',
+      'J’entretiens mon véhicule',
+      'Je maîtrise mon budget',
     ]) {
       expect(center, contains("title: '$section'"));
     }

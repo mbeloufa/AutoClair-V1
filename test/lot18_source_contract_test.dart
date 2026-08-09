@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Préparer ma visite au garage'"));
       expect(source, contains("route: '/workshop-visit'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     for (final label in ['contrôle technique', 'garage', 'inspection']) {
       expect(home, contains(label));
     }
@@ -135,7 +135,7 @@ void main() {
       navigationContract,
       contains("'Préparer ma visite au garage': '/workshop-visit'"),
     );
-    expect(controlContract, contains("'Ouvrir les "));
+    expect(controlContract, contains("'Choisir une situation'"));
     expect(controlContract, contains('Lot 4 to Lot '));
   });
 

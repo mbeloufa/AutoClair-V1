@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Vérifier éclairage et visibilité'"));
       expect(source, contains("route: '/visibility-care'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     expect(home, contains('visibilité'));
   });
 
@@ -115,7 +115,7 @@ void main() {
       navigationContract,
       contains("'Vérifier éclairage et visibilité': '/visibility-care'"),
     );
-    expect(fluidContract, contains("'Ouvrir les "));
+    expect(fluidContract, contains("'Choisir une situation'"));
     expect(fluidContract, contains('Lot 4 to Lot '));
   });
 

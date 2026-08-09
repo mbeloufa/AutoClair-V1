@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("route: '/risk-forecast'"));
     }
     expect(center, contains(r"ValueKey('action-tool-${tool.route}')"));
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     for (final label in [
       'vol',
       'départ',
@@ -147,7 +147,7 @@ void main() {
       navigationContract,
       contains("'Anticiper les risques': '/risk-forecast'"),
     );
-    expect(theftContract, contains("'Tous les outils AutoClair'"));
+    expect(theftContract, contains("'Moments clés'"));
     expect(theftContract, contains("'Réagir à un vol'"));
     expect(theftContract, contains('find.text(label)'));
     expect(theftContract, isNot(contains('Ouvrir les 13 outils')));

@@ -21,7 +21,7 @@ void main() {
     expect(hub, contains("route: '/theft-assistant'"));
     expect(center, contains("title: 'Réagir à un vol'"));
     expect(center, contains("route: '/theft-assistant'"));
-    expect(home, contains("'Tous les outils AutoClair'"));
+    expect(home, contains("'Moments clés'"));
     expect(home, contains("context.push<void>('/actions')"));
   });
 

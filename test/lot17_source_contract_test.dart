@@ -25,7 +25,7 @@ void main() {
         expect(source, contains("title: 'Préparer mon contrôle technique'"));
         expect(source, contains("route: '/technical-control-readiness'"));
       }
-      expect(home, contains("'Ouvrir les "));
+      expect(home, contains("'Choisir une situation'"));
       for (final label in [
         'immobilisation',
         'contrôle technique',
@@ -141,7 +141,7 @@ void main() {
         "'Préparer mon contrôle technique': '/technical-control-readiness'",
       ),
     );
-    expect(storageContract, contains("'Ouvrir les "));
+    expect(storageContract, contains("'Choisir une situation'"));
     expect(storageContract, contains('Lot 4 to Lot '));
   });
 

@@ -9,7 +9,7 @@ class ActionCenterPage extends StatelessWidget {
   static const _sections = <_ActionSection>[
     _ActionSection(
       keyName: 'emergency',
-      title: 'Urgence et imprévus',
+      title: 'J’ai un imprévu',
       subtitle: 'Réagir vite, sans chercher le bon écran.',
       icon: Icons.health_and_safety_outlined,
       foreground: AppColors.error,
@@ -37,7 +37,7 @@ class ActionCenterPage extends StatelessWidget {
     ),
     _ActionSection(
       keyName: 'buy-sell',
-      title: 'Acheter et vendre',
+      title: 'J’achète ou je vends',
       subtitle: 'Préparer une décision importante avec une checklist claire.',
       icon: Icons.swap_horiz_rounded,
       foreground: AppColors.info,
@@ -66,7 +66,7 @@ class ActionCenterPage extends StatelessWidget {
     ),
     _ActionSection(
       keyName: 'care-driving',
-      title: 'Entretenir et conduire',
+      title: 'J’entretiens mon véhicule',
       subtitle: 'Anticiper les opérations et mieux utiliser le véhicule.',
       icon: Icons.build_circle_outlined,
       foreground: AppColors.success,
@@ -167,7 +167,7 @@ class ActionCenterPage extends StatelessWidget {
     ),
     _ActionSection(
       keyName: 'budget-savings',
-      title: 'Budget et économies',
+      title: 'Je maîtrise mon budget',
       subtitle: 'Comprendre les coûts et préparer les prochaines dépenses.',
       icon: Icons.account_balance_wallet_outlined,
       foreground: AppColors.warning,
@@ -216,7 +216,7 @@ class ActionCenterPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tous les outils AutoClair')),
+      appBar: AppBar(title: const Text('Moments clés')),
       body: ListView(
         key: const ValueKey('action-center-scroll'),
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -259,7 +259,7 @@ class _ActionCenterIntro extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Une action, un accès direct',
+            'Choisissez votre situation',
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(color: Colors.white),

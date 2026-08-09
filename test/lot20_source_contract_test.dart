@@ -21,7 +21,7 @@ void main() {
       expect(source, contains("title: 'Suivre ma batterie'"));
       expect(source, contains("route: '/battery-care'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     expect(home, contains('batterie'));
   });
 
@@ -97,7 +97,7 @@ void main() {
       navigationContract,
       contains("'Suivre ma batterie': '/battery-care'"),
     );
-    expect(tireContract, contains("'Ouvrir les "));
+    expect(tireContract, contains("'Choisir une situation'"));
     expect(tireContract, contains('Lot 4 to Lot '));
   });
 

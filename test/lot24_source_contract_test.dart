@@ -86,7 +86,7 @@ void main() {
     final navigation = _read('test/lot11_5_source_contract_test.dart');
     final responsive = _read('test/action_center_responsive_test.dart');
 
-    expect(home, contains("'Ouvrir les 26 outils'"));
+    expect(home, contains("'Choisir une situation'"));
     expect(
       navigation,
       contains("'Vérifier carrosserie et sécurité': '/body-safety-care'"),

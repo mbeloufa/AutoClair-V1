@@ -23,7 +23,7 @@ void main() {
       expect(source, contains("title: 'Gérer une immobilisation'"));
       expect(source, contains("route: '/vehicle-storage'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     for (final label in [
       'départ',
       'immobilisation',
@@ -132,7 +132,7 @@ void main() {
       navigationContract,
       contains("'Gérer une immobilisation': '/vehicle-storage'"),
     );
-    expect(tripContract, contains("'Ouvrir les "));
+    expect(tripContract, contains("'Choisir une situation'"));
     expect(tripContract, contains('Lot 4 to Lot '));
   });
 

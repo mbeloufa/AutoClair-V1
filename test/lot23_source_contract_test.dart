@@ -24,7 +24,7 @@ void main() {
       );
       expect(source, contains("route: '/brake-care'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     expect(home, contains('freinage'));
   });
 

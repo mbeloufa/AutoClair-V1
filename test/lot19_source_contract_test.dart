@@ -21,7 +21,7 @@ void main() {
       expect(source, contains("title: 'Suivre mes pneus'"));
       expect(source, contains("route: '/tire-care'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     expect(home, contains('pneus'));
   });
 
@@ -90,7 +90,7 @@ void main() {
     expect(financialTest, contains("'/tire-care'"));
     expect(navigationContract, contains('every Lot 4 to Lot '));
     expect(navigationContract, contains("'Suivre mes pneus': '/tire-care'"));
-    expect(workshopContract, contains("'Ouvrir les "));
+    expect(workshopContract, contains("'Choisir une situation'"));
     expect(workshopContract, contains('Lot 4 to Lot '));
   });
 

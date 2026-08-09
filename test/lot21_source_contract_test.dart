@@ -21,7 +21,7 @@ void main() {
       expect(source, contains("title: 'Suivre mes niveaux'"));
       expect(source, contains("route: '/fluid-care'"));
     }
-    expect(home, contains("'Ouvrir les "));
+    expect(home, contains("'Choisir une situation'"));
     expect(home, contains('niveaux'));
   });
 
@@ -99,7 +99,7 @@ void main() {
     expect(financialTest, contains("'/fluid-care'"));
     expect(navigationContract, contains('every Lot 4 to Lot '));
     expect(navigationContract, contains("'Suivre mes niveaux': '/fluid-care'"));
-    expect(batteryContract, contains("'Ouvrir les "));
+    expect(batteryContract, contains("'Choisir une situation'"));
     expect(batteryContract, contains('Lot 4 to Lot '));
   });
 
