@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import 'vehicle_360_access.dart';
 import 'vehicle_360_models.dart';
 
 class Vehicle360Exception implements Exception {
@@ -21,6 +22,24 @@ class Vehicle360Service {
       'vehicle_id': vehicleId,
     });
     return Vehicle360Precheck.fromMap(payload);
+  }
+
+  Future<Vehicle360Access> access() async {
+    final accessPayload = await _rpcMap('get_vehicle_report_access');
+    final trialPayload = await _invokeTrial('status');
+    return Vehicle360Access.fromMaps(
+      access: accessPayload,
+      trial: trialPayload,
+    );
+  }
+
+  Future<Vehicle360Access> claimTrial() async {
+    final trialPayload = await _invokeTrial('claim');
+    final accessPayload = await _rpcMap('get_vehicle_report_access');
+    return Vehicle360Access.fromMaps(
+      access: accessPayload,
+      trial: trialPayload,
+    );
   }
 
   Future<Vehicle360Report> generate(
@@ -81,6 +100,49 @@ class Vehicle360Service {
       throw const Vehicle360Exception(
         "La cote du véhicule n'a pas pu être actualisée.",
         code: 'VALUATION_REFRESH_FAILED',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _rpcMap(String functionName) async {
+    try {
+      final result = await _client.rpc(functionName);
+      return _payload(result);
+    } on PostgrestException catch (_) {
+      throw const Vehicle360Exception(
+        'Le statut Premium est temporairement indisponible.',
+        code: 'PREMIUM_ACCESS_UNAVAILABLE',
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _invokeTrial(String action) async {
+    final token = _requireAccessToken();
+    try {
+      final response = await _client.functions.invoke(
+        'claim-vehicle-360-trial',
+        body: {'action': action},
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      final payload = _payload(response.data);
+      if (payload['success'] != true) {
+        throw Vehicle360Exception(
+          _messageFromPayload(payload),
+          code: payload['error_code']?.toString(),
+        );
+      }
+      return payload;
+    } on FunctionException catch (error) {
+      throw Vehicle360Exception(
+        _functionMessage(error),
+        code: _functionCode(error),
+      );
+    } on Vehicle360Exception {
+      rethrow;
+    } catch (_) {
+      throw const Vehicle360Exception(
+        'L’essai gratuit est temporairement indisponible.',
+        code: 'TRIAL_SERVICE_UNAVAILABLE',
       );
     }
   }

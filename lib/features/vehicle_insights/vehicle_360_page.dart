@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'vehicle_360_access.dart';
+import 'vehicle_360_access_card.dart';
 import 'vehicle_360_models.dart';
 import 'vehicle_360_service.dart';
 import 'vehicle_value_chart.dart';
@@ -26,6 +28,7 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
 
   Vehicle360Precheck? _precheck;
   Vehicle360Report? _report;
+  Vehicle360Access? _access;
   late Vehicle360Section _section;
   bool _loading = true;
   bool _generating = false;
@@ -51,10 +54,12 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
 
     try {
       final precheck = await _service.precheck(widget.vehicleId);
+      final access = await _service.access();
       if (!mounted) return;
       setState(() {
         _precheck = precheck;
         _report = precheck.latestReport;
+        _access = access;
       });
     } on Vehicle360Exception catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
@@ -63,8 +68,85 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
     }
   }
 
+  Future<bool> _ensureFirstReportAccess() async {
+    if (_report != null) return true;
+
+    var access = _access;
+    if (access == null) {
+      final loadedAccess = await _service.access();
+      if (!mounted) return false;
+      setState(() => _access = loadedAccess);
+      access = loadedAccess;
+    }
+
+    if (access.canGenerate) return true;
+
+    if (access.trialAvailable) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Utiliser votre essai gratuit ?'),
+          content: const Text(
+            'Votre premier Bilan AutoClair 360 est offert. '
+            'Un seul crédit gratuit sera ajouté à votre compte puis utilisé '
+            'uniquement si un nouveau bilan doit réellement être généré.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Plus tard'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Utiliser mon essai'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return false;
+
+      access = await _service.claimTrial();
+      if (!mounted) return false;
+      setState(() => _access = access);
+      if (access.canGenerate) return true;
+    }
+
+    if (!mounted) return false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Accès Premium requis'),
+        content: const Text(
+          'Vous avez utilisé votre essai gratuit. AutoClair prévoit un '
+          'abonnement mensuel et l’achat de crédits à l’unité. Les achats '
+          'seront activés lors du branchement des stores de production.',
+        ),
+        actions: [
+          FilledButton.tonal(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Compris'),
+          ),
+        ],
+      ),
+    );
+    return false;
+  }
+
   Future<void> _generate() async {
     if (_generating) return;
+
+    try {
+      if (!await _ensureFirstReportAccess()) return;
+    } on Vehicle360Exception catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      return;
+    }
+
+    if (!mounted) return;
 
     if (_report != null) {
       final confirmed = await showDialog<bool>(
@@ -178,9 +260,17 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
 
     final report = _report;
     final precheck = _precheck!;
+    final access = _access;
+    if (access == null) {
+      return _ErrorView(
+        message: _errorMessage ?? 'Le statut Premium n’a pas pu être chargé.',
+        onRetry: _load,
+      );
+    }
     if (report == null) {
       return _PrecheckView(
         precheck: precheck,
+        access: access,
         errorMessage: _errorMessage,
         onGenerate: _generate,
       );
@@ -285,11 +375,13 @@ class _ErrorView extends StatelessWidget {
 class _PrecheckView extends StatelessWidget {
   const _PrecheckView({
     required this.precheck,
+    required this.access,
     required this.onGenerate,
     this.errorMessage,
   });
 
   final Vehicle360Precheck precheck;
+  final Vehicle360Access access;
   final VoidCallback onGenerate;
   final String? errorMessage;
 
@@ -300,6 +392,8 @@ class _PrecheckView extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
       children: [
         const _PremiumHero(),
+        const SizedBox(height: 18),
+        Vehicle360AccessCard(access: access),
         const SizedBox(height: 18),
         _DataQualityCard(quality: quality),
         if (errorMessage != null) ...[
@@ -323,9 +417,15 @@ class _PrecheckView extends StatelessWidget {
           onPressed: quality.canGenerate ? onGenerate : null,
           icon: const Icon(Icons.auto_awesome_outlined),
           label: Text(
-            quality.canGenerate
-                ? 'Lancer le bilan complet'
-                : 'Compléter le véhicule avant le bilan',
+            !quality.canGenerate
+                ? 'Compléter le véhicule avant le bilan'
+                : access.entitled
+                ? 'Lancer le bilan Premium'
+                : access.creditBalance > 0
+                ? 'Utiliser 1 crédit de bilan'
+                : access.trialAvailable
+                ? 'Essayer gratuitement'
+                : 'Voir les options Premium',
           ),
         ),
         const SizedBox(height: 12),

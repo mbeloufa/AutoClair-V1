@@ -388,9 +388,7 @@ Deno.serve(async (req: Request) => {
       throw new Error("OPENAI_MODEL_MISSING");
     }
 
-    const billingMode = (
-      Deno.env.get("AUTOCLAIR_BILLING_MODE") ?? "blocked"
-    ).toLowerCase();
+    const billingMode = "credits";
 
     const { data: report, error: reportError } = await adminClient
       .from("vehicle_analysis_reports")
