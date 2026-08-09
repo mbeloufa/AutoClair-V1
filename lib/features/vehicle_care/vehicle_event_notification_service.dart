@@ -6,6 +6,7 @@ import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'vehicle_event_reminder.dart';
+import 'vehicle_smart_reminder.dart';
 
 class VehicleEventNotificationException implements Exception {
   const VehicleEventNotificationException(this.message);
@@ -83,6 +84,48 @@ class VehicleEventNotificationService {
     }
   }
 
+  Future<void> synchronizeEssentialReminders({
+    required String vehicleId,
+    required Iterable<VehicleSmartReminderPlan> plans,
+    required String vehicleLabel,
+  }) async {
+    await _initialize();
+
+    final now = DateTime.now();
+    final futurePlans = plans
+        .where((plan) => plan.isFutureAt(now))
+        .toList(growable: false);
+    final desiredIds = futurePlans.map((plan) => plan.notificationId).toSet();
+
+    final pending = await _plugin.pendingNotificationRequests();
+    final scopedPayloadPrefix = vehicleSmartNotificationPayloadPrefix(
+      vehicleId,
+    );
+    for (final request in pending) {
+      if (request.payload?.startsWith(scopedPayloadPrefix) == true &&
+          !desiredIds.contains(request.id)) {
+        await _plugin.cancel(request.id);
+      }
+    }
+
+    for (final plan in futurePlans) {
+      await _scheduleEssentialPlan(plan, vehicleLabel: vehicleLabel);
+    }
+  }
+
+  Future<void> cancelEssentialReminders(String vehicleId) async {
+    await _initialize();
+    final pending = await _plugin.pendingNotificationRequests();
+    final scopedPayloadPrefix = vehicleSmartNotificationPayloadPrefix(
+      vehicleId,
+    );
+    for (final request in pending) {
+      if (request.payload?.startsWith(scopedPayloadPrefix) == true) {
+        await _plugin.cancel(request.id);
+      }
+    }
+  }
+
   Future<void> _schedulePlan(
     VehicleEventReminderPlan plan, {
     required String vehicleLabel,
@@ -111,6 +154,38 @@ class VehicleEventNotificationService {
       payload: vehicleEventNotificationPayload(
         vehicleId: plan.vehicleId,
         eventKey: plan.eventKey,
+      ),
+    );
+  }
+
+  Future<void> _scheduleEssentialPlan(
+    VehicleSmartReminderPlan plan, {
+    required String vehicleLabel,
+  }) async {
+    final scheduledDate = tz.TZDateTime.from(plan.reminderAt, tz.local);
+    await _plugin.zonedSchedule(
+      plan.notificationId,
+      'À prévoir avec AutoClair',
+      '${plan.title} · $vehicleLabel',
+      scheduledDate,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'autoclair_vehicle_moments',
+          'Rappels essentiels',
+          channelDescription: 'Rappels des moments importants du véhicule',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      payload: vehicleSmartNotificationPayload(
+        vehicleId: plan.vehicleId,
+        key: plan.key,
       ),
     );
   }

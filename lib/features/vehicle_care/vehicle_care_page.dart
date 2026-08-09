@@ -15,6 +15,9 @@ import 'vehicle_assistant_brief_card.dart';
 import 'vehicle_care_models.dart';
 import 'vehicle_care_service.dart';
 import 'vehicle_event_notification_service.dart';
+import 'vehicle_smart_reminder.dart';
+import 'vehicle_smart_reminder_card.dart';
+import 'vehicle_smart_reminder_store.dart';
 
 enum _CareSection { overview, timeline, maintenance, alerts }
 
@@ -37,6 +40,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   final _careService = VehicleCareService();
   final _offersService = CommercialOffersService();
   final _notificationService = VehicleEventNotificationService.instance;
+  final _smartReminderStore = VehicleSmartReminderStore();
 
   Vehicle? _vehicle;
   VehicleCareBundle? _bundle;
@@ -45,6 +49,9 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   bool _loading = true;
   bool _actionInProgress = false;
   bool _offersLoading = true;
+  bool _smartRemindersEnabled = false;
+  bool _smartReminderBusy = false;
+  bool _smartReminderPreferenceLoaded = false;
   String? _errorMessage;
 
   @override
@@ -76,9 +83,11 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
         _vehicle = vehicle;
         _bundle = bundle;
         _loading = false;
+        _smartReminderPreferenceLoaded = false;
       });
       unawaited(_loadOfferPreview());
       unawaited(_synchronizeEventReminders(vehicle));
+      unawaited(_loadSmartReminderPreference(vehicle, bundle));
     } on VehicleServiceException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } on VehicleCareException catch (error) {
@@ -100,6 +109,82 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
       // La page du carnet reste utilisable si la synchronisation locale échoue.
     } on VehicleEventNotificationException {
       // Une permission refusée ne bloque jamais le suivi du véhicule.
+    }
+  }
+
+  Future<void> _loadSmartReminderPreference(
+    Vehicle vehicle,
+    VehicleCareBundle bundle,
+  ) async {
+    try {
+      final enabled = await _smartReminderStore.isEnabled(vehicle.id);
+      if (!mounted) return;
+      setState(() => _smartRemindersEnabled = enabled);
+      if (enabled) {
+        await _synchronizeSmartReminders(vehicle, bundle);
+      }
+    } catch (_) {
+      // Les préférences locales de rappel ne doivent jamais bloquer la fiche.
+    } finally {
+      if (mounted) setState(() => _smartReminderPreferenceLoaded = true);
+    }
+  }
+
+  Future<void> _synchronizeSmartReminders(
+    Vehicle vehicle,
+    VehicleCareBundle bundle,
+  ) async {
+    final plans = buildVehicleSmartReminderPlans(
+      vehicleId: vehicle.id,
+      schedules: bundle.schedules,
+      reminders: bundle.dashboard.upcomingActions,
+    );
+    try {
+      await _notificationService.synchronizeEssentialReminders(
+        vehicleId: vehicle.id,
+        plans: plans,
+        vehicleLabel: vehicle.displayName,
+      );
+    } catch (_) {
+      // La fiche reste utilisable si la programmation locale échoue.
+    }
+  }
+
+  Future<void> _setSmartReminders(bool enabled) async {
+    final vehicle = _vehicle;
+    final bundle = _bundle;
+    if (vehicle == null || bundle == null || _smartReminderBusy) return;
+
+    setState(() => _smartReminderBusy = true);
+
+    try {
+      if (enabled) {
+        await _notificationService.ensurePermission();
+        await _smartReminderStore.setEnabled(vehicle.id, true);
+        await _synchronizeSmartReminders(vehicle, bundle);
+      } else {
+        await _smartReminderStore.setEnabled(vehicle.id, false);
+        await _notificationService.cancelEssentialReminders(vehicle.id);
+      }
+
+      if (!mounted) return;
+      setState(() => _smartRemindersEnabled = enabled);
+      _message(
+        enabled
+            ? 'Rappels essentiels activés sur cet appareil.'
+            : 'Rappels essentiels désactivés.',
+      );
+    } on VehicleEventNotificationException catch (error) {
+      await _smartReminderStore.setEnabled(vehicle.id, false);
+      if (!mounted) return;
+      setState(() => _smartRemindersEnabled = false);
+      _message(error.message);
+    } catch (_) {
+      if (mounted) {
+        _message('Impossible de modifier les rappels pour le moment.');
+      }
+    } finally {
+      if (mounted) setState(() => _smartReminderBusy = false);
     }
   }
 
@@ -403,6 +488,11 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
       bundle: bundle,
       offerCount: _offerBundle?.currentVehicleCount ?? 0,
     );
+    final smartReminderPlans = buildVehicleSmartReminderPlans(
+      vehicleId: vehicle.id,
+      schedules: bundle.schedules,
+      reminders: bundle.dashboard.upcomingActions,
+    );
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -415,6 +505,13 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
           VehicleAssistantBriefCard(
             brief: assistantBrief,
             onAction: _handleAssistantTarget,
+          ),
+          const SizedBox(height: 12),
+          VehicleSmartReminderCard(
+            enabled: _smartRemindersEnabled,
+            busy: _smartReminderBusy || !_smartReminderPreferenceLoaded,
+            availableCount: smartReminderPlans.length,
+            onChanged: (value) => unawaited(_setSmartReminders(value)),
           ),
           const SizedBox(height: 14),
           VehicleCarePrimaryActions(
