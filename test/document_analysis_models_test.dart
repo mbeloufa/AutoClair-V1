@@ -180,6 +180,57 @@ void main() {
     expect(result.usefulQuestions, ['Quand prévoir la prochaine vidange ?']);
   });
 
+  test('utilise la détection IA lorsque le type déclaré est Autre', () {
+    final result = DocumentAnalysisResult.fromMap({
+      'id': 'analysis-auto',
+      'document_id': 'document-auto',
+      'summary': 'Facture détectée',
+      'overall_confidence': 0.93,
+      'declared_document_type': 'other',
+      'result_json': {'document_type_detected': 'invoice'},
+    });
+
+    expect(result.effectiveDocumentType, 'invoice');
+    expect(result.detectedTypeLabel, 'Facture');
+  });
+
+  test('structure les informations utiles du contrôle technique', () {
+    final result = DocumentAnalysisResult.fromMap({
+      'id': 'analysis-ct-structured',
+      'document_id': 'document-ct',
+      'summary': 'Contrôle technique avec contre-visite',
+      'overall_confidence': 0.96,
+      'declared_document_type': 'technical_inspection_report',
+      'result_json': {
+        'document_type_detected': 'technical_inspection_report',
+        'technical_inspection': {
+          'result': 'unfavorable_major',
+          'reinspection_required': true,
+          'reinspection_deadline': '2026-10-05',
+          'defects': [
+            {
+              'severity': 'major',
+              'code': '1.1.14.a.2',
+              'wording': 'Disque ou tambour de frein usé',
+              'explanation': 'Le freinage doit être contrôlé.',
+              'recommended_action': 'Faire contrôler le freinage.',
+              'confidence': 0.94,
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result.isTechnicalInspection, isTrue);
+    expect(
+      result.technicalInspectionResultLabel,
+      'Défavorable — défaillances majeures',
+    );
+    expect(result.technicalInspectionRequiresReinspection, isTrue);
+    expect(result.technicalInspectionReinspectionDeadline, '2026-10-05');
+    expect(result.technicalInspectionDefects.single['severity'], 'major');
+  });
+
   group('DocumentTypeCatalog', () {
     test('propose les cinq catégories utilisateur', () {
       expect(

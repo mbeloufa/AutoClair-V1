@@ -68,23 +68,61 @@ class DocumentAnalysisResult {
 
   String get confidenceLabel => '${(overallConfidence * 100).round()} %';
 
-  String get detectedTypeLabel {
-    if (declaredDocumentType == 'technical_inspection_report' ||
-        declaredDocumentType == 'other') {
-      return DocumentTypeCatalog.labelFor(declaredDocumentType);
+  String get effectiveDocumentType {
+    if (declaredDocumentType == 'technical_inspection_report') {
+      return 'technical_inspection_report';
     }
 
     final detectedType = resultJson['document_type_detected']?.toString();
-    if (DocumentTypeCatalog.isSelectable(detectedType)) {
-      return DocumentTypeCatalog.labelFor(detectedType);
+    if (DocumentTypeCatalog.isSelectable(detectedType) &&
+        detectedType != 'other') {
+      return detectedType!;
     }
 
     if (DocumentTypeCatalog.isSelectable(declaredDocumentType)) {
-      return DocumentTypeCatalog.labelFor(declaredDocumentType);
+      return declaredDocumentType!;
     }
 
-    return 'Type non déterminé';
+    return 'unknown';
   }
+
+  String get detectedTypeLabel {
+    return DocumentTypeCatalog.labelFor(
+      effectiveDocumentType,
+      fallback: 'Type non déterminé',
+    );
+  }
+
+  bool get isTechnicalInspection =>
+      effectiveDocumentType == 'technical_inspection_report';
+
+  Map<String, dynamic> get technicalInspection =>
+      objectAt('technical_inspection');
+
+  List<Map<String, dynamic>> get technicalInspectionDefects =>
+      technicalInspection['defects'] is List
+      ? (technicalInspection['defects'] as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList(growable: false)
+      : const [];
+
+  String get technicalInspectionResultLabel {
+    return switch (technicalInspection['result']?.toString()) {
+      'favorable' => 'Favorable',
+      'unfavorable_major' => 'Défavorable — défaillances majeures',
+      'unfavorable_critical' => 'Défavorable — défaillances critiques',
+      _ => 'Résultat à vérifier',
+    };
+  }
+
+  bool? get technicalInspectionRequiresReinspection {
+    final value = technicalInspection['reinspection_required'];
+    return value is bool ? value : null;
+  }
+
+  String? get technicalInspectionReinspectionDeadline =>
+      _nullableString(technicalInspection['reinspection_deadline']);
 
   String get readabilityLabel {
     final quality = objectAt('document_quality');

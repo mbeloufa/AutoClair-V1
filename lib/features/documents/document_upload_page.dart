@@ -38,7 +38,7 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
 
   List<Vehicle> _vehicles = const [];
   String? _selectedVehicleId;
-  String _documentType = 'estimate';
+  String _documentType = 'other';
   SelectedDocumentFile? _selectedFile;
   bool _loadingVehicles = true;
   bool _pickingFile = false;
@@ -342,7 +342,8 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
           DropdownButtonFormField<String>(
             initialValue: _documentType,
             decoration: const InputDecoration(
-              labelText: 'Type de document',
+              labelText: 'Type de document (facultatif)',
+              helperText: 'Laissez AutoClair le reconnaître si vous hésitez.',
               prefixIcon: Icon(Icons.description_outlined),
             ),
             items: DocumentTypeCatalog.definitions
@@ -353,7 +354,11 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
                       children: [
                         Icon(definition.icon, size: 20),
                         const SizedBox(width: 10),
-                        Text(definition.label),
+                        Text(
+                          definition.value == 'other'
+                              ? 'Détection automatique'
+                              : definition.label,
+                        ),
                       ],
                     ),
                   ),
@@ -496,15 +501,15 @@ class _JourneyHeader extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            'Un parcours simple, du document au résultat',
+            'Ajoutez le document, AutoClair s’occupe du reste',
             style: Theme.of(
               context,
             ).textTheme.titleLarge?.copyWith(color: Colors.white),
           ),
           const SizedBox(height: 7),
           Text(
-            'Scannez ou choisissez un fichier, contrôlez sa prévisualisation, '
-            'puis confirmez. Le bon résultat s’ouvrira automatiquement.',
+            'Scannez ou choisissez un fichier. AutoClair reconnaît autant que '
+            'possible son type et vous présente uniquement les points utiles.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Colors.white.withValues(alpha: 0.82),
             ),

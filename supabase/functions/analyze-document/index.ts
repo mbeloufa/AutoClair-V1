@@ -1,8 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const BUCKET_ID = "vehicle-documents";
-const PROMPT_VERSION = "autoclair-document-v1";
-const SCHEMA_VERSION = "1.0";
+const PROMPT_VERSION = "autoclair-document-v2";
+const SCHEMA_VERSION = "2.0";
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 
 const corsHeaders = {
@@ -61,26 +61,21 @@ const ANALYSIS_SCHEMA = {
   properties: {
     document_type_detected: {
       type: "string",
-      enum: ["estimate", "invoice", "repair_order", "unknown"],
+      enum: [
+        "estimate",
+        "invoice",
+        "repair_order",
+        "technical_inspection_report",
+        "unknown",
+      ],
     },
-    summary: {
-      type: "string",
-      minLength: 1,
-      maxLength: 5000,
-    },
-    overall_confidence: {
-      type: "number",
-      minimum: 0,
-      maximum: 1,
-    },
+    summary: { type: "string", minLength: 1, maxLength: 5000 },
+    overall_confidence: { type: "number", minimum: 0, maximum: 1 },
     document_quality: {
       type: "object",
       additionalProperties: false,
       properties: {
-        readability: {
-          type: "string",
-          enum: ["good", "partial", "poor"],
-        },
+        readability: { type: "string", enum: ["good", "partial", "poor"] },
         missing_or_unreadable_elements: {
           type: "array",
           items: { type: "string" },
@@ -93,10 +88,8 @@ const ANALYSIS_SCHEMA = {
       additionalProperties: false,
       properties: {
         garage_name: { type: ["string", "null"] },
-        garage_address: { type: ["string", "null"] },
-        customer_name: { type: ["string", "null"] },
       },
-      required: ["garage_name", "garage_address", "customer_name"],
+      required: ["garage_name"],
     },
     vehicle: {
       type: "object",
@@ -108,13 +101,7 @@ const ANALYSIS_SCHEMA = {
         model: { type: ["string", "null"] },
         mileage: { type: ["number", "null"], minimum: 0 },
       },
-      required: [
-        "registration_number",
-        "vin",
-        "make",
-        "model",
-        "mileage",
-      ],
+      required: ["registration_number", "vin", "make", "model", "mileage"],
     },
     dates: {
       type: "object",
@@ -150,11 +137,7 @@ const ANALYSIS_SCHEMA = {
           label: { type: "string" },
           value: { type: "string" },
           source: { type: "string" },
-          confidence: {
-            type: "number",
-            minimum: 0,
-            maximum: 1,
-          },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
         },
         required: ["label", "value", "source", "confidence"],
       },
@@ -168,38 +151,17 @@ const ANALYSIS_SCHEMA = {
           description: { type: "string" },
           category: {
             type: "string",
-            enum: [
-              "parts",
-              "labor",
-              "fluids",
-              "fees",
-              "discount",
-              "other",
-            ],
+            enum: ["parts", "labor", "fluids", "fees", "discount", "other"],
           },
           quantity: { type: ["number", "null"], minimum: 0 },
-          unit_price_excluding_tax: {
-            type: ["number", "null"],
-            minimum: 0,
-          },
-          total_excluding_tax: {
-            type: ["number", "null"],
-          },
+          unit_price_excluding_tax: { type: ["number", "null"], minimum: 0 },
+          total_excluding_tax: { type: ["number", "null"] },
           necessity_assessment: {
             type: "string",
-            enum: [
-              "explicitly_required",
-              "recommended",
-              "optional",
-              "unclear",
-            ],
+            enum: ["explicitly_required", "recommended", "optional", "unclear"],
           },
           explanation: { type: "string" },
-          confidence: {
-            type: "number",
-            minimum: 0,
-            maximum: 1,
-          },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
         },
         required: [
           "description",
@@ -213,49 +175,74 @@ const ANALYSIS_SCHEMA = {
         ],
       },
     },
+    technical_inspection: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        result: {
+          type: ["string", "null"],
+          enum: [
+            "favorable",
+            "unfavorable_major",
+            "unfavorable_critical",
+            "unknown",
+            null,
+          ],
+        },
+        reinspection_required: { type: ["boolean", "null"] },
+        reinspection_deadline: { type: ["string", "null"] },
+        defects: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              severity: {
+                type: "string",
+                enum: ["critical", "major", "minor", "unknown"],
+              },
+              code: { type: ["string", "null"] },
+              wording: { type: "string" },
+              explanation: { type: "string" },
+              recommended_action: { type: "string" },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: [
+              "severity",
+              "code",
+              "wording",
+              "explanation",
+              "recommended_action",
+              "confidence",
+            ],
+          },
+        },
+      },
+      required: [
+        "result",
+        "reinspection_required",
+        "reinspection_deadline",
+        "defects",
+      ],
+    },
     observations: {
       type: "array",
       items: {
         type: "object",
         additionalProperties: false,
         properties: {
-          level: {
-            type: "string",
-            enum: ["information", "attention", "important"],
-          },
+          level: { type: "string", enum: ["information", "attention", "important"] },
           title: { type: "string" },
           explanation: { type: "string" },
-          basis: {
-            type: "string",
-            enum: ["document_fact", "calculation", "inference"],
-          },
-          confidence: {
-            type: "number",
-            minimum: 0,
-            maximum: 1,
-          },
+          basis: { type: "string", enum: ["document_fact", "calculation", "inference"] },
+          confidence: { type: "number", minimum: 0, maximum: 1 },
         },
-        required: [
-          "level",
-          "title",
-          "explanation",
-          "basis",
-          "confidence",
-        ],
+        required: ["level", "title", "explanation", "basis", "confidence"],
       },
     },
-    questions_to_ask: {
-      type: "array",
-      items: { type: "string" },
-    },
-    uncertainties: {
-      type: "array",
-      items: { type: "string" },
-    },
-    disclaimer: {
-      type: "string",
-      minLength: 1,
-    },
+    questions_to_ask: { type: "array", items: { type: "string" } },
+    uncertainties: { type: "array", items: { type: "string" } },
+    disclaimer: { type: "string", minLength: 1 },
   },
   required: [
     "document_type_detected",
@@ -268,6 +255,7 @@ const ANALYSIS_SCHEMA = {
     "amounts",
     "facts",
     "line_items",
+    "technical_inspection",
     "observations",
     "questions_to_ask",
     "uncertainties",
@@ -277,8 +265,12 @@ const ANALYSIS_SCHEMA = {
 
 const SYSTEM_PROMPT = `
 Tu es AutoClair, un assistant pédagogique francophone spécialisé dans la
-lecture de devis, factures et ordres de réparation automobiles destinés aux
-particuliers.
+lecture de documents automobiles destinés aux particuliers.
+
+Tu dois reconnaître autant que possible si le document est un devis, une
+facture, un ordre de réparation ou un procès-verbal de contrôle technique.
+Lorsque le type déclaré vaut "other", il s'agit d'une demande de détection
+automatique : base-toi d'abord sur le contenu réel du document.
 
 Règles impératives :
 - Analyse uniquement ce qui est visible ou lisible dans les fichiers fournis.
@@ -289,6 +281,10 @@ Règles impératives :
 - Une incohérence doit être présentée comme un point à vérifier.
 - N'affirme pas qu'une opération mécanique est indispensable si le document ne
   le démontre pas clairement.
+- Ignore les données personnelles inutiles : ne restitue pas le nom, l'adresse,
+  le téléphone ou l'e-mail d'un particulier.
+- Le nom d'un professionnel automobile peut être conservé s'il aide à
+  comprendre le document. N'extrais pas son adresse si elle n'est pas utile.
 - Les explications doivent être compréhensibles par un particulier.
 - Les montants sont des nombres, sans symbole monétaire.
 - Utilise "EUR" comme devise lorsque le document indique des euros.
@@ -297,6 +293,20 @@ Règles impératives :
 - Réponds exclusivement en français et respecte strictement le schéma JSON.
 - Le résultat ne remplace ni un diagnostic mécanique, ni un avis juridique,
   ni une expertise contradictoire.
+
+Pour un contrôle technique :
+- document_type_detected doit être "technical_inspection_report".
+- Extrais le résultat global seulement s'il est lisible.
+- Indique si une contre-visite est explicitement requise.
+- Extrais son échéance uniquement si elle figure sur le document.
+- Reprends chaque défaillance importante avec son niveau (critique, majeure,
+  mineure ou inconnue), son libellé, une explication simple et l'action utile.
+- Ne transforme jamais une défaillance mineure en urgence.
+- technical_inspection.defects doit être vide si aucune défaillance n'est
+  lisible.
+- Pour les autres types de documents, technical_inspection doit contenir
+  result=null, reinspection_required=null, reinspection_deadline=null et une
+  liste defects vide.
 `.trim();
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -398,6 +408,8 @@ function buildUserContext(
     estimate: "devis",
     invoice: "facture",
     repair_order: "ordre de réparation",
+    technical_inspection_report: "contrôle technique",
+    other: "détection automatique / autre document",
   };
 
   const lines = [

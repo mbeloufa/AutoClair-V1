@@ -6,6 +6,7 @@ import '../vehicle_care/vehicle_event_catalog.dart';
 import 'document_analysis_result.dart';
 import 'document_analysis_service.dart';
 import 'document_carnet_sync_result.dart';
+import 'technical_inspection_analysis_card.dart';
 
 class AnalysisResultPage extends StatefulWidget {
   const AnalysisResultPage({required this.documentId, super.key});
@@ -167,6 +168,10 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
         children: [
           _OperationHero(result: result, operation: operation),
+          if (result.isTechnicalInspection) ...[
+            const SizedBox(height: 14),
+            TechnicalInspectionAnalysisCard(result: result),
+          ],
           const SizedBox(height: 14),
           _CarnetOperationCard(
             operation: operation,
