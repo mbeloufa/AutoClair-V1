@@ -1,0 +1,145 @@
+import 'package:autoclair_app/features/vehicle_care/vehicle_assistant_brief.dart';
+import 'package:autoclair_app/features/vehicle_care/vehicle_care_models.dart';
+import 'package:autoclair_app/features/vehicles/vehicle.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('assistant prioritizes plausible recall before overdue maintenance', () {
+    final brief = VehicleAssistantBrief.build(
+      vehicle: _vehicle(model: 'Golf 7 2.0 TDI', mileage: 82000),
+      bundle: VehicleCareBundle(
+        dashboard: _dashboard(
+          recalls: [
+            {
+              'match_id': 'recall-1',
+              'status': 'TO_CHECK',
+              'match_score': 0.95,
+              'title': 'Campagne airbag',
+              'brand': 'Volkswagen',
+              'models_references': 'Golf VII et Golf VIII',
+              'risks': 'Risque à contrôler',
+              'consumer_actions': 'Contacter le réseau',
+              'match_reason': 'Modèle compatible',
+            },
+          ],
+        ),
+        schedules: [
+          VehicleMaintenanceSchedule.fromMap({
+            'id': 'schedule-1',
+            'title': 'Vidange moteur',
+            'schedule_type': 'MAINTENANCE',
+            'due_mileage': 80000,
+            'status': 'ACTIVE',
+            'priority': 'HIGH',
+            'source_type': 'AUTOCLAIR_RULE',
+            'reason': '',
+          }),
+        ],
+        suggestions: const [],
+        completedDocumentCount: 0,
+      ),
+      offerCount: 2,
+      now: DateTime(2026, 8, 9),
+    );
+
+    expect(brief.items, hasLength(3));
+    expect(brief.items.first.title, 'Rappel constructeur à vérifier');
+    expect(brief.items.first.target, VehicleAssistantTarget.alerts);
+    expect(brief.items[1].title, 'Entretien à rattraper');
+    expect(brief.items[1].target, VehicleAssistantTarget.maintenance);
+    expect(brief.items[2].target, VehicleAssistantTarget.offers);
+  });
+
+  test('assistant ignores a recall for an unrelated model', () {
+    final brief = VehicleAssistantBrief.build(
+      vehicle: _vehicle(model: 'Golf 7 2.0 TDI', mileage: 82000),
+      bundle: VehicleCareBundle(
+        dashboard: _dashboard(
+          recalls: [
+            {
+              'match_id': 'recall-1',
+              'status': 'TO_CHECK',
+              'match_score': 0.98,
+              'title': 'Campagne utilitaire',
+              'brand': 'Volkswagen',
+              'models_references': 'Transporter T5, Caravelle et Multivan',
+              'risks': 'Risque à contrôler',
+              'consumer_actions': 'Contacter le réseau',
+              'match_reason': 'Marque compatible',
+            },
+          ],
+        ),
+        schedules: const [],
+        suggestions: const [],
+        completedDocumentCount: 0,
+      ),
+      now: DateTime(2026, 8, 9),
+    );
+
+    expect(brief.isUpToDate, isTrue);
+    expect(brief.items.single.title, 'Suivi à jour');
+  });
+
+  test(
+    'assistant asks for mileage before showing a commercial opportunity',
+    () {
+      final brief = VehicleAssistantBrief.build(
+        vehicle: _vehicle(model: '208', mileage: null),
+        bundle: VehicleCareBundle(
+          dashboard: _dashboard(),
+          schedules: const [],
+          suggestions: const [],
+          completedDocumentCount: 0,
+        ),
+        offerCount: 1,
+        now: DateTime(2026, 8, 9),
+      );
+
+      expect(brief.items.first.title, 'Kilométrage à renseigner');
+      expect(brief.items.first.target, VehicleAssistantTarget.mileage);
+      expect(brief.items[1].target, VehicleAssistantTarget.offers);
+    },
+  );
+}
+
+Vehicle _vehicle({required String model, required int? mileage}) {
+  final now = DateTime(2026, 8, 9);
+  return Vehicle(
+    id: 'vehicle-1',
+    userId: 'user-1',
+    make: 'Volkswagen',
+    model: model,
+    mileage: mileage,
+    isPrimary: true,
+    createdAt: now,
+    updatedAt: now,
+  );
+}
+
+VehicleCareDashboard _dashboard({
+  List<Map<String, dynamic>> recalls = const [],
+}) {
+  return VehicleCareDashboard.fromMap({
+    'health': {
+      'maintenance_score': 90,
+      'safety_score': 90,
+      'administrative_score': 90,
+      'history_score': 90,
+      'budget_tracking_score': 90,
+      'sale_readiness_score': 90,
+      'overall_status': 'GOOD',
+      'reasons': const {},
+      'metrics': const {},
+    },
+    'upcoming_actions': const [],
+    'recalls': recalls,
+    'risks': const [],
+    'recent_events': const [],
+    'expenses': {
+      'total_last_12_months': 0,
+      'total_all_time': 0,
+      'by_category': const {},
+    },
+    'generated_at': '2026-08-09T10:00:00Z',
+  });
+}

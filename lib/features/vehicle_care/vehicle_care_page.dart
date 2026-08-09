@@ -10,6 +10,8 @@ import '../commercial_offers/commercial_offers_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_brand_logo.dart';
 import '../vehicles/vehicle_service.dart';
+import 'vehicle_assistant_brief.dart';
+import 'vehicle_assistant_brief_card.dart';
 import 'vehicle_care_models.dart';
 import 'vehicle_care_service.dart';
 import 'vehicle_event_notification_service.dart';
@@ -310,6 +312,23 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     });
   }
 
+  void _handleAssistantTarget(VehicleAssistantTarget target) {
+    switch (target) {
+      case VehicleAssistantTarget.alerts:
+        setState(() => _section = _CareSection.alerts);
+        return;
+      case VehicleAssistantTarget.maintenance:
+        setState(() => _section = _CareSection.maintenance);
+        return;
+      case VehicleAssistantTarget.offers:
+        unawaited(_openCommercialOffers());
+        return;
+      case VehicleAssistantTarget.mileage:
+        unawaited(_openOdometer());
+        return;
+    }
+  }
+
   Future<void> _runAction(Future<void> Function() action) async {
     if (_actionInProgress) return;
     setState(() => _actionInProgress = true);
@@ -379,6 +398,11 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
               recall.requiresAttention && recall.isPlausibleFor(vehicle.model),
         )
         .toList(growable: false);
+    final assistantBrief = VehicleAssistantBrief.build(
+      vehicle: vehicle,
+      bundle: bundle,
+      offerCount: _offerBundle?.currentVehicleCount ?? 0,
+    );
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -387,6 +411,11 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 104),
         children: [
           _VehicleHeader(vehicle: vehicle, health: bundle.dashboard.health),
+          const SizedBox(height: 14),
+          VehicleAssistantBriefCard(
+            brief: assistantBrief,
+            onAction: _handleAssistantTarget,
+          ),
           const SizedBox(height: 14),
           VehicleCarePrimaryActions(
             disabled: _actionInProgress,
