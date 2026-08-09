@@ -11,15 +11,7 @@ void main() {
     expect(upload, contains("String _documentType = 'other';"));
     expect(upload, contains('Type de document (facultatif)'));
     expect(upload, contains('Détection automatique'));
-
-    // Dart format may split adjacent string literals over several lines.
-    // Validate the semantic source contract without depending on one line.
-    expect(
-      RegExp(
-        r"AutoClair reconnaît autant que '\s*'possible son type",
-      ).hasMatch(upload),
-      isTrue,
-    );
+    expect(upload, contains('achat, vente, LOA/LLD et assurance'));
   });
 
   test(
@@ -34,7 +26,7 @@ void main() {
         'lib/features/documents/technical_inspection_analysis_card.dart',
       );
 
-      expect(function, contains('autoclair-document-v2'));
+      expect(function, contains('autoclair-document-v3'));
       expect(function, contains('"technical_inspection_report"'));
       expect(function, contains('technical_inspection:'));
       expect(function, contains('reinspection_required'));

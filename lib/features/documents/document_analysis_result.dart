@@ -74,8 +74,7 @@ class DocumentAnalysisResult {
     }
 
     final detectedType = resultJson['document_type_detected']?.toString();
-    if (DocumentTypeCatalog.isSelectable(detectedType) &&
-        detectedType != 'other') {
+    if (DocumentTypeCatalog.isKnown(detectedType) && detectedType != 'other') {
       return detectedType!;
     }
 
@@ -95,6 +94,40 @@ class DocumentAnalysisResult {
 
   bool get isTechnicalInspection =>
       effectiveDocumentType == 'technical_inspection_report';
+
+  bool get isContractDocument => const <String>{
+    'purchase_order',
+    'sale_contract',
+    'lease_contract',
+    'loa_contract',
+    'lld_contract',
+    'insurance_contract',
+  }.contains(effectiveDocumentType);
+
+  bool get supportsCarnetSync => !isContractDocument;
+
+  Map<String, dynamic> get contractAnalysis => objectAt('contract_analysis');
+
+  String? get contractCommitmentSummary =>
+      _nullableString(contractAnalysis['commitment_summary']);
+
+  List<Map<String, dynamic>> get contractObligations =>
+      _mapList(contractAnalysis['obligations']);
+
+  List<Map<String, dynamic>> get contractCosts =>
+      _mapList(contractAnalysis['costs']);
+
+  List<Map<String, dynamic>> get contractImportantClauses =>
+      _mapList(contractAnalysis['important_clauses']);
+
+  List<String> get contractMissingInformation {
+    final value = contractAnalysis['missing_information'];
+    if (value is! List) return const [];
+    return value
+        .map((item) => item?.toString().trim() ?? '')
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
 
   Map<String, dynamic> get technicalInspection =>
       objectAt('technical_inspection');
@@ -247,6 +280,14 @@ class DocumentAnalysisResult {
   String? stringAt(String key) {
     final value = resultJson[key]?.toString().trim();
     return value == null || value.isEmpty ? null : value;
+  }
+
+  static List<Map<String, dynamic>> _mapList(dynamic value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
   }
 
   static Map<String, dynamic> _sanitizeMap(Map<String, dynamic> source) {

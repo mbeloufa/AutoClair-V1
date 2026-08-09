@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../vehicle_care/vehicle_event_catalog.dart';
 import 'document_analysis_result.dart';
+import 'contract_document_analysis_card.dart';
 import 'document_analysis_service.dart';
 import 'document_carnet_sync_result.dart';
 import 'service_document_analysis_card.dart';
@@ -45,7 +46,9 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
       final result = await _service.fetchAnalysis(widget.documentId);
       if (!mounted) return;
       setState(() => _result = result);
-      await _syncCarnet();
+      if (result.supportsCarnetSync) {
+        await _syncCarnet();
+      }
     } on DocumentAnalysisException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } finally {
@@ -177,18 +180,26 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
             const SizedBox(height: 14),
             ServiceDocumentAnalysisCard(result: result),
           ],
-          const SizedBox(height: 14),
-          _CarnetOperationCard(
-            operation: operation,
-            sync: _carnetSync,
-            loading: _syncingCarnet,
-            errorMessage: _carnetSyncError,
-            onConfirm: _confirmCarnetEvent,
-            onOpenCarnet: _openVehicleCarnet,
-            onRetry: _syncCarnet,
-          ),
-          const SizedBox(height: 14),
-          _UsefulDetailsCard(result: result, operation: operation),
+          if (ContractDocumentAnalysisCard.supports(result)) ...[
+            const SizedBox(height: 14),
+            ContractDocumentAnalysisCard(result: result),
+          ],
+          if (result.supportsCarnetSync) ...[
+            const SizedBox(height: 14),
+            _CarnetOperationCard(
+              operation: operation,
+              sync: _carnetSync,
+              loading: _syncingCarnet,
+              errorMessage: _carnetSyncError,
+              onConfirm: _confirmCarnetEvent,
+              onOpenCarnet: _openVehicleCarnet,
+              onRetry: _syncCarnet,
+            ),
+          ],
+          if (!result.isContractDocument) ...[
+            const SizedBox(height: 14),
+            _UsefulDetailsCard(result: result, operation: operation),
+          ],
           if (!ServiceDocumentAnalysisCard.supports(result) &&
               result.objectListAt('line_items').isNotEmpty) ...[
             const SizedBox(height: 14),
@@ -207,8 +218,8 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'AutoClair utilise uniquement les informations utiles au véhicule. '
-            'Le nom du client n’est pas affiché ni utilisé dans le carnet.',
+            'AutoClair utilise uniquement les informations utiles à l’analyse. '
+            'Le nom et les coordonnées du particulier ne sont pas affichés.',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodySmall,
           ),
@@ -256,7 +267,9 @@ class _OperationHero extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  operation.heading,
+                  result.isContractDocument
+                      ? 'Document expliqué'
+                      : operation.heading,
                   style: Theme.of(
                     context,
                   ).textTheme.titleLarge?.copyWith(color: Colors.white),
@@ -266,7 +279,9 @@ class _OperationHero extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            operation.title,
+            result.isContractDocument
+                ? result.detectedTypeLabel
+                : operation.title,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w900,
@@ -274,7 +289,9 @@ class _OperationHero extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            operation.categoryPath,
+            result.isContractDocument
+                ? 'Engagements, coûts et clauses à vérifier'
+                : operation.categoryPath,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.82),
               fontWeight: FontWeight.w700,

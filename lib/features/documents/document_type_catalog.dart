@@ -41,11 +41,49 @@ abstract final class DocumentTypeCatalog {
     ),
   ];
 
+  static const detectedOnlyDefinitions = <DocumentTypeDefinition>[
+    DocumentTypeDefinition(
+      value: 'purchase_order',
+      label: 'Bon de commande',
+      icon: Icons.shopping_cart_outlined,
+    ),
+    DocumentTypeDefinition(
+      value: 'sale_contract',
+      label: 'Contrat de vente',
+      icon: Icons.handshake_outlined,
+    ),
+    DocumentTypeDefinition(
+      value: 'lease_contract',
+      label: 'Contrat de location',
+      icon: Icons.assignment_outlined,
+    ),
+    DocumentTypeDefinition(
+      value: 'loa_contract',
+      label: 'Contrat LOA',
+      icon: Icons.event_repeat_outlined,
+    ),
+    DocumentTypeDefinition(
+      value: 'lld_contract',
+      label: 'Contrat LLD',
+      icon: Icons.calendar_month_outlined,
+    ),
+    DocumentTypeDefinition(
+      value: 'insurance_contract',
+      label: 'Contrat d’assurance',
+      icon: Icons.shield_outlined,
+    ),
+  ];
+
+  static Iterable<DocumentTypeDefinition> get allDefinitions sync* {
+    yield* definitions;
+    yield* detectedOnlyDefinitions;
+  }
+
   static DocumentTypeDefinition? definitionFor(String? value) {
     final normalized = value?.trim().toLowerCase();
     if (normalized == null || normalized.isEmpty) return null;
 
-    for (final definition in definitions) {
+    for (final definition in allDefinitions) {
       if (definition.value == normalized) return definition;
     }
 
@@ -56,5 +94,10 @@ abstract final class DocumentTypeCatalog {
     return definitionFor(value)?.label ?? fallback;
   }
 
-  static bool isSelectable(String? value) => definitionFor(value) != null;
+  static bool isSelectable(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    return definitions.any((definition) => definition.value == normalized);
+  }
+
+  static bool isKnown(String? value) => definitionFor(value) != null;
 }

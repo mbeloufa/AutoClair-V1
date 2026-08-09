@@ -1,7 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const BUCKET_ID = "vehicle-documents";
-const PROMPT_VERSION = "autoclair-document-v2";
+const PROMPT_VERSION = "autoclair-document-v3";
 const SCHEMA_VERSION = "2.0";
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 
@@ -66,6 +66,12 @@ const ANALYSIS_SCHEMA = {
         "invoice",
         "repair_order",
         "technical_inspection_report",
+        "purchase_order",
+        "sale_contract",
+        "lease_contract",
+        "loa_contract",
+        "lld_contract",
+        "insurance_contract",
         "unknown",
       ],
     },
@@ -225,6 +231,77 @@ const ANALYSIS_SCHEMA = {
         "defects",
       ],
     },
+    contract_analysis: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        commitment_summary: { type: ["string", "null"] },
+        obligations: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: { type: "string" },
+              explanation: { type: "string" },
+              source: { type: "string" },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: ["title", "explanation", "source", "confidence"],
+          },
+        },
+        costs: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              label: { type: "string" },
+              amount: { type: ["number", "null"] },
+              currency: { type: "string" },
+              frequency: { type: ["string", "null"] },
+              explanation: { type: "string" },
+              source: { type: "string" },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: [
+              "label",
+              "amount",
+              "currency",
+              "frequency",
+              "explanation",
+              "source",
+              "confidence",
+            ],
+          },
+        },
+        important_clauses: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              title: { type: "string" },
+              explanation: { type: "string" },
+              source: { type: "string" },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+            },
+            required: ["title", "explanation", "source", "confidence"],
+          },
+        },
+        missing_information: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+      required: [
+        "commitment_summary",
+        "obligations",
+        "costs",
+        "important_clauses",
+        "missing_information",
+      ],
+    },
     observations: {
       type: "array",
       items: {
@@ -256,6 +333,7 @@ const ANALYSIS_SCHEMA = {
     "facts",
     "line_items",
     "technical_inspection",
+    "contract_analysis",
     "observations",
     "questions_to_ask",
     "uncertainties",
@@ -268,7 +346,9 @@ Tu es AutoClair, un assistant pédagogique francophone spécialisé dans la
 lecture de documents automobiles destinés aux particuliers.
 
 Tu dois reconnaître autant que possible si le document est un devis, une
-facture, un ordre de réparation ou un procès-verbal de contrôle technique.
+facture, un ordre de réparation, un procès-verbal de contrôle technique, un
+bon de commande, un contrat de vente, un contrat de location, une LOA, une
+LLD ou un contrat d'assurance automobile.
 Lorsque le type déclaré vaut "other", il s'agit d'une demande de détection
 automatique : base-toi d'abord sur le contenu réel du document.
 
@@ -307,6 +387,43 @@ Pour un contrôle technique :
 - Pour les autres types de documents, technical_inspection doit contenir
   result=null, reinspection_required=null, reinspection_deadline=null et une
   liste defects vide.
+
+Pour un document d'achat, de vente, de location, LOA, LLD ou d'assurance :
+- Utilise le type détecté le plus précis parmi purchase_order, sale_contract,
+  lease_contract, loa_contract, lld_contract et insurance_contract.
+- contract_analysis.commitment_summary résume en une phrase les engagements
+  principaux explicitement lisibles, sans interprétation juridique.
+- contract_analysis.obligations contient uniquement des obligations, actions,
+  limites ou échéances réellement écrites dans le document.
+- contract_analysis.costs recense les coûts ou engagements financiers visibles
+  : prix, acompte, loyers, premier loyer, dépôt, franchise, frais ou autres
+  montants pertinents. amount vaut null si le montant n'est pas lisible.
+- contract_analysis.important_clauses met en avant les clauses ayant un impact
+  pratique important : durée, kilométrage, restitution, option d'achat,
+  garanties, exclusions, franchise, résiliation ou conditions de livraison,
+  uniquement lorsqu'elles sont présentes dans le document.
+- contract_analysis.missing_information ne signifie jamais qu'une information
+  est légalement obligatoire. Formule uniquement ce qui n'a pas été trouvé
+  dans les pages fournies alors que cela empêcherait de comprendre un point
+  important du document.
+- questions_to_ask doit proposer quelques questions concrètes avant signature
+  lorsqu'un engagement important reste ambigu ou incomplet.
+- Ne juge jamais qu'une clause est légale, illégale, abusive, valable ou nulle.
+- N'invente jamais un délai légal, un droit de rétractation, une garantie ou
+  une obligation réglementaire absent du document.
+- Pour un contrat d'assurance, explique les garanties, exclusions, franchises
+  et coûts visibles sans affirmer que la couverture est suffisante.
+- Pour une LOA ou LLD, relève lorsque c'est écrit la durée, les loyers, le
+  kilométrage prévu, les frais de restitution et l'option d'achat éventuelle.
+- Pour un bon de commande ou contrat de vente, relève lorsque c'est écrit le
+  prix, les acomptes, les frais, la date ou condition de livraison et les
+  engagements importants.
+- line_items doit être vide pour ces documents sauf si le document contient
+  réellement des lignes de prestations automobiles distinctes.
+
+Pour les documents qui ne sont pas contractuels, contract_analysis doit
+contenir commitment_summary=null et des listes obligations, costs,
+important_clauses et missing_information vides.
 `.trim();
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -409,6 +526,12 @@ function buildUserContext(
     invoice: "facture",
     repair_order: "ordre de réparation",
     technical_inspection_report: "contrôle technique",
+    purchase_order: "bon de commande",
+    sale_contract: "contrat de vente",
+    lease_contract: "contrat de location",
+    loa_contract: "contrat LOA",
+    lld_contract: "contrat LLD",
+    insurance_contract: "contrat d'assurance",
     other: "détection automatique / autre document",
   };
 

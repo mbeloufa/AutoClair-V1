@@ -94,20 +94,23 @@ void main() {
     },
   );
 
-  test('Lot 3 improves presentation only and keeps analyze-document V2', () {
-    final page = File(
-      'lib/features/documents/analysis_result_page.dart',
-    ).readAsStringSync();
-    final backend = File(
-      'supabase/functions/analyze-document/index.ts',
-    ).readAsStringSync();
+  test(
+    'workshop presentation remains available with contract-aware backend',
+    () {
+      final page = File(
+        'lib/features/documents/analysis_result_page.dart',
+      ).readAsStringSync();
+      final backend = File(
+        'supabase/functions/analyze-document/index.ts',
+      ).readAsStringSync();
 
-    expect(page, contains("import 'service_document_analysis_card.dart';"));
-    expect(page, contains('ServiceDocumentAnalysisCard.supports(result)'));
-    expect(page, contains('ServiceDocumentAnalysisCard(result: result)'));
-    expect(backend, contains('autoclair-document-v2'));
-    expect(backend, isNot(contains('autoclair-document-v3')));
-  });
+      expect(page, contains("import 'service_document_analysis_card.dart';"));
+      expect(page, contains('ServiceDocumentAnalysisCard.supports(result)'));
+      expect(page, contains('ServiceDocumentAnalysisCard(result: result)'));
+      expect(backend, contains('autoclair-document-v3'));
+      expect(backend, contains('contract_analysis:'));
+    },
+  );
 }
 
 DocumentAnalysisResult _result({

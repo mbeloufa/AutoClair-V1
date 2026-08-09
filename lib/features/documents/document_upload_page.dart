@@ -343,7 +343,8 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
             initialValue: _documentType,
             decoration: const InputDecoration(
               labelText: 'Type de document (facultatif)',
-              helperText: 'Laissez AutoClair le reconnaître si vous hésitez.',
+              helperText:
+                  'La détection automatique couvre aussi achat, vente, LOA/LLD et assurance.',
               prefixIcon: Icon(Icons.description_outlined),
             ),
             items: DocumentTypeCatalog.definitions

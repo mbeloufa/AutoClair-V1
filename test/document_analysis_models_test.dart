@@ -231,18 +231,85 @@ void main() {
     expect(result.technicalInspectionDefects.single['severity'], 'major');
   });
 
+  test(
+    'structure un contrat détecté sans le transformer en opération carnet',
+    () {
+      final result = DocumentAnalysisResult.fromMap({
+        'id': 'analysis-contract',
+        'document_id': 'doc-contract',
+        'declared_document_type': 'other',
+        'summary': 'Contrat de location automobile.',
+        'overall_confidence': 0.91,
+        'result_json': {
+          'document_type_detected': 'loa_contract',
+          'contract_analysis': {
+            'commitment_summary': 'Location de 36 mois.',
+            'obligations': [
+              {
+                'title': 'Kilométrage prévu',
+                'explanation': 'Le contrat indique 45 000 km.',
+                'source': 'Clause kilométrage',
+                'confidence': 0.96,
+              },
+            ],
+            'costs': [
+              {
+                'label': 'Loyer mensuel',
+                'amount': 329.0,
+                'currency': 'EUR',
+                'frequency': 'mensuel',
+                'explanation': 'Montant affiché dans le contrat.',
+                'source': 'Échéancier',
+                'confidence': 0.98,
+              },
+            ],
+            'important_clauses': [
+              {
+                'title': 'Restitution',
+                'explanation':
+                    'Des frais peuvent être facturés selon le contrat.',
+                'source': 'Clause restitution',
+                'confidence': 0.86,
+              },
+            ],
+            'missing_information': ['Conditions de restitution peu lisibles'],
+          },
+        },
+      });
+
+      expect(result.effectiveDocumentType, 'loa_contract');
+      expect(result.detectedTypeLabel, 'Contrat LOA');
+      expect(result.isContractDocument, isTrue);
+      expect(result.supportsCarnetSync, isFalse);
+      expect(result.contractCommitmentSummary, 'Location de 36 mois.');
+      expect(result.contractObligations.single['title'], 'Kilométrage prévu');
+      expect(result.contractCosts.single['amount'], 329.0);
+      expect(result.contractImportantClauses.single['title'], 'Restitution');
+      expect(result.contractMissingInformation, isNotEmpty);
+    },
+  );
+
   group('DocumentTypeCatalog', () {
-    test('propose les cinq catégories utilisateur', () {
-      expect(
-        DocumentTypeCatalog.definitions.map((item) => item.value),
-        containsAll([
-          'estimate',
-          'invoice',
-          'repair_order',
-          'technical_inspection_report',
-          'other',
-        ]),
-      );
-    });
+    test(
+      'garde cinq catégories sélectionnables et connaît les contrats détectés',
+      () {
+        expect(
+          DocumentTypeCatalog.definitions.map((item) => item.value),
+          containsAll([
+            'estimate',
+            'invoice',
+            'repair_order',
+            'technical_inspection_report',
+            'other',
+          ]),
+        );
+        expect(DocumentTypeCatalog.isSelectable('loa_contract'), isFalse);
+        expect(DocumentTypeCatalog.isKnown('loa_contract'), isTrue);
+        expect(
+          DocumentTypeCatalog.labelFor('insurance_contract'),
+          'Contrat d’assurance',
+        );
+      },
+    );
   });
 }
