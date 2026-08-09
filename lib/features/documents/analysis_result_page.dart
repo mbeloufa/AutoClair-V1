@@ -6,6 +6,7 @@ import '../vehicle_care/vehicle_event_catalog.dart';
 import 'document_analysis_result.dart';
 import 'document_analysis_service.dart';
 import 'document_carnet_sync_result.dart';
+import 'service_document_analysis_card.dart';
 import 'technical_inspection_analysis_card.dart';
 
 class AnalysisResultPage extends StatefulWidget {
@@ -172,6 +173,10 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
             const SizedBox(height: 14),
             TechnicalInspectionAnalysisCard(result: result),
           ],
+          if (ServiceDocumentAnalysisCard.supports(result)) ...[
+            const SizedBox(height: 14),
+            ServiceDocumentAnalysisCard(result: result),
+          ],
           const SizedBox(height: 14),
           _CarnetOperationCard(
             operation: operation,
@@ -184,7 +189,8 @@ class _AnalysisResultPageState extends State<AnalysisResultPage> {
           ),
           const SizedBox(height: 14),
           _UsefulDetailsCard(result: result, operation: operation),
-          if (result.objectListAt('line_items').isNotEmpty) ...[
+          if (!ServiceDocumentAnalysisCard.supports(result) &&
+              result.objectListAt('line_items').isNotEmpty) ...[
             const SizedBox(height: 14),
             _OperationsListCard(result: result),
           ],
