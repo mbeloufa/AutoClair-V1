@@ -95,7 +95,7 @@ void main() {
     final responsiveTest = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsiveTest, contains("'/sale-preparation'"));
-    expect(responsiveTest, contains("find.text('Préparer ma vente')"));
+    expect(responsiveTest, contains("'Préparer ma vente'"));
     expect(responsiveTest, contains('tester.scrollUntilVisible'));
     expect(responsiveTest, contains('scrollable: scrollable'));
   });

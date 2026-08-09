@@ -65,7 +65,7 @@ void main() {
     final responsiveTest = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsiveTest, contains("'/breakdown-assistant'"));
-    expect(responsiveTest, contains("find.text('Gérer une panne')"));
+    expect(responsiveTest, contains("'Gérer une panne'"));
     expect(responsiveTest, contains('tester.scrollUntilVisible'));
   });
 

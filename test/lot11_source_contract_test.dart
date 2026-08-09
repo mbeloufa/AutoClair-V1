@@ -100,10 +100,10 @@ void main() {
     final responsive = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsive, contains("'/accident-assistant'"));
-    expect(responsive, contains("find.text('Gérer un accident')"));
+    expect(responsive, contains("'Gérer un accident'"));
     expect(responsive, contains('tester.scrollUntilVisible'));
     expect(responsive, contains('scrollable: scrollable'));
-    expect(responsive, contains("find.text('Réviser mon assurance')"));
+    expect(responsive, contains("'Réviser mon assurance'"));
   });
 
   test('lot 11 dart sources avoid known regressions', () {

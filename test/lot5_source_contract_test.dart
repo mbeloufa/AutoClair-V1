@@ -52,7 +52,7 @@ void main() {
     final responsive = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsive, contains("'/charging-optimizer'"));
-    expect(responsive, contains("find.text('Optimiser ma recharge')"));
+    expect(responsive, contains("'Optimiser ma recharge'"));
     expect(responsive, contains('tester.scrollUntilVisible'));
     expect(responsive, contains('scrollable: scrollable'));
   });

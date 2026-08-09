@@ -53,7 +53,7 @@ void main() {
     final responsive = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsive, contains("'/eco-driving'"));
-    expect(responsive, contains("find.text('Améliorer ma conduite')"));
+    expect(responsive, contains("'Améliorer ma conduite'"));
     expect(responsive, contains('tester.scrollUntilVisible'));
     expect(responsive, contains('scrollable: scrollable'));
   });

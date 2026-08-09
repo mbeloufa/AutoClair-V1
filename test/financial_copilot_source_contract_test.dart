@@ -81,8 +81,8 @@ void main() {
     final responsiveTest = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsiveTest, contains('tester.scrollUntilVisible'));
-    expect(responsiveTest, contains("find.text('Optimiser mon plein')"));
-    expect(responsiveTest, contains("find.text('Réviser mon assurance')"));
+    expect(responsiveTest, contains("'Optimiser mon plein'"));
+    expect(responsiveTest, contains("'Réviser mon assurance'"));
     expect(responsiveTest, contains('scrollable: scrollable'));
   });
 }

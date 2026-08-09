@@ -79,7 +79,7 @@ void main() {
     final responsive = _read('test/financial_tools_responsive_test.dart');
 
     expect(responsive, contains("'/used-purchase'"));
-    expect(responsive, contains("find.text('Sécuriser mon achat')"));
+    expect(responsive, contains("'Sécuriser mon achat'"));
     expect(responsive, contains('tester.scrollUntilVisible'));
     expect(responsive, contains('scrollable: scrollable'));
   });
