@@ -6,6 +6,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
+import 'sale_listing_draft.dart';
+import 'sale_listing_draft_card.dart';
 import 'sale_preparation_calculator.dart';
 import 'sale_preparation_models.dart';
 import 'sale_preparation_service.dart';
@@ -266,6 +268,51 @@ class _SalePreparationPageState extends State<SalePreparationPage> {
     ).showSnackBar(const SnackBar(content: Text('Résumé de vente copié.')));
   }
 
+  Future<void> _showListingDraft() async {
+    final vehicle = _selectedVehicle;
+    final saleContext = _context;
+    if (vehicle == null || saleContext == null) {
+      setState(() => _error = 'Sélectionnez un véhicule.');
+      return;
+    }
+
+    final draft = SaleListingDraftBuilder.build(
+      vehicle: vehicle,
+      profile: _profile(),
+      saleContext: saleContext,
+    );
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetContext) {
+        return FractionallySizedBox(
+          heightFactor: 0.9,
+          child: SingleChildScrollView(
+            child: SaleListingDraftCard(
+              draft: draft,
+              onCopyTitle: () =>
+                  _copyListingText(draft.title, 'Titre de l’annonce copié.'),
+              onCopyAll: () => _copyListingText(
+                draft.buildCopyText(),
+                'Brouillon de l’annonce copié.',
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _copyListingText(String text, String confirmation) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(confirmation)));
+  }
+
   Future<void> _openOfficial(Uri uri) async {
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -430,6 +477,8 @@ class _SalePreparationPageState extends State<SalePreparationPage> {
                     _AssessmentCard(assessment: assessment),
                   ],
                   const SizedBox(height: 16),
+                  _ListingDraftLauncher(onPressed: _showListingDraft),
+                  const SizedBox(height: 16),
                   _OfficialServicesCard(
                     onHistovec: () => _openOfficial(_histovecUri),
                     onFranceTitres: () => _openOfficial(_franceTitresUri),
@@ -507,6 +556,59 @@ class _SaleIntro extends StatelessWidget {
             'AutoClair vérifie votre checklist et calcule le produit net '
             'attendu. Il ne fixe pas la valeur de marché et ne remplace pas '
             'les démarches officielles.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ListingDraftLauncher extends StatelessWidget {
+  const _ListingDraftLauncher({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SurfaceCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.softPrimary,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_outlined,
+              color: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Créer un brouillon d’annonce',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 5),
+                const Text(
+                  'AutoClair réutilise les informations déjà connues et '
+                  'signale ce qu’il reste à compléter, sans inventer '
+                  'l’état du véhicule ni sa valeur.',
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Préparer mon annonce'),
+                ),
+              ],
+            ),
           ),
         ],
       ),
