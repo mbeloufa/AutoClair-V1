@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'used_listing_analysis.dart';
+import 'used_listing_analysis_card.dart';
 import 'used_purchase_calculator.dart';
 import 'used_purchase_models.dart';
 import 'used_purchase_service.dart';
@@ -26,6 +28,7 @@ class _UsedPurchasePageState extends State<UsedPurchasePage> {
   );
 
   final UsedPurchaseService _service = UsedPurchaseService();
+  final TextEditingController _listingController = TextEditingController();
   final TextEditingController _makeController = TextEditingController();
   final TextEditingController _modelController = TextEditingController();
   final TextEditingController _yearController = TextEditingController();
@@ -60,6 +63,7 @@ class _UsedPurchasePageState extends State<UsedPurchasePage> {
 
   List<UsedPurchaseSnapshot> _snapshots = const [];
   UsedPurchaseAssessment? _assessment;
+  UsedListingAnalysis? _listingAnalysis;
   bool _loading = true;
   bool _saving = false;
   String? _error;
@@ -72,6 +76,7 @@ class _UsedPurchasePageState extends State<UsedPurchasePage> {
 
   @override
   void dispose() {
+    _listingController.dispose();
     _makeController.dispose();
     _modelController.dispose();
     _yearController.dispose();
@@ -175,6 +180,63 @@ class _UsedPurchasePageState extends State<UsedPurchasePage> {
     );
   }
 
+  void _analyzeListing() {
+    final source = _listingController.text.trim();
+    if (source.length < 40) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Collez un peu plus de texte de l’annonce pour obtenir une lecture utile.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final analysis = UsedListingAnalyzer.analyze(source);
+    var prefilled = false;
+
+    if (_yearController.text.trim().isEmpty && analysis.detectedYear != null) {
+      _yearController.text = analysis.detectedYear.toString();
+      prefilled = true;
+    }
+    if (_mileageController.text.trim().isEmpty &&
+        analysis.detectedMileage != null) {
+      _mileageController.text = analysis.detectedMileage.toString();
+      prefilled = true;
+    }
+    if (_askingPriceController.text.trim().isEmpty &&
+        analysis.detectedPrice != null) {
+      _askingPriceController.text = analysis.detectedPrice!.toStringAsFixed(0);
+      prefilled = true;
+    }
+
+    setState(() => _listingAnalysis = analysis);
+
+    if (prefilled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Les informations détectées ont prérempli les champs encore vides.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _copyListingQuestions() async {
+    final analysis = _listingAnalysis;
+    if (analysis == null || analysis.questions.isEmpty) return;
+
+    final text = analysis.questions.map((question) => '• $question').join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Questions au vendeur copiées.')),
+    );
+  }
+
   Future<void> _evaluateAndSave() async {
     setState(() {
       _saving = true;
@@ -262,6 +324,47 @@ class _UsedPurchasePageState extends State<UsedPurchasePage> {
                     const SizedBox(height: 12),
                     _ErrorCard(message: _error!),
                   ],
+                  const SizedBox(height: 14),
+                  _SectionCard(
+                    title: '0. Lire l’annonce',
+                    icon: Icons.search_rounded,
+                    children: [
+                      TextField(
+                        controller: _listingController,
+                        minLines: 5,
+                        maxLines: 9,
+                        maxLength: 6000,
+                        inputFormatters: [
+                          LengthLimitingTextInputFormatter(6000),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: 'Texte de l’annonce',
+                          hintText:
+                              'Collez ici le texte publié par le vendeur.',
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      FilledButton.icon(
+                        onPressed: _analyzeListing,
+                        icon: const Icon(Icons.manage_search_rounded),
+                        label: const Text('Lire cette annonce'),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Le texte reste sur l’appareil et n’est pas enregistré '
+                        'dans votre dossier d’achat.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      if (_listingAnalysis != null) ...[
+                        const SizedBox(height: 14),
+                        UsedListingAnalysisCard(
+                          analysis: _listingAnalysis!,
+                          onCopyQuestions: _copyListingQuestions,
+                        ),
+                      ],
+                    ],
+                  ),
                   const SizedBox(height: 14),
                   _SectionCard(
                     title: '1. Véhicule et budget',
