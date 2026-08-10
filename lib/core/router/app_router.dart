@@ -45,6 +45,7 @@ import '../../features/trip_readiness/trip_readiness_page.dart';
 import '../../features/vehicle_storage/vehicle_storage_page.dart';
 import '../../features/technical_control_readiness/technical_control_readiness_page.dart';
 import '../../features/workshop_visit/workshop_visit_preparation_page.dart';
+import '../widgets/app_state_panel.dart';
 import '../../features/tire_care/tire_care_page.dart';
 import '../../features/battery_care/battery_care_page.dart';
 import '../../features/fluid_care/fluid_care_page.dart';
@@ -329,14 +330,25 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => const DeleteAccountPage(),
       ),
     ],
-    errorBuilder: (context, state) {
+    errorBuilder: (context, _) {
       return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text(
-              'Cette page est introuvable.\n${state.uri}',
-              textAlign: TextAlign.center,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: AppStatePanel(
+                  key: const ValueKey('route-error-state'),
+                  icon: Icons.explore_off_outlined,
+                  title: 'Cette page n’est plus disponible',
+                  message:
+                      'Revenez dans AutoClair pour continuer sans perdre votre suivi.',
+                  tone: AppStateTone.warning,
+                  primaryActionLabel: 'Revenir à AutoClair',
+                  onPrimaryAction: () => context.go('/start'),
+                ),
+              ),
             ),
           ),
         ),

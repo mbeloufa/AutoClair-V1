@@ -107,7 +107,8 @@ class _RegisterPageState extends State<RegisterPage> {
   Widget build(BuildContext context) {
     return AuthLayout(
       title: 'Créer mon compte',
-      subtitle: 'Rejoignez AutoClair pour analyser vos documents automobiles.',
+      subtitle:
+          'Centralisez votre véhicule, comprenez vos documents et anticipez les prochaines étapes.',
       child: Form(
         key: _formKey,
         child: Column(

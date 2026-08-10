@@ -62,7 +62,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return AuthLayout(
       title: 'Ravi de vous revoir',
-      subtitle: 'Retrouvez vos véhicules et vos documents.',
+      subtitle: 'Retrouvez votre véhicule, vos priorités et vos documents.',
       child: Form(
         key: _formKey,
         child: Column(

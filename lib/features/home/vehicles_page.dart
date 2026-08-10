@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_bottom_nav.dart';
+import '../../core/widgets/app_state_panel.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_card.dart';
 import '../vehicles/vehicle_service.dart';
@@ -152,29 +153,33 @@ class _VehiclesPageState extends State<VehiclesPage> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(28),
+          child: AppStatePanel(
+            key: ValueKey('vehicles-loading-state'),
+            icon: Icons.directions_car_outlined,
+            title: 'Chargement de vos véhicules',
+            message: 'AutoClair prépare votre espace.',
+            loading: true,
+          ),
+        ),
+      );
     }
 
     if (_errorMessage != null) {
       return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.cloud_off_outlined,
-                size: 54,
-                color: AppColors.error,
-              ),
-              const SizedBox(height: 16),
-              Text(_errorMessage!, textAlign: TextAlign.center),
-              const SizedBox(height: 18),
-              FilledButton.tonal(
-                onPressed: _loadVehicles,
-                child: const Text('Réessayer'),
-              ),
-            ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(28),
+          child: AppStatePanel(
+            key: const ValueKey('vehicles-error-state'),
+            icon: Icons.cloud_off_outlined,
+            title: 'Impossible de charger vos véhicules',
+            message:
+                'Vérifiez votre connexion puis réessayez. Vos données ne sont pas modifiées.',
+            tone: AppStateTone.error,
+            primaryActionLabel: 'Réessayer',
+            onPrimaryAction: _loadVehicles,
           ),
         ),
       );
@@ -184,43 +189,14 @@ class _VehiclesPageState extends State<VehiclesPage> {
       return Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  color: AppColors.softPrimary,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: const Icon(
-                  Icons.directions_car_outlined,
-                  size: 52,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Ajoutez votre premier véhicule',
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Il servira à classer vos devis, factures et analyses.',
-                textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyLarge?.copyWith(color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _openCreate,
-                icon: const Icon(Icons.add),
-                label: const Text('Ajouter un véhicule'),
-              ),
-            ],
+          child: AppStatePanel(
+            key: const ValueKey('vehicles-empty-state'),
+            icon: Icons.directions_car_outlined,
+            title: 'Ajoutez votre premier véhicule',
+            message:
+                'AutoClair pourra organiser son entretien, ses documents et ses prochaines échéances.',
+            primaryActionLabel: 'Ajouter un véhicule',
+            onPrimaryAction: _openCreate,
           ),
         ),
       );

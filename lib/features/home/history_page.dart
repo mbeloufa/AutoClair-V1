@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_bottom_nav.dart';
+import '../../core/widgets/app_state_panel.dart';
 import '../documents/document_analysis_service.dart';
 import '../documents/document_history_item.dart';
 
@@ -195,28 +196,35 @@ class _HistoryPageState extends State<HistoryPage> {
 
   Widget _buildBody(BuildContext context) {
     if (_loading && _documents.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(20, 72, 20, 32),
+        children: [
+          AppStatePanel(
+            key: ValueKey('history-loading-state'),
+            icon: Icons.description_outlined,
+            title: 'Chargement de vos documents',
+            message: 'AutoClair retrouve vos fichiers et analyses.',
+            loading: true,
+          ),
+        ],
+      );
     }
 
     if (_errorMessage != null && _documents.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.fromLTRB(20, 72, 20, 32),
         children: [
-          const SizedBox(height: 100),
-          const Icon(
-            Icons.cloud_off_outlined,
-            size: 56,
-            color: AppColors.primary,
-          ),
-          const SizedBox(height: 18),
-          Text(_errorMessage!, textAlign: TextAlign.center),
-          const SizedBox(height: 18),
-          Center(
-            child: FilledButton(
-              onPressed: _loadDocuments,
-              child: const Text('Réessayer'),
-            ),
+          AppStatePanel(
+            key: const ValueKey('history-error-state'),
+            icon: Icons.cloud_off_outlined,
+            title: 'Impossible de charger vos documents',
+            message:
+                'Vérifiez votre connexion puis réessayez. Aucun document n’est supprimé.',
+            tone: AppStateTone.error,
+            primaryActionLabel: 'Réessayer',
+            onPrimaryAction: _loadDocuments,
           ),
         ],
       );
@@ -227,49 +235,14 @@ class _HistoryPageState extends State<HistoryPage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 56, 20, 32),
         children: [
-          Container(
-            padding: const EdgeInsets.all(26),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 78,
-                  height: 78,
-                  decoration: BoxDecoration(
-                    color: AppColors.softPrimary,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: const Icon(
-                    Icons.manage_search_outlined,
-                    size: 42,
-                    color: AppColors.primary,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Votre espace documents est prêt',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 9),
-                Text(
-                  'Vos devis, factures et autres documents apparaîtront ici, '
-                  'dans l’ordre du plus récent au plus ancien.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 22),
-                FilledButton.icon(
-                  onPressed: () => context.push('/documents/new'),
-                  icon: const Icon(Icons.add_rounded),
-                  label: const Text('Analyser mon premier document'),
-                ),
-              ],
-            ),
+          AppStatePanel(
+            key: const ValueKey('history-empty-state'),
+            icon: Icons.manage_search_outlined,
+            title: 'Votre espace documents est prêt',
+            message:
+                'Ajoutez un devis, une facture, un contrôle technique ou un autre document : AutoClair vous aidera à comprendre l’essentiel.',
+            primaryActionLabel: 'Analyser mon premier document',
+            onPrimaryAction: () => context.push('/documents/new'),
           ),
         ],
       );

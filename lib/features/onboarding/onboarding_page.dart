@@ -49,13 +49,13 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       const Center(child: AppLogo(compact: true)),
                       const SizedBox(height: 24),
                       Text(
-                        'La vie d’une voiture n’est pas toujours simple',
+                        'Votre voiture, plus simple à gérer',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'AutoClair vous aide à chaque étape.',
+                        'Comprenez quoi faire, au bon moment, sans jargon.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                           color: AppColors.textMuted,
@@ -81,7 +81,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Vos données restent dans votre espace sécurisé.',
+                        'Vous gardez le contrôle de vos données.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
