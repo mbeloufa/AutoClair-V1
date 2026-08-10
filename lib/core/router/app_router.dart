@@ -209,26 +209,32 @@ GoRouter createAppRouter(AppController controller) {
       ),
       GoRoute(
         path: '/budget',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const VehicleBudgetPage(),
       ),
       GoRoute(
         path: '/fuel-optimizer',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const FuelOptimizerPage(),
       ),
       GoRoute(
         path: '/charging-optimizer',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const ChargingOptimizerPage(),
       ),
       GoRoute(
         path: '/eco-driving',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const EcoDrivingPage(),
       ),
       GoRoute(
         path: '/maintenance-planner',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const MaintenancePlannerPage(),
       ),
       GoRoute(
         path: '/breakdown-assistant',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const BreakdownAssistantPage(),
       ),
       GoRoute(
@@ -241,74 +247,92 @@ GoRouter createAppRouter(AppController controller) {
       ),
       GoRoute(
         path: '/accident-assistant',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const AccidentAssistantPage(),
       ),
       GoRoute(
         path: '/theft-assistant',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const TheftAssistantPage(),
       ),
       GoRoute(
         path: '/risk-forecast',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const RiskForecastPage(),
       ),
       GoRoute(
         path: '/vehicle-inspection',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const VehicleInspectionPage(),
       ),
       GoRoute(
         path: '/trip-readiness',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const TripReadinessPage(),
       ),
       GoRoute(
         path: '/vehicle-storage',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const VehicleStoragePage(),
       ),
       GoRoute(
         path: '/technical-control-readiness',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const TechnicalControlReadinessPage(),
       ),
       GoRoute(
         path: '/workshop-visit',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const WorkshopVisitPreparationPage(),
       ),
       GoRoute(
         path: '/tire-care',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const TireCarePage(),
       ),
       GoRoute(
         path: '/battery-care',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const BatteryCarePage(),
       ),
       GoRoute(
         path: '/fluid-care',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const FluidCarePage(),
       ),
       GoRoute(
         path: '/visibility-care',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const VisibilityCarePage(),
       ),
       GoRoute(
         path: '/brake-care',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const BrakeCarePage(),
       ),
       GoRoute(
         path: '/body-safety-care',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const BodySafetyCarePage(),
       ),
       GoRoute(
         path: '/lease-return',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const LeaseReturnPage(),
       ),
       GoRoute(
         path: '/compliance',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const VehicleCompliancePage(),
       ),
       GoRoute(
         path: '/quote-comparison',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const QuoteComparisonPage(),
       ),
       GoRoute(
         path: '/insurance-review',
+        redirect: (context, state) => '/actions',
         builder: (context, state) => const InsuranceReviewPage(),
       ),
       GoRoute(
