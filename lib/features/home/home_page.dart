@@ -183,11 +183,7 @@ class _HomePageState extends State<HomePage> {
           .where((group) => group.isDueSoon(currentMileage: vehicle.mileage))
           .length;
       final recalls = care.dashboard.recalls
-          .where(
-            (recall) =>
-                recall.status == 'SCHEDULED' &&
-                recall.isPlausibleFor(vehicle.model),
-          )
+          .where((recall) => recall.status.toUpperCase() == 'SCHEDULED')
           .length;
 
       if (overdue > 0) {

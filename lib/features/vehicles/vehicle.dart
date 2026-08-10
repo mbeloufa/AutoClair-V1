@@ -9,6 +9,7 @@ class Vehicle {
     required this.updatedAt,
     this.nickname,
     this.vehicleYear,
+    this.firstRegistrationDate,
     this.fuelType,
     this.mileage,
     this.registrationNumber,
@@ -21,6 +22,7 @@ class Vehicle {
   final String make;
   final String model;
   final int? vehicleYear;
+  final DateTime? firstRegistrationDate;
   final String? fuelType;
   final int? mileage;
   final String? registrationNumber;
@@ -47,6 +49,9 @@ class Vehicle {
       make: json['make'] as String,
       model: json['model'] as String,
       vehicleYear: (json['vehicle_year'] as num?)?.toInt(),
+      firstRegistrationDate: DateTime.tryParse(
+        json['first_registration_date']?.toString() ?? '',
+      ),
       fuelType: json['fuel_type'] as String?,
       mileage: (json['mileage'] as num?)?.toInt(),
       registrationNumber: json['registration_number'] as String?,

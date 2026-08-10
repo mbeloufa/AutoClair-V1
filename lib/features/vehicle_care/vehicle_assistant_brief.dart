@@ -53,9 +53,7 @@ class VehicleAssistantBrief {
     }
 
     final scheduledRecalls = bundle.dashboard.recalls.where(
-      (recall) =>
-          recall.status.toUpperCase() == 'SCHEDULED' &&
-          recall.isPlausibleFor(vehicle.model),
+      (recall) => recall.status.toUpperCase() == 'SCHEDULED',
     );
 
     for (final recall in scheduledRecalls) {

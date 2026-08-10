@@ -35,7 +35,7 @@ void main() {
     final models = _read('lib/features/vehicle_care/vehicle_care_models.dart');
 
     expect(brief, contains("recall.status.toUpperCase() == 'SCHEDULED'"));
-    expect(brief, contains('recall.isPlausibleFor(vehicle.model)'));
+    expect(brief, isNot(contains('recall.isPlausibleFor(vehicle.model)')));
     expect(page, contains('Cela ne confirme pas que ce véhicule est concerné'));
     expect(page, contains('Vérifiez avec le VIN'));
     expect(page, contains('Campagne constructeur à vérifier'));

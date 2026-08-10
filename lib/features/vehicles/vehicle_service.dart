@@ -47,6 +47,7 @@ class VehicleService {
     required String model,
     String? nickname,
     int? vehicleYear,
+    DateTime? firstRegistrationDate,
     String? fuelType,
     int? mileage,
     String? registrationNumber,
@@ -70,17 +71,33 @@ class VehicleService {
         },
       );
 
+      late final Vehicle savedVehicle;
       if (data is List && data.isNotEmpty) {
-        return Vehicle.fromJson(Map<String, dynamic>.from(data.first as Map));
+        savedVehicle = Vehicle.fromJson(
+          Map<String, dynamic>.from(data.first as Map),
+        );
+      } else if (data is Map) {
+        savedVehicle = Vehicle.fromJson(Map<String, dynamic>.from(data));
+      } else {
+        throw const VehicleServiceException(
+          "Le serveur n'a pas renvoyé le véhicule enregistré.",
+        );
       }
 
-      if (data is Map) {
-        return Vehicle.fromJson(Map<String, dynamic>.from(data));
-      }
-
-      throw const VehicleServiceException(
-        "Le serveur n'a pas renvoyé le véhicule enregistré.",
+      await _client.rpc(
+        'set_vehicle_first_registration_date',
+        params: {
+          'p_vehicle_id': savedVehicle.id,
+          'p_first_registration_date': _dateOnly(firstRegistrationDate),
+        },
       );
+
+      await _client.rpc(
+        'match_vehicle_recalls',
+        params: {'p_vehicle_id': savedVehicle.id},
+      );
+
+      return fetchVehicle(savedVehicle.id);
     } on VehicleServiceException {
       rethrow;
     } catch (error) {
@@ -94,6 +111,12 @@ class VehicleService {
     } catch (error) {
       throw VehicleServiceException(_message(error));
     }
+  }
+
+  static String? _dateOnly(DateTime? value) {
+    if (value == null) return null;
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${value.year}-${two(value.month)}-${two(value.day)}';
   }
 
   static String? _nullIfEmpty(String? value) {

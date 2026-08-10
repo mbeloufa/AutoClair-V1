@@ -214,6 +214,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
           "date_debut_commercialisation",
           "date_date_fin_commercialisation",
           "motif_rappel",
+          "identification_produits",
+          "informations_complementaires",
+          "informations_complementaires_publiques",
           "risques_encourus",
           "conduites_a_tenir_par_le_consommateur",
           "numero_contact",
@@ -268,6 +271,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
           models_references: text(record.modeles_ou_references),
           title: text(record.libelle),
           recall_reason: text(record.motif_rappel),
+          identification_products: record.identification_produits ?? [],
+          additional_information: text(record.informations_complementaires),
+          additional_public_information: text(
+            record.informations_complementaires_publiques,
+          ),
           risks: text(record.risques_encourus),
           consumer_actions: text(
             record.conduites_a_tenir_par_le_consommateur,

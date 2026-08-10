@@ -22,6 +22,7 @@ class VehicleFormPage extends StatefulWidget {
 }
 
 class _VehicleFormPageState extends State<VehicleFormPage> {
+  DateTime? _firstRegistrationDate;
   static const _fuelTypes = <String>[
     'Essence',
     'Diesel',
@@ -90,6 +91,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       _mileageController.text = vehicle.mileage?.toString() ?? '';
       _registrationController.text = vehicle.registrationNumber ?? '';
       _vinController.text = vehicle.vin ?? '';
+      _firstRegistrationDate = vehicle.firstRegistrationDate;
       _fuelType = vehicle.fuelType;
       _isPrimary = vehicle.isPrimary;
     } on VehicleServiceException catch (error) {
@@ -157,6 +159,17 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
   }
 
   void _applyIdentifiedVehicle(VehicleIdentificationResult result) {
+    final providerDate = DateTime.tryParse(result.firstRegistrationDate ?? '');
+    if (providerDate != null &&
+        !providerDate.isBefore(DateTime(1886, 1, 29)) &&
+        !providerDate.isAfter(DateTime.now())) {
+      _firstRegistrationDate = DateTime(
+        providerDate.year,
+        providerDate.month,
+        providerDate.day,
+      );
+    }
+
     setState(() {
       _makeController.text = VehicleBrandCatalog.canonicalValue(result.make);
       _modelController.text = result.model;
@@ -190,6 +203,7 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         make: VehicleBrandCatalog.canonicalValue(_makeController.text),
         model: _modelController.text,
         vehicleYear: _nullableInt(_yearController),
+        firstRegistrationDate: _firstRegistrationDate,
         fuelType: _fuelType,
         mileage: _nullableInt(_mileageController),
         registrationNumber: _registrationController.text,
@@ -223,6 +237,55 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
         setState(() => _saving = false);
       }
     }
+  }
+
+  String _formatFirstRegistrationDate(DateTime value) {
+    String two(int number) => number.toString().padLeft(2, '0');
+    return '${two(value.day)}/${two(value.month)}/${value.year}';
+  }
+
+  Future<void> _pickFirstRegistrationDate() async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final current = _firstRegistrationDate;
+    final initial = current == null || current.isAfter(today) ? today : current;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(1886, 1, 29),
+      lastDate: today,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _firstRegistrationDate = DateTime(picked.year, picked.month, picked.day);
+    });
+  }
+
+  Widget _firstRegistrationDateField() {
+    final value = _firstRegistrationDate;
+    return InkWell(
+      onTap: _saving ? null : _pickFirstRegistrationDate,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'Mise en circulation',
+          prefixIcon: const Icon(Icons.event_outlined),
+          suffixIcon: value == null
+              ? null
+              : IconButton(
+                  tooltip: 'Effacer la date',
+                  onPressed: _saving
+                      ? null
+                      : () => setState(() => _firstRegistrationDate = null),
+                  icon: const Icon(Icons.clear),
+                ),
+        ),
+        child: Text(
+          value == null
+              ? 'Non renseignée'
+              : _formatFirstRegistrationDate(value),
+        ),
+      ),
+    );
   }
 
   @override
@@ -423,6 +486,8 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
             ],
           ),
           const SizedBox(height: 28),
+          _firstRegistrationDateField(),
+          const SizedBox(height: 14),
           FilledButton(
             onPressed: _saving ? null : _save,
             child: _saving

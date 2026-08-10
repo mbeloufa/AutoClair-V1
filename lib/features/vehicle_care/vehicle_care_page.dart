@@ -523,10 +523,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     final vehicle = _vehicle!;
     final bundle = _bundle!;
     final recalls = bundle.dashboard.recalls
-        .where(
-          (recall) =>
-              recall.requiresAttention && recall.isPlausibleFor(vehicle.model),
-        )
+        .where((recall) => recall.requiresAttention)
         .toList(growable: false);
     final assistantBrief = VehicleAssistantBrief.build(
       vehicle: vehicle,

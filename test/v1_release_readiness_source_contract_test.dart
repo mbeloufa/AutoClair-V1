@@ -48,7 +48,7 @@ void main() {
     ).readAsStringSync();
 
     expect(assistant, contains('.take(3)'));
-    expect(assistant, contains('recall.isPlausibleFor(vehicle.model)'));
+    expect(assistant, isNot(contains('recall.isPlausibleFor(vehicle.model)')));
     expect(reminders, contains('const int maxVehicleSmartReminders = 3;'));
     expect(
       reminders,

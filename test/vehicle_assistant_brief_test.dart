@@ -79,7 +79,7 @@ void main() {
     expect(brief.isUpToDate, isTrue);
   });
 
-  test('assistant ignores a recall for an unrelated model', () {
+  test('assistant trusts a programmed recall already matched by Supabase', () {
     final brief = VehicleAssistantBrief.build(
       vehicle: _vehicle(model: 'Golf 7 2.0 TDI', mileage: 82000),
       bundle: VehicleCareBundle(
@@ -105,7 +105,9 @@ void main() {
       now: DateTime(2026, 8, 10),
     );
 
-    expect(brief.isUpToDate, isTrue);
+    expect(brief.isUpToDate, isFalse);
+    expect(brief.items.first.title, 'Rappel constructeur programmé');
+    expect(brief.items.first.message, 'Campagne utilitaire');
   });
 
   test('generic upcoming action opens the visible overview section', () {
