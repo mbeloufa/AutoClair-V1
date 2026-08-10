@@ -44,37 +44,58 @@ void main() {
     }
   });
 
-  test('registration lookup exposes only the data needed by Flutter', () {
+  test('backend response matches the existing Flutter service contract', () {
     final backend = File(
       'supabase/functions/identify-vehicle/index.ts',
     ).readAsStringSync();
+    final service = File(
+      'lib/features/vehicles/vehicle_identification_service.dart',
+    ).readAsStringSync();
 
     for (final fragment in [
+      'success: true',
+      'vehicle: {',
       'registration_number: plate',
       'make,',
       'model,',
       'vehicle_year: vehicleYear',
       'fuel_type: fuelType',
+      'source_label: "API Plaque Immatriculation"',
     ]) {
       expect(backend, contains(fragment));
     }
 
-    expect(backend, isNot(contains('console.log')));
-    expect(backend, isNot(contains('raw_response')));
-    expect(backend, isNot(contains('owner_name')));
-    expect(backend, isNot(contains('titulaire')));
+    for (final fragment in [
+      "payload['success'] != true",
+      "final rawVehicle = payload['vehicle'];",
+    ]) {
+      expect(service, contains(fragment));
+    }
   });
 
-  test('registration lookup keeps manual fallback messages', () {
+  test('backend errors match the existing Flutter error contract', () {
+    final backend = File(
+      'supabase/functions/identify-vehicle/index.ts',
+    ).readAsStringSync();
+    final service = File(
+      'lib/features/vehicles/vehicle_identification_service.dart',
+    ).readAsStringSync();
+
+    expect(backend, contains('success: false'));
+    expect(backend, contains('error_code: errorCode'));
+    expect(service, contains("payload['error_code']"));
+    expect(service, contains("details['error_code']"));
+  });
+
+  test('registration lookup exposes only the data needed by Flutter', () {
     final backend = File(
       'supabase/functions/identify-vehicle/index.ts',
     ).readAsStringSync();
 
-    expect(
-      RegExp('continuer manuellement').allMatches(backend).length,
-      greaterThanOrEqualTo(4),
-    );
-    expect(backend, contains('"PROVIDER_NOT_CONFIGURED"'));
-    expect(backend, contains('"PROVIDER_UNAVAILABLE"'));
+    expect(backend, isNot(contains('AWN_VIN')));
+    expect(backend, isNot(contains('console.log')));
+    expect(backend, isNot(contains('raw_response')));
+    expect(backend, isNot(contains('owner_name')));
+    expect(backend, isNot(contains('titulaire')));
   });
 }

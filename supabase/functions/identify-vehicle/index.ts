@@ -166,6 +166,18 @@ function normalizeFuel(value: string | null): string | null {
   return "Autre";
 }
 
+function errorResponse(
+  status: number,
+  errorCode: string,
+  message: string,
+): Response {
+  return jsonResponse(status, {
+    success: false,
+    error_code: errorCode,
+    message,
+  });
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -175,10 +187,11 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") {
-    return jsonResponse(405, {
-      error: "METHOD_NOT_ALLOWED",
-      message: "Methode non autorisee.",
-    });
+    return errorResponse(
+      405,
+      "METHOD_NOT_ALLOWED",
+      "Methode non autorisee.",
+    );
   }
 
   const providerToken = Deno.env.get(
@@ -186,28 +199,30 @@ Deno.serve(async (req: Request) => {
   )?.trim();
 
   if (!providerToken) {
-    return jsonResponse(503, {
-      error: "PROVIDER_NOT_CONFIGURED",
-      message:
-        "Identification automatique indisponible. Vous pouvez continuer manuellement.",
-    });
+    return errorResponse(
+      503,
+      "VEHICLE_LOOKUP_NOT_CONFIGURED",
+      "Identification automatique indisponible. Vous pouvez continuer manuellement.",
+    );
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch (_) {
-    return jsonResponse(400, {
-      error: "INVALID_REQUEST",
-      message: "Requete invalide.",
-    });
+    return errorResponse(
+      400,
+      "INVALID_REQUEST",
+      "Requete invalide.",
+    );
   }
 
   if (!isRecord(body)) {
-    return jsonResponse(400, {
-      error: "INVALID_REQUEST",
-      message: "Requete invalide.",
-    });
+    return errorResponse(
+      400,
+      "INVALID_REQUEST",
+      "Requete invalide.",
+    );
   }
 
   const requestedRegistration = firstString(body, [
@@ -217,10 +232,11 @@ Deno.serve(async (req: Request) => {
   ]);
 
   if (requestedRegistration === null) {
-    return jsonResponse(400, {
-      error: "REGISTRATION_REQUIRED",
-      message: "Immatriculation requise.",
-    });
+    return errorResponse(
+      400,
+      "VEHICLE_REGISTRATION_INVALID",
+      "Immatriculation requise.",
+    );
   }
 
   const compactRegistration = normalizeRegistration(
@@ -231,10 +247,11 @@ Deno.serve(async (req: Request) => {
     compactRegistration.length < 5 ||
     compactRegistration.length > 12
   ) {
-    return jsonResponse(400, {
-      error: "INVALID_REGISTRATION",
-      message: "Format d'immatriculation invalide.",
-    });
+    return errorResponse(
+      400,
+      "VEHICLE_REGISTRATION_INVALID",
+      "Format d'immatriculation invalide.",
+    );
   }
 
   const plate = providerRegistration(compactRegistration);
@@ -253,32 +270,33 @@ Deno.serve(async (req: Request) => {
           "api-de-plaque-d-immatriculation-france.p.rapidapi.com",
         "x-rapidapi-key": providerToken,
       },
+      signal: AbortSignal.timeout(9000),
     });
   } catch (_) {
-    return jsonResponse(503, {
-      error: "PROVIDER_UNAVAILABLE",
-      message:
-        "Le service d'identification est temporairement indisponible. Vous pouvez continuer manuellement.",
-    });
+    return errorResponse(
+      503,
+      "VEHICLE_LOOKUP_UNAVAILABLE",
+      "Le service d'identification est temporairement indisponible. Vous pouvez continuer manuellement.",
+    );
   }
 
   let providerPayload: unknown;
   try {
     providerPayload = await providerResponse.json();
   } catch (_) {
-    return jsonResponse(502, {
-      error: "INVALID_PROVIDER_RESPONSE",
-      message:
-        "Le service d'identification a retourne une reponse invalide. Vous pouvez continuer manuellement.",
-    });
+    return errorResponse(
+      502,
+      "VEHICLE_LOOKUP_INVALID_RESPONSE",
+      "Le service d'identification a retourne une reponse invalide. Vous pouvez continuer manuellement.",
+    );
   }
 
   if (!isRecord(providerPayload)) {
-    return jsonResponse(502, {
-      error: "INVALID_PROVIDER_RESPONSE",
-      message:
-        "Le service d'identification a retourne une reponse invalide. Vous pouvez continuer manuellement.",
-    });
+    return errorResponse(
+      502,
+      "VEHICLE_LOOKUP_INVALID_RESPONSE",
+      "Le service d'identification a retourne une reponse invalide. Vous pouvez continuer manuellement.",
+    );
   }
 
   const providerCode = Number(providerPayload["code"]);
@@ -292,21 +310,24 @@ Deno.serve(async (req: Request) => {
     const notFound =
       providerResponse.status === 404 || providerCode === 404;
 
-    return jsonResponse(notFound ? 404 : 503, {
-      error: notFound ? "VEHICLE_NOT_FOUND" : "PROVIDER_UNAVAILABLE",
-      message: notFound
+    return errorResponse(
+      notFound ? 404 : 503,
+      notFound
+        ? "VEHICLE_NOT_FOUND"
+        : "VEHICLE_LOOKUP_UNAVAILABLE",
+      notFound
         ? "Aucun vehicule n'a ete identifie avec cette immatriculation. Vous pouvez continuer manuellement."
         : "Le service d'identification est temporairement indisponible. Vous pouvez continuer manuellement.",
-    });
+    );
   }
 
   const data = providerPayload["data"];
   if (!isRecord(data)) {
-    return jsonResponse(502, {
-      error: "INVALID_PROVIDER_RESPONSE",
-      message:
-        "Le service d'identification a retourne une reponse incomplete. Vous pouvez continuer manuellement.",
-    });
+    return errorResponse(
+      502,
+      "VEHICLE_LOOKUP_INVALID_RESPONSE",
+      "Le service d'identification a retourne une reponse incomplete. Vous pouvez continuer manuellement.",
+    );
   }
 
   const make = firstString(data, [
@@ -334,18 +355,22 @@ Deno.serve(async (req: Request) => {
   );
 
   if (make === null || model === null) {
-    return jsonResponse(422, {
-      error: "IDENTIFICATION_INCOMPLETE",
-      message:
-        "Le vehicule a ete trouve mais son identification est incomplete. Vous pouvez continuer manuellement.",
-    });
+    return errorResponse(
+      422,
+      "VEHICLE_IDENTIFICATION_INCOMPLETE",
+      "Le vehicule a ete trouve mais son identification est incomplete. Vous pouvez continuer manuellement.",
+    );
   }
 
   return jsonResponse(200, {
-    registration_number: plate,
-    make,
-    model,
-    vehicle_year: vehicleYear,
-    fuel_type: fuelType,
+    success: true,
+    vehicle: {
+      registration_number: plate,
+      make,
+      model,
+      vehicle_year: vehicleYear,
+      fuel_type: fuelType,
+      source_label: "API Plaque Immatriculation",
+    },
   });
 });
