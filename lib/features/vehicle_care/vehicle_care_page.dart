@@ -13,6 +13,7 @@ import '../vehicles/vehicle_service.dart';
 import 'vehicle_assistant_brief.dart';
 import 'vehicle_assistant_brief_card.dart';
 import 'vehicle_care_models.dart';
+import 'vehicle_maintenance_presentation.dart';
 import 'vehicle_care_service.dart';
 import 'vehicle_event_notification_service.dart';
 import 'vehicle_smart_reminder.dart';
@@ -41,6 +42,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   final _offersService = CommercialOffersService();
   final _notificationService = VehicleEventNotificationService.instance;
   final _smartReminderStore = VehicleSmartReminderStore();
+  final _careSectionKey = GlobalKey();
 
   Vehicle? _vehicle;
   VehicleCareBundle? _bundle;
@@ -370,40 +372,63 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     }
   }
 
-  Future<void> _completeSchedule(VehicleMaintenanceSchedule schedule) async {
+  Future<void> _completeSchedules(VehicleMaintenanceGroup group) async {
     final data = await showModalBottomSheet<_ScheduleCompletionData>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _ScheduleCompletionSheet(
-        schedule: schedule,
+        schedule: group.primary,
+        displayTitle: group.title,
         currentMileage: _vehicle?.mileage,
       ),
     );
     if (data == null || !mounted) return;
 
     await _runAction(() async {
-      await _careService.completeSchedule(
-        scheduleId: schedule.id,
-        completedAt: data.completedAt,
-        mileage: data.mileage,
-        amount: data.amount,
-        providerName: data.providerName,
-        notes: data.notes,
-      );
+      for (final schedule in group.schedules) {
+        await _careService.completeSchedule(
+          scheduleId: schedule.id,
+          completedAt: data.completedAt,
+          mileage: data.mileage,
+          amount: data.amount,
+          providerName: data.providerName,
+          notes: data.notes,
+        );
+      }
       if (mounted) _message('Entretien enregistré.');
       await _load();
     });
   }
 
+  void _showCareSection(_CareSection section) {
+    setState(() => _section = section);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final sectionContext = _careSectionKey.currentContext;
+      if (sectionContext == null) return;
+      unawaited(
+        Scrollable.ensureVisible(
+          sectionContext,
+          duration: const Duration(milliseconds: 360),
+          curve: Curves.easeOutCubic,
+          alignment: 0.04,
+        ),
+      );
+    });
+  }
+
   void _handleAssistantTarget(VehicleAssistantTarget target) {
     switch (target) {
+      case VehicleAssistantTarget.overview:
+        _showCareSection(_CareSection.overview);
+        return;
       case VehicleAssistantTarget.alerts:
-        setState(() => _section = _CareSection.alerts);
+        _showCareSection(_CareSection.alerts);
         return;
       case VehicleAssistantTarget.maintenance:
-        setState(() => _section = _CareSection.maintenance);
+        _showCareSection(_CareSection.maintenance);
         return;
       case VehicleAssistantTarget.offers:
         unawaited(_openCommercialOffers());
@@ -522,10 +547,13 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
             onDocument: _openDocumentUpload,
           ),
           const SizedBox(height: 18),
-          _SectionPicker(
-            selected: _section,
-            alertCount: recalls.length + bundle.dashboard.risks.length,
-            onSelected: (value) => setState(() => _section = value),
+          KeyedSubtree(
+            key: _careSectionKey,
+            child: _SectionPicker(
+              selected: _section,
+              alertCount: recalls.length + bundle.dashboard.risks.length,
+              onSelected: (value) => setState(() => _section = value),
+            ),
           ),
           if (_actionInProgress) ...[
             const SizedBox(height: 12),
@@ -555,7 +583,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
               vehicle: vehicle,
               schedules: bundle.schedules,
               onApplyPlan: _applyPlan,
-              onComplete: _completeSchedule,
+              onComplete: _completeSchedules,
             ),
             _CareSection.alerts => _AlertsSection(
               recalls: recalls,
@@ -1105,16 +1133,16 @@ class _MaintenanceSection extends StatelessWidget {
   final Vehicle vehicle;
   final List<VehicleMaintenanceSchedule> schedules;
   final VoidCallback onApplyPlan;
-  final ValueChanged<VehicleMaintenanceSchedule> onComplete;
+  final ValueChanged<VehicleMaintenanceGroup> onComplete;
 
   @override
   Widget build(BuildContext context) {
-    final ordered = orderedMaintenanceSchedules(
+    final groups = groupVehicleMaintenanceSchedules(
       schedules,
       currentMileage: vehicle.mileage,
     );
 
-    if (ordered.isEmpty) {
+    if (groups.isEmpty) {
       return _EmptyPanel(
         icon: Icons.event_repeat_outlined,
         title: 'Aucun plan d’entretien',
@@ -1133,11 +1161,11 @@ class _MaintenanceSection extends StatelessWidget {
           label: const Text('Compléter le plan'),
         ),
         const SizedBox(height: 12),
-        for (final schedule in ordered) ...[
+        for (final group in groups) ...[
           _ScheduleCard(
-            schedule: schedule,
+            group: group,
             currentMileage: vehicle.mileage,
-            onComplete: () => onComplete(schedule),
+            onComplete: () => onComplete(group),
           ),
           const SizedBox(height: 10),
         ],
@@ -1148,22 +1176,22 @@ class _MaintenanceSection extends StatelessWidget {
 
 class _ScheduleCard extends StatelessWidget {
   const _ScheduleCard({
-    required this.schedule,
+    required this.group,
     required this.currentMileage,
     required this.onComplete,
   });
 
-  final VehicleMaintenanceSchedule schedule;
+  final VehicleMaintenanceGroup group;
   final int? currentMileage;
   final VoidCallback onComplete;
 
   @override
   Widget build(BuildContext context) {
-    final overdue = schedule.isOverdue(currentMileage: currentMileage);
-    final dueSoon = schedule.isDueSoon(currentMileage: currentMileage);
+    final overdue = group.isOverdue(currentMileage: currentMileage);
+    final dueSoon = group.isDueSoon(currentMileage: currentMileage);
     final due = <String>[
-      if (schedule.dueDate != null) _date(schedule.dueDate!),
-      if (schedule.dueMileage != null) '${_integer(schedule.dueMileage!)} km',
+      if (group.dueDate != null) _date(group.dueDate!),
+      if (group.dueMileage != null) '${_integer(group.dueMileage!)} km',
     ];
     final status = overdue
         ? 'En retard'
@@ -1190,7 +1218,7 @@ class _ScheduleCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  schedule.title,
+                  group.title,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
@@ -1260,6 +1288,8 @@ class _ReminderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayTitle = vehicleMaintenanceDisplayTitle(reminder.title);
+    final normalizedMaintenance = displayTitle != reminder.title.trim();
     final due = <String>[
       if (reminder.dueAt != null) _date(reminder.dueAt!),
       if (reminder.dueMileage != null) '${_integer(reminder.dueMileage!)} km',
@@ -1281,14 +1311,14 @@ class _ReminderCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  reminder.title,
+                  displayTitle,
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 if (due.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(due.join(' • ')),
                 ],
-                if (reminder.message.isNotEmpty) ...[
+                if (!normalizedMaintenance && reminder.message.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(reminder.message),
                 ],
@@ -1372,19 +1402,45 @@ class _RecallCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheduled = recall.status.toUpperCase() == 'SCHEDULED';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.warningSoft,
+        color: scheduled ? AppColors.errorSoft : AppColors.warningSoft,
         borderRadius: BorderRadius.circular(19),
+        border: Border.all(
+          color: (scheduled ? AppColors.error : AppColors.warning).withValues(
+            alpha: 0.22,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(recall.title, style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            scheduled
+                ? 'Rappel constructeur programmé'
+                : 'Campagne constructeur à vérifier',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            scheduled
+                ? 'Une intervention a été indiquée comme programmée pour ce véhicule.'
+                : 'AutoClair a trouvé une campagne qui peut correspondre au modèle. Cela ne confirme pas que ce véhicule est concerné. Vérifiez avec le VIN auprès du constructeur ou de son réseau.',
+          ),
+          const SizedBox(height: 9),
+          Text(
+            recall.title,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          if (recall.modelsReferences.trim().isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text('Modèles indiqués : ${recall.modelsReferences}'),
+          ],
           if (recall.risks.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(recall.risks),
+            const SizedBox(height: 7),
+            Text('Risque indiqué par la source : ${recall.risks}'),
           ],
           const SizedBox(height: 12),
           Wrap(
@@ -1393,16 +1449,22 @@ class _RecallCard extends StatelessWidget {
             children: [
               OutlinedButton(
                 onPressed: onOpen,
-                child: const Text('Voir la source'),
+                child: const Text('Vérifier la source'),
               ),
               PopupMenuButton<String>(
                 onSelected: onStatus,
                 itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'SCHEDULED', child: Text('Programmé')),
-                  PopupMenuItem(value: 'COMPLETED', child: Text('Effectué')),
+                  PopupMenuItem(
+                    value: 'SCHEDULED',
+                    child: Text('Intervention programmée'),
+                  ),
+                  PopupMenuItem(
+                    value: 'COMPLETED',
+                    child: Text('Rappel effectué'),
+                  ),
                   PopupMenuItem(
                     value: 'NOT_CONCERNED',
-                    child: Text('Non concerné'),
+                    child: Text('Véhicule non concerné'),
                   ),
                 ],
                 child: const Chip(label: Text('Mettre à jour')),
@@ -1706,10 +1768,12 @@ class _ScheduleCompletionData {
 class _ScheduleCompletionSheet extends StatefulWidget {
   const _ScheduleCompletionSheet({
     required this.schedule,
+    required this.displayTitle,
     required this.currentMileage,
   });
 
   final VehicleMaintenanceSchedule schedule;
+  final String displayTitle;
   final int? currentMileage;
 
   @override
@@ -1761,7 +1825,7 @@ class _ScheduleCompletionSheetState extends State<_ScheduleCompletionSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            widget.schedule.title,
+            widget.displayTitle,
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 16),

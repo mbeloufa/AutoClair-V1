@@ -25,6 +25,7 @@ void main() {
     expect(find.text('Contrôler'), findsOneWidget);
     expect(find.text('Revendre'), findsOneWidget);
     expect(find.text('AutoClair reste à vos côtés'), findsOneWidget);
+    expect(find.byKey(const ValueKey('onboarding-road')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

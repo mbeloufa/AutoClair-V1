@@ -139,12 +139,37 @@ class DriverJourney extends StatelessWidget {
       ),
       child: Column(
         children: [
-          for (var index = 0; index < _steps.length; index++) ...[
-            _JourneyStep(data: _steps[index], alignRight: index.isOdd),
-            if (index < _steps.length - 1)
-              _JourneyConnector(alignRight: index.isEven),
-          ],
-          const SizedBox(height: 8),
+          Stack(
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    key: const ValueKey('onboarding-road'),
+                    painter: _JourneyRoadPainter(
+                      color: AppColors.primary.withValues(alpha: 0.22),
+                      centerLineColor: Colors.white.withValues(alpha: 0.82),
+                      stepCount: _steps.length,
+                    ),
+                  ),
+                ),
+              ),
+              Column(
+                children: [
+                  for (var index = 0; index < _steps.length; index++) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: _JourneyStep(
+                        data: _steps[index],
+                        alignRight: index.isOdd,
+                      ),
+                    ),
+                    if (index < _steps.length - 1) const SizedBox(height: 22),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
@@ -246,61 +271,81 @@ class _JourneyStep extends StatelessWidget {
   }
 }
 
-class _JourneyConnector extends StatelessWidget {
-  const _JourneyConnector({required this.alignRight});
-
-  final bool alignRight;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 34,
-      child: CustomPaint(
-        painter: _JourneyConnectorPainter(
-          alignRight: alignRight,
-          color: AppColors.primary.withValues(alpha: 0.38),
-        ),
-        child: const SizedBox.expand(),
-      ),
-    );
-  }
-}
-
-class _JourneyConnectorPainter extends CustomPainter {
-  const _JourneyConnectorPainter({
-    required this.alignRight,
+class _JourneyRoadPainter extends CustomPainter {
+  const _JourneyRoadPainter({
     required this.color,
+    required this.centerLineColor,
+    required this.stepCount,
   });
 
-  final bool alignRight;
   final Color color;
+  final Color centerLineColor;
+  final int stepCount;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
+    if (stepCount < 2 || size.isEmpty) return;
+
+    final roadPaint = Paint()
       ..color = color
-      ..strokeWidth = 3
+      ..strokeWidth = 12
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    final path = Path();
-    final startX = alignRight ? size.width * 0.30 : size.width * 0.70;
-    final endX = alignRight ? size.width * 0.70 : size.width * 0.30;
-    path.moveTo(startX, 0);
-    path.cubicTo(
-      startX,
-      size.height * 0.50,
-      endX,
-      size.height * 0.50,
-      endX,
-      size.height,
-    );
-    canvas.drawPath(path, paint);
+    final centerPaint = Paint()
+      ..color = centerLineColor
+      ..strokeWidth = 2
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final points = <Offset>[
+      for (var index = 0; index < stepCount; index++)
+        Offset(
+          index.isEven ? size.width * 0.28 : size.width * 0.72,
+          size.height * ((index + 0.5) / stepCount),
+        ),
+    ];
+
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var index = 1; index < points.length; index++) {
+      final previous = points[index - 1];
+      final current = points[index];
+      final middleY = (previous.dy + current.dy) / 2;
+      path.cubicTo(
+        previous.dx,
+        middleY,
+        current.dx,
+        middleY,
+        current.dx,
+        current.dy,
+      );
+    }
+
+    canvas.drawPath(path, roadPaint);
+    _drawDashedPath(canvas, path, centerPaint);
+  }
+
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
+    const dashLength = 8.0;
+    const gapLength = 7.0;
+
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = (distance + dashLength)
+            .clamp(0.0, metric.length)
+            .toDouble();
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + gapLength;
+      }
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _JourneyConnectorPainter oldDelegate) {
-    return oldDelegate.alignRight != alignRight || oldDelegate.color != color;
+  bool shouldRepaint(covariant _JourneyRoadPainter oldDelegate) {
+    return oldDelegate.color != color ||
+        oldDelegate.centerLineColor != centerLineColor ||
+        oldDelegate.stepCount != stepCount;
   }
 }
 

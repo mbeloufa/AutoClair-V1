@@ -3,34 +3,38 @@ import 'package:autoclair_app/features/vehicle_care/vehicle_smart_reminder.dart'
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('essential reminders keep only the three nearest dated moments', () {
-    final now = DateTime(2026, 8, 9, 12);
-    final plans = buildVehicleSmartReminderPlans(
-      vehicleId: 'vehicle-1',
-      now: now,
-      schedules: [
-        _schedule('a', 'Vidange', DateTime(2026, 9, 10)),
-        _schedule('b', 'Contrôle technique', DateTime(2026, 10, 1)),
-        _schedule('c', 'Liquide de frein', DateTime(2026, 11, 1)),
-        _schedule('d', 'Filtre habitacle', DateTime(2026, 12, 1)),
-      ],
-      reminders: const [],
-    );
+  test(
+    'essential reminders group an oil service and keep only three moments',
+    () {
+      final now = DateTime(2026, 8, 10, 12);
+      final plans = buildVehicleSmartReminderPlans(
+        vehicleId: 'vehicle-1',
+        now: now,
+        schedules: [
+          _schedule('a', 'Vidange moteur', DateTime(2026, 9, 10)),
+          _schedule('a-filter', 'Filtre à huile', DateTime(2026, 9, 10)),
+          _schedule('b', 'Contrôle technique', DateTime(2026, 10, 1)),
+          _schedule('c', 'Liquide de frein', DateTime(2026, 11, 1)),
+          _schedule('d', 'Filtre habitacle', DateTime(2026, 12, 1)),
+        ],
+        reminders: const [],
+      );
 
-    expect(plans, hasLength(3));
-    expect(plans.map((plan) => plan.title), [
-      'Vidange',
-      'Contrôle technique',
-      'Liquide de frein',
-    ]);
-  });
+      expect(plans, hasLength(3));
+      expect(plans.map((plan) => plan.title), [
+        'Révision avec vidange',
+        'Contrôle technique',
+        'Liquide de frein',
+      ]);
+    },
+  );
 
   test(
     'planned events and recalls are not duplicated by essential reminders',
     () {
       final plans = buildVehicleSmartReminderPlans(
         vehicleId: 'vehicle-1',
-        now: DateTime(2026, 8, 9, 8),
+        now: DateTime(2026, 8, 10, 8),
         schedules: const [],
         reminders: [
           _reminder(
@@ -53,7 +57,6 @@ void main() {
           ),
         ],
       );
-
       expect(plans, hasLength(1));
       expect(plans.single.title, 'Contrôle technique');
     },
@@ -64,7 +67,7 @@ void main() {
     () {
       final plans = buildVehicleSmartReminderPlans(
         vehicleId: 'vehicle-1',
-        now: DateTime(2026, 8, 9, 8),
+        now: DateTime(2026, 8, 10, 8),
         schedules: [
           _schedule('schedule-ct', 'Contrôle technique', DateTime(2026, 9, 20)),
         ],
@@ -77,28 +80,26 @@ void main() {
           ),
         ],
       );
-
       expect(plans, hasLength(1));
     },
   );
 
   test('reminder timing adapts without scheduling already due moments', () {
-    final now = DateTime(2026, 8, 9, 8);
-
+    final now = DateTime(2026, 8, 10, 8);
     expect(
-      vehicleSmartReminderAt(dueAt: DateTime(2026, 9, 9), now: now),
-      DateTime(2026, 8, 26, 9),
+      vehicleSmartReminderAt(dueAt: DateTime(2026, 9, 10), now: now),
+      DateTime(2026, 8, 27, 9),
     );
     expect(
-      vehicleSmartReminderAt(dueAt: DateTime(2026, 8, 18), now: now),
-      DateTime(2026, 8, 15, 9),
+      vehicleSmartReminderAt(dueAt: DateTime(2026, 8, 19), now: now),
+      DateTime(2026, 8, 16, 9),
     );
     expect(
-      vehicleSmartReminderAt(dueAt: DateTime(2026, 8, 12), now: now),
-      DateTime(2026, 8, 11, 9),
+      vehicleSmartReminderAt(dueAt: DateTime(2026, 8, 13), now: now),
+      DateTime(2026, 8, 12, 9),
     );
     expect(
-      vehicleSmartReminderAt(dueAt: DateTime(2026, 8, 10), now: now),
+      vehicleSmartReminderAt(dueAt: DateTime(2026, 8, 11), now: now),
       isNull,
     );
   });
@@ -112,7 +113,6 @@ void main() {
       vehicleId: 'vehicle-b',
       key: 'schedule-1',
     );
-
     expect(first, greaterThan(0));
     expect(second, greaterThan(0));
     expect(first, isNot(second));

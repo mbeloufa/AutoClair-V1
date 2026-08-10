@@ -8,6 +8,7 @@ import '../../core/widgets/app_logo.dart';
 import '../documents/document_analysis_service.dart';
 import '../documents/document_history_item.dart';
 import '../vehicle_care/vehicle_care_models.dart';
+import '../vehicle_care/vehicle_maintenance_presentation.dart';
 import '../vehicle_care/vehicle_care_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_brand_logo.dart';
@@ -171,20 +172,20 @@ class _HomePageState extends State<HomePage> {
     final care = _primaryCare;
 
     if (care != null) {
-      final overdue = care.schedules
-          .where(
-            (schedule) => schedule.isOverdue(currentMileage: vehicle.mileage),
-          )
+      final maintenanceGroups = groupVehicleMaintenanceSchedules(
+        care.schedules,
+        currentMileage: vehicle.mileage,
+      );
+      final overdue = maintenanceGroups
+          .where((group) => group.isOverdue(currentMileage: vehicle.mileage))
           .length;
-      final dueSoon = care.schedules
-          .where(
-            (schedule) => schedule.isDueSoon(currentMileage: vehicle.mileage),
-          )
+      final dueSoon = maintenanceGroups
+          .where((group) => group.isDueSoon(currentMileage: vehicle.mileage))
           .length;
       final recalls = care.dashboard.recalls
           .where(
             (recall) =>
-                recall.requiresAttention &&
+                recall.status == 'SCHEDULED' &&
                 recall.isPlausibleFor(vehicle.model),
           )
           .length;
@@ -208,10 +209,10 @@ class _HomePageState extends State<HomePage> {
           _HomeActionItem(
             icon: Icons.campaign_outlined,
             title: recalls == 1
-                ? 'Un rappel constructeur est à vérifier'
-                : '$recalls rappels constructeur sont à vérifier',
+                ? 'Un rappel constructeur est programmé'
+                : '$recalls rappels constructeur sont programmés',
             subtitle:
-                'Le modèle correspond. La confirmation se fait avec le VIN.',
+                'Retrouvez les informations de l’intervention dans votre suivi.',
             priority: _HomeActionPriority.urgent,
             onTap: () => _openVehicleCare(section: 'alerts'),
           ),
@@ -286,21 +287,22 @@ class _HomePageState extends State<HomePage> {
     final care = _primaryCare;
     if (care == null || care.schedules.isEmpty) return null;
 
-    final orderedSchedules = orderedMaintenanceSchedules(
+    final maintenanceGroups = groupVehicleMaintenanceSchedules(
       care.schedules,
       currentMileage: vehicle.mileage,
     );
-    final schedule = orderedSchedules.first;
-    if (schedule.isOverdue(currentMileage: vehicle.mileage)) {
-      return '${schedule.title} à régulariser';
+    if (maintenanceGroups.isEmpty) return null;
+    final group = maintenanceGroups.first;
+    if (group.isOverdue(currentMileage: vehicle.mileage)) {
+      return '${group.title} à régulariser';
     }
-    if (schedule.dueMileage != null) {
-      return '${schedule.title} vers ${_formatInteger(schedule.dueMileage!)} km';
+    if (group.dueMileage != null) {
+      return '${group.title} vers ${_formatInteger(group.dueMileage!)} km';
     }
-    if (schedule.dueDate != null) {
-      return '${schedule.title} avant le ${_formatDate(schedule.dueDate!)}';
+    if (group.dueDate != null) {
+      return '${group.title} avant le ${_formatDate(group.dueDate!)}';
     }
-    return schedule.title;
+    return group.title;
   }
 
   @override
@@ -380,15 +382,16 @@ class _HomePageState extends State<HomePage> {
                 onTap: () => _openVehicleCare(),
               ),
             const SizedBox(height: 26),
-            Text('Essentiel', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Vos raccourcis',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 12),
             _HomeMenuGrid(
               hasVehicle: vehicle != null,
               documentCount: _documents.length,
               onVehicles: () => context.go('/vehicles'),
-              onActions: () => context.push<void>('/actions'),
               onNearby: () => context.go('/nearby'),
-              onSavings: () => context.go('/savings'),
               onAnalyze: _openDocumentUpload,
               onDocuments: () => context.go('/history'),
             ),
@@ -439,7 +442,10 @@ class _ActionCenterBanner extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.apps_rounded, color: Colors.white),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  color: Colors.white,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -447,22 +453,21 @@ class _ActionCenterBanner extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Moments clés',
+                      'Votre copilote AutoClair',
                       style: Theme.of(
                         context,
                       ).textTheme.titleLarge?.copyWith(color: Colors.white),
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      'Panne, accident, vol, départ, immobilisation, contrôle technique, garage, pneus, batterie, niveaux, visibilité, freinage, carrosserie, inspection, risques, achat, vente, entretien, conduite, '
-                      'budget et économies.',
+                      'Entretien, documents, services autour de vous, achat ou vente : choisissez votre besoin et AutoClair vous guide.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.white.withValues(alpha: 0.82),
                       ),
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Choisir une situation',
+                      'Choisir mon besoin',
                       style: Theme.of(
                         context,
                       ).textTheme.labelLarge?.copyWith(color: Colors.white),
@@ -842,9 +847,7 @@ class _HomeMenuGrid extends StatelessWidget {
     required this.hasVehicle,
     required this.documentCount,
     required this.onVehicles,
-    required this.onActions,
     required this.onNearby,
-    required this.onSavings,
     required this.onAnalyze,
     required this.onDocuments,
   });
@@ -852,9 +855,7 @@ class _HomeMenuGrid extends StatelessWidget {
   final bool hasVehicle;
   final int documentCount;
   final VoidCallback onVehicles;
-  final VoidCallback onActions;
   final VoidCallback onNearby;
-  final VoidCallback onSavings;
   final VoidCallback onAnalyze;
   final VoidCallback onDocuments;
 
@@ -867,17 +868,6 @@ class _HomeMenuGrid extends StatelessWidget {
           spacing: 12,
           runSpacing: 12,
           children: [
-            _HomeMenuTile(
-              key: const ValueKey('home-all-tools-tile'),
-              width: tileWidth,
-              icon: Icons.apps_rounded,
-              title: 'Tous les outils',
-              subtitle:
-                  'Panne, accident, vol, départ, immobilisation, contrôle technique, garage, pneus, batterie, niveaux, visibilité, freinage, carrosserie, inspection, risques, achat, vente et budget',
-              foreground: AppColors.error,
-              background: AppColors.errorSoft,
-              onTap: onActions,
-            ),
             _HomeMenuTile(
               width: tileWidth,
               icon: Icons.directions_car_outlined,
@@ -895,15 +885,6 @@ class _HomeMenuGrid extends StatelessWidget {
               foreground: AppColors.success,
               background: AppColors.successSoft,
               onTap: onNearby,
-            ),
-            _HomeMenuTile(
-              width: tileWidth,
-              icon: Icons.savings_outlined,
-              title: 'Mes économies',
-              subtitle: 'Budget, plein, devis et assurance',
-              foreground: AppColors.primary,
-              background: AppColors.softPrimary,
-              onTap: onSavings,
             ),
             _HomeMenuTile(
               width: tileWidth,
@@ -936,7 +917,6 @@ class _HomeMenuGrid extends StatelessWidget {
 
 class _HomeMenuTile extends StatelessWidget {
   const _HomeMenuTile({
-    super.key,
     required this.width,
     required this.icon,
     required this.title,

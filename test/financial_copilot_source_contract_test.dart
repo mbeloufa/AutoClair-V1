@@ -21,7 +21,8 @@ void main() {
     ]) {
       expect(router, contains(route));
     }
-    expect(home, contains("title: 'Mes économies'"));
+    expect(home, isNot(contains("title: 'Mes économies'")));
+    expect(home, isNot(contains('onSavings')));
     expect(hub, contains('Mon budget automobile'));
     expect(hub, contains('Optimiser mon plein'));
     expect(hub, contains('Comparer mes devis'));
@@ -77,12 +78,14 @@ void main() {
     },
   );
 
-  test('responsive hub test scrolls to off-screen financial cards', () {
-    final responsiveTest = _read('test/financial_tools_responsive_test.dart');
+  test('financial tools are no longer exposed as a V1 public menu', () {
+    final home = File('lib/features/home/home_page.dart').readAsStringSync();
+    final router = File('lib/core/router/app_router.dart').readAsStringSync();
 
-    expect(responsiveTest, contains('tester.scrollUntilVisible'));
-    expect(responsiveTest, contains("'Optimiser mon plein'"));
-    expect(responsiveTest, contains("'Réviser mon assurance'"));
-    expect(responsiveTest, contains('scrollable: scrollable'));
+    expect(home, isNot(contains("title: 'Mes économies'")));
+    expect(home, isNot(contains("route: '/savings'")));
+    expect(router, contains("path: '/savings'"));
+    expect(router, contains("redirect: (context, state) => '/home'"));
+    expect(router, isNot(contains('const FinancialToolsPage()')));
   });
 }

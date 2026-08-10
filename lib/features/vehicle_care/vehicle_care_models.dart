@@ -181,7 +181,7 @@ class VehicleRecallAlert {
   }
 
   bool isPlausibleFor(String vehicleModel) {
-    return matchScore >= 0.80 &&
+    return matchScore >= 0.90 &&
         recallReferencesContainVehicleModel(
           vehicleModel: vehicleModel,
           recallReferences: modelsReferences,

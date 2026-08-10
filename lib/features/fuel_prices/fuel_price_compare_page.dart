@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/comparison_map.dart';
 import '../home/nearby_location.dart';
 import '../home/nearby_location_service.dart';
+import '../home/nearby_location_picker_card.dart';
 import '../home/nearby_radius_slider.dart';
 import '../technical_control/technical_control_location_service.dart';
 import '../vehicles/vehicle.dart';
@@ -328,7 +329,10 @@ class _FuelPriceComparePageState extends State<FuelPriceComparePage> {
                   },
           ),
           const SizedBox(height: 20),
-          _SearchLocationBanner(location: _locationService.sessionLocation),
+          NearbyLocationPickerCard(
+            key: const ValueKey('fuel-location-picker'),
+            onChanged: (_) => setState(_resetResults),
+          ),
           const SizedBox(height: 14),
           NearbyRadiusSlider(
             key: const ValueKey('fuel-radius-slider'),
@@ -691,42 +695,6 @@ class _FuelMapSheet extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-class _SearchLocationBanner extends StatelessWidget {
-  const _SearchLocationBanner({required this.location});
-
-  final NearbySearchLocation? location;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = location;
-    if (value == null) {
-      return Text(
-        'La position de votre appareil sera utilisée. Vous pouvez aussi choisir une ville depuis Autour de moi.',
-        style: Theme.of(context).textTheme.bodySmall,
-      );
-    }
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.softPrimary,
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.place_outlined, color: AppColors.primary),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Text(
-              'Zone : ${value.label}',
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

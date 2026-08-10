@@ -24,7 +24,6 @@ import '../../features/charging_optimizer/charging_optimizer_page.dart';
 import '../../features/commercial_offers/commercial_offers_page.dart';
 import '../../features/commercial_offers/purchase_offer_search_page.dart';
 import '../../features/compliance/vehicle_compliance_page.dart';
-import '../../features/financial_tools/financial_tools_page.dart';
 import '../../features/fuel_optimizer/fuel_optimizer_page.dart';
 import '../../features/insurance_review/insurance_review_page.dart';
 import '../../features/maintenance_planner/maintenance_planner_page.dart';
@@ -203,10 +202,7 @@ GoRouter createAppRouter(AppController controller) {
         path: '/charging-prices',
         builder: (context, state) => const ChargingComparePage(),
       ),
-      GoRoute(
-        path: '/savings',
-        builder: (context, state) => const FinancialToolsPage(),
-      ),
+      GoRoute(path: '/savings', redirect: (context, state) => '/home'),
       GoRoute(
         path: '/budget',
         redirect: (context, state) => '/actions',

@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/comparison_map.dart';
 import '../home/nearby_location.dart';
 import '../home/nearby_location_service.dart';
+import '../home/nearby_location_picker_card.dart';
 import '../home/nearby_radius_slider.dart';
 import '../technical_control/technical_control_location_service.dart';
 import '../vehicles/vehicle.dart';
@@ -406,7 +407,10 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
             ],
           ),
           const SizedBox(height: 20),
-          _SearchLocationBanner(location: _locationService.sessionLocation),
+          NearbyLocationPickerCard(
+            key: const ValueKey('charging-location-picker'),
+            onChanged: (_) => setState(_resetResults),
+          ),
           const SizedBox(height: 14),
           NearbyRadiusSlider(
             key: const ValueKey('charging-radius-slider'),
@@ -826,26 +830,6 @@ class _ChargingPowerSlider extends StatelessWidget {
             onChanged: enabled ? (raw) => onChanged(values[raw.round()]) : null,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SearchLocationBanner extends StatelessWidget {
-  const _SearchLocationBanner({required this.location});
-
-  final NearbySearchLocation? location;
-
-  @override
-  Widget build(BuildContext context) {
-    final value = location;
-    return Text(
-      value == null
-          ? 'La position de votre appareil sera utilisée. Une ville peut être choisie depuis Autour de moi.'
-          : 'Zone de recherche : ${value.label}',
-      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-        color: value == null ? null : AppColors.primary,
-        fontWeight: value == null ? null : FontWeight.w800,
       ),
     );
   }

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 String _read(String path) => File(path).readAsStringSync();
 
 void main() {
-  test('lot 3 adds manual location search and visual sliders', () {
+  test('location search lives inside each selected nearby category', () {
     final nearby = _read('lib/features/home/nearby_page.dart');
     final service = _read('lib/features/home/nearby_location_service.dart');
     final fuel = _read('lib/features/fuel_prices/fuel_price_compare_page.dart');
@@ -17,13 +17,20 @@ void main() {
       'lib/features/technical_control/technical_control_compare_page.dart',
     );
 
-    expect(nearby, contains('Ville, code postal ou adresse'));
-    expect(nearby, contains('Un garage automobile'));
+    final picker = _read('lib/features/home/nearby_location_picker_card.dart');
+    expect(nearby, isNot(contains('Ville, code postal ou adresse')));
+    expect(nearby, isNot(contains('Un garage automobile')));
+    expect(picker, contains('Ville, code postal ou adresse'));
+    expect(picker, contains("ValueKey('category-location-search')"));
     expect(service, contains('data.geopf.fr'));
     expect(service, contains("'/geocodage/search'"));
+    expect(fuel, contains('NearbyLocationPickerCard('));
     expect(fuel, contains("ValueKey('fuel-radius-slider')"));
+    expect(charging, contains('NearbyLocationPickerCard('));
     expect(charging, contains("ValueKey('charging-power-slider')"));
+    expect(parking, contains('NearbyLocationPickerCard('));
     expect(parking, contains("ValueKey('parking-radius-slider')"));
+    expect(controls, contains('NearbyLocationPickerCard('));
     expect(controls, contains("ValueKey('technical-control-radius-slider')"));
   });
 

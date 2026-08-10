@@ -1,4 +1,5 @@
 import 'vehicle_care_models.dart';
+import 'vehicle_maintenance_presentation.dart';
 
 const int maxVehicleSmartReminders = 3;
 
@@ -32,9 +33,16 @@ List<VehicleSmartReminderPlan> buildVehicleSmartReminderPlans({
   final reference = now ?? DateTime.now();
   final candidates = <_SmartReminderCandidate>[];
 
-  for (final schedule in schedules) {
-    final dueDate = schedule.dueDate;
-    if (dueDate == null || schedule.status.toUpperCase() == 'COMPLETED') {
+  final maintenanceGroups = groupVehicleMaintenanceSchedules(
+    schedules,
+    now: reference,
+  );
+  for (final group in maintenanceGroups) {
+    final dueDate = group.dueDate;
+    if (dueDate == null ||
+        group.schedules.every(
+          (schedule) => schedule.status.toUpperCase() == 'COMPLETED',
+        )) {
       continue;
     }
 
@@ -43,12 +51,14 @@ List<VehicleSmartReminderPlan> buildVehicleSmartReminderPlans({
 
     candidates.add(
       _SmartReminderCandidate(
-        priority: _priorityRank(schedule.priority),
+        priority: group.schedules
+            .map((schedule) => _priorityRank(schedule.priority))
+            .reduce((left, right) => left < right ? left : right),
         dueAt: dueDate,
         plan: VehicleSmartReminderPlan(
           vehicleId: vehicleId,
-          key: 'schedule:${schedule.id}',
-          title: schedule.title,
+          key: 'schedule:${group.schedules.map((item) => item.id).join('+')}',
+          title: group.title,
           dueAt: dueDate,
           reminderAt: reminderAt,
         ),
@@ -76,7 +86,7 @@ List<VehicleSmartReminderPlan> buildVehicleSmartReminderPlans({
         plan: VehicleSmartReminderPlan(
           vehicleId: vehicleId,
           key: 'reminder:${reminder.id}',
-          title: reminder.title,
+          title: vehicleMaintenanceDisplayTitle(reminder.title),
           dueAt: dueAt,
           reminderAt: reminderAt,
         ),

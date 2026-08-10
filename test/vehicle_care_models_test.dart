@@ -148,6 +148,26 @@ void main() {
     );
   });
 
+  test('recall candidate requires a strong model match before display', () {
+    final weak = VehicleRecallAlert.fromMap({
+      'match_id': 'weak',
+      'status': 'TO_CHECK',
+      'match_score': 0.85,
+      'title': 'Campagne',
+      'models_references': 'Golf VII',
+    });
+    final strong = VehicleRecallAlert.fromMap({
+      'match_id': 'strong',
+      'status': 'TO_CHECK',
+      'match_score': 0.95,
+      'title': 'Campagne',
+      'models_references': 'Golf VII',
+    });
+
+    expect(weak.isPlausibleFor('Golf 7 2.0 TDI'), isFalse);
+    expect(strong.isPlausibleFor('Golf 7 2.0 TDI'), isTrue);
+  });
+
   test('maintenance ordering puts overdue operations first', () {
     final schedules = [
       VehicleMaintenanceSchedule.fromMap({

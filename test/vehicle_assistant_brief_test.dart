@@ -4,7 +4,7 @@ import 'package:autoclair_app/features/vehicles/vehicle.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('assistant prioritizes plausible recall before overdue maintenance', () {
+  test('assistant promotes only a programmed plausible recall', () {
     final brief = VehicleAssistantBrief.build(
       vehicle: _vehicle(model: 'Golf 7 2.0 TDI', mileage: 82000),
       bundle: VehicleCareBundle(
@@ -12,7 +12,7 @@ void main() {
           recalls: [
             {
               'match_id': 'recall-1',
-              'status': 'TO_CHECK',
+              'status': 'SCHEDULED',
               'match_score': 0.95,
               'title': 'Campagne airbag',
               'brand': 'Volkswagen',
@@ -26,7 +26,7 @@ void main() {
         schedules: [
           VehicleMaintenanceSchedule.fromMap({
             'id': 'schedule-1',
-            'title': 'Vidange moteur',
+            'title': 'Filtre à huile',
             'schedule_type': 'MAINTENANCE',
             'due_mileage': 80000,
             'status': 'ACTIVE',
@@ -39,15 +39,44 @@ void main() {
         completedDocumentCount: 0,
       ),
       offerCount: 2,
-      now: DateTime(2026, 8, 9),
+      now: DateTime(2026, 8, 10),
     );
 
     expect(brief.items, hasLength(3));
-    expect(brief.items.first.title, 'Rappel constructeur à vérifier');
+    expect(brief.items.first.title, 'Rappel constructeur programmé');
     expect(brief.items.first.target, VehicleAssistantTarget.alerts);
     expect(brief.items[1].title, 'Entretien à rattraper');
-    expect(brief.items[1].target, VehicleAssistantTarget.maintenance);
+    expect(brief.items[1].message, contains('Révision avec vidange'));
     expect(brief.items[2].target, VehicleAssistantTarget.offers);
+  });
+
+  test('unconfirmed recall candidate is not promoted as vehicle urgency', () {
+    final brief = VehicleAssistantBrief.build(
+      vehicle: _vehicle(model: 'Golf 7 2.0 TDI', mileage: 82000),
+      bundle: VehicleCareBundle(
+        dashboard: _dashboard(
+          recalls: [
+            {
+              'match_id': 'recall-1',
+              'status': 'TO_CHECK',
+              'match_score': 0.98,
+              'title': 'Campagne à confirmer',
+              'brand': 'Volkswagen',
+              'models_references': 'Golf VII',
+              'risks': 'Information source',
+              'consumer_actions': 'Vérifier le VIN',
+              'match_reason': 'Modèle compatible',
+            },
+          ],
+        ),
+        schedules: const [],
+        suggestions: const [],
+        completedDocumentCount: 0,
+      ),
+      now: DateTime(2026, 8, 10),
+    );
+
+    expect(brief.isUpToDate, isTrue);
   });
 
   test('assistant ignores a recall for an unrelated model', () {
@@ -58,7 +87,7 @@ void main() {
           recalls: [
             {
               'match_id': 'recall-1',
-              'status': 'TO_CHECK',
+              'status': 'SCHEDULED',
               'match_score': 0.98,
               'title': 'Campagne utilitaire',
               'brand': 'Volkswagen',
@@ -73,11 +102,38 @@ void main() {
         suggestions: const [],
         completedDocumentCount: 0,
       ),
-      now: DateTime(2026, 8, 9),
+      now: DateTime(2026, 8, 10),
     );
 
     expect(brief.isUpToDate, isTrue);
-    expect(brief.items.single.title, 'Suivi à jour');
+  });
+
+  test('generic upcoming action opens the visible overview section', () {
+    final brief = VehicleAssistantBrief.build(
+      vehicle: _vehicle(model: '208', mileage: 50000),
+      bundle: VehicleCareBundle(
+        dashboard: _dashboard(
+          upcomingActions: [
+            {
+              'id': 'deadline',
+              'source_type': 'COMPLIANCE',
+              'title': 'Contrôle technique',
+              'message': 'À anticiper',
+              'priority': 'HIGH',
+              'status': 'ACTIVE',
+              'due_at': '2026-10-10T09:00:00Z',
+            },
+          ],
+        ),
+        schedules: const [],
+        suggestions: const [],
+        completedDocumentCount: 0,
+      ),
+      now: DateTime(2026, 8, 10),
+    );
+
+    expect(brief.items.first.target, VehicleAssistantTarget.overview);
+    expect(brief.items.first.actionLabel, 'Voir l’échéance');
   });
 
   test(
@@ -92,7 +148,7 @@ void main() {
           completedDocumentCount: 0,
         ),
         offerCount: 1,
-        now: DateTime(2026, 8, 9),
+        now: DateTime(2026, 8, 10),
       );
 
       expect(brief.items.first.title, 'Kilométrage à renseigner');
@@ -103,7 +159,7 @@ void main() {
 }
 
 Vehicle _vehicle({required String model, required int? mileage}) {
-  final now = DateTime(2026, 8, 9);
+  final now = DateTime(2026, 8, 10);
   return Vehicle(
     id: 'vehicle-1',
     userId: 'user-1',
@@ -118,6 +174,7 @@ Vehicle _vehicle({required String model, required int? mileage}) {
 
 VehicleCareDashboard _dashboard({
   List<Map<String, dynamic>> recalls = const [],
+  List<Map<String, dynamic>> upcomingActions = const [],
 }) {
   return VehicleCareDashboard.fromMap({
     'health': {
@@ -131,7 +188,7 @@ VehicleCareDashboard _dashboard({
       'reasons': const {},
       'metrics': const {},
     },
-    'upcoming_actions': const [],
+    'upcoming_actions': upcomingActions,
     'recalls': recalls,
     'risks': const [],
     'recent_events': const [],
@@ -140,6 +197,6 @@ VehicleCareDashboard _dashboard({
       'total_all_time': 0,
       'by_category': const {},
     },
-    'generated_at': '2026-08-09T10:00:00Z',
+    'generated_at': '2026-08-10T08:00:00Z',
   });
 }
