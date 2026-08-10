@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/theme/app_theme.dart';
+import 'vehicle_identification_details_view.dart';
 import 'vehicle_identification_result.dart';
 import 'vehicle_identification_service.dart';
 import 'vehicle_registration.dart';
@@ -127,8 +128,9 @@ class _VehicleRegistrationIdentificationCardState
           ),
           const SizedBox(height: 6),
           Text(
-            'AutoClair peut proposer la marque, le modèle, l’année et '
-            'la motorisation. Vous gardez la main avant l’enregistrement.',
+            'AutoClair récupère l’identification, le VIN et les caractéristiques '
+            'techniques disponibles en un seul appel. Vérifiez les informations '
+            'principales avant l’enregistrement.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 14),
@@ -178,42 +180,74 @@ class _VehicleRegistrationIdentificationCardState
                 color: AppColors.successSoft,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.check_circle_outline,
-                    color: AppColors.success,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.check_circle_outline,
+                        color: AppColors.success,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              result.displayName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.text,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              [
+                                if (result.vehicleYear != null)
+                                  result.vehicleYear.toString(),
+                                ?result.fuelType,
+                                if (result.vin != null) 'VIN ${result.vin}',
+                              ].join(' • '),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              result.cached
+                                  ? 'Données déjà enregistrées • ${result.sourceLabel}'
+                                  : 'Source : ${result.sourceLabel}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          result.displayName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.text,
+                  if (result.identity.isNotEmpty ||
+                      result.technical.isNotEmpty ||
+                      result.aftersales.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Material(
+                      type: MaterialType.transparency,
+                      child: ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(top: 8),
+                        title: const Text(
+                          'Voir les caractéristiques récupérées',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        children: [
+                          VehicleIdentificationDetailsView(
+                            identity: result.identity,
+                            technical: result.technical,
+                            administrative: result.administrative,
+                            aftersales: result.aftersales,
                           ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          [
-                            if (result.vehicleYear != null)
-                              result.vehicleYear.toString(),
-                            ?result.fuelType,
-                          ].join(' • '),
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          'Source : ${result.sourceLabel}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

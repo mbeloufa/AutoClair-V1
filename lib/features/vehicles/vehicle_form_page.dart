@@ -169,6 +169,10 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
       if (fuelType != null && _fuelTypes.contains(fuelType)) {
         _fuelType = fuelType;
       }
+
+      if (result.vin != null) {
+        _vinController.text = result.vin!;
+      }
     });
   }
 
@@ -410,10 +414,10 @@ class _VehicleFormPageState extends State<VehicleFormPage> {
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  "L'immatriculation et le VIN sont facultatifs. "
-                  "Lors d'une identification, AutoClair ne conserve que "
-                  'les données techniques que vous choisissez ensuite '
-                  "d'enregistrer dans la fiche véhicule.",
+                  "L'immatriculation et le VIN restent modifiables. "
+                  "Lors d'une identification, AutoClair conserve aussi les "
+                  'caractéristiques techniques utiles récupérées auprès du '
+                  "fournisseur afin de les réutiliser sans nouvel appel payant.",
                 ),
               ),
             ],

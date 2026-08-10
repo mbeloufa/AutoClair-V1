@@ -10,6 +10,9 @@ import '../commercial_offers/commercial_offers_service.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_brand_logo.dart';
 import '../vehicles/vehicle_service.dart';
+import '../vehicles/vehicle_identification_profile.dart';
+import '../vehicles/vehicle_identification_profile_card.dart';
+import '../vehicles/vehicle_identification_profile_service.dart';
 import 'vehicle_assistant_brief.dart';
 import 'vehicle_assistant_brief_card.dart';
 import 'vehicle_care_models.dart';
@@ -38,6 +41,7 @@ class VehicleCarePage extends StatefulWidget {
 
 class _VehicleCarePageState extends State<VehicleCarePage> {
   final _vehicleService = VehicleService();
+  final _identificationProfileService = VehicleIdentificationProfileService();
   final _careService = VehicleCareService();
   final _offersService = CommercialOffersService();
   final _notificationService = VehicleEventNotificationService.instance;
@@ -45,10 +49,12 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   final _careSectionKey = GlobalKey();
 
   Vehicle? _vehicle;
+  VehicleIdentificationProfile? _identificationProfile;
   VehicleCareBundle? _bundle;
   CommercialOfferBundle? _offerBundle;
   late _CareSection _section;
   bool _loading = true;
+  bool _identificationProfileLoading = false;
   bool _actionInProgress = false;
   bool _offersLoading = true;
   bool _smartRemindersEnabled = false;
@@ -88,6 +94,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
         _smartReminderPreferenceLoaded = false;
       });
       unawaited(_loadOfferPreview());
+      unawaited(_loadIdentificationProfile());
       unawaited(_synchronizeEventReminders(vehicle));
       unawaited(_loadSmartReminderPreference(vehicle, bundle));
     } on VehicleServiceException catch (error) {
@@ -96,6 +103,19 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
       if (mounted) setState(() => _errorMessage = error.message);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadIdentificationProfile() async {
+    if (!mounted) return;
+    setState(() => _identificationProfileLoading = true);
+    try {
+      final profile = await _identificationProfileService.fetchForVehicle(
+        widget.vehicleId,
+      );
+      if (mounted) setState(() => _identificationProfile = profile);
+    } finally {
+      if (mounted) setState(() => _identificationProfileLoading = false);
     }
   }
 
@@ -526,6 +546,13 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 104),
         children: [
           _VehicleHeader(vehicle: vehicle, health: bundle.dashboard.health),
+          if (_identificationProfileLoading) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(minHeight: 2),
+          ] else if (_identificationProfile != null) ...[
+            const SizedBox(height: 12),
+            VehicleIdentificationProfileCard(profile: _identificationProfile!),
+          ],
           const SizedBox(height: 14),
           VehicleAssistantBriefCard(
             brief: assistantBrief,
