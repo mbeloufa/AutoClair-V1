@@ -7,10 +7,7 @@ const corsHeaders = {
 
 type JsonRecord = Record<string, unknown>;
 
-function jsonResponse(
-  status: number,
-  body: JsonRecord,
-): Response {
+function jsonResponse(status: number, body: JsonRecord): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -20,237 +17,335 @@ function jsonResponse(
   });
 }
 
-function compactRegistration(value: string): string {
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function cleanString(value: unknown): string | null {
+  if (typeof value !== "string" && typeof value !== "number") {
+    return null;
+  }
+
+  const text = String(value).trim();
+  if (!text || text.toUpperCase() === "INCONNU") {
+    return null;
+  }
+
+  return text;
+}
+
+function firstString(data: JsonRecord, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = cleanString(data[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeRegistration(value: string): string {
   return value
     .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .trim();
+    .replace(/[^A-Z0-9]/g, "");
 }
 
-function formatRegistration(value: string): string {
-  const compact = compactRegistration(value);
-
-  const siv = compact.match(/^([A-HJ-NP-TV-Z]{2})(\d{3})([A-HJ-NP-TV-Z]{2})$/);
-  if (siv) {
-    return `${siv[1]}-${siv[2]}-${siv[3]}`;
+function providerRegistration(compact: string): string {
+  if (/^[A-Z]{2}[0-9]{3}[A-Z]{2}$/.test(compact)) {
+    return `${compact.substring(0, 2)}-${compact.substring(2, 5)}-${
+      compact.substring(5, 7)
+    }`;
   }
 
-  const fni = compact.match(/^(\d{1,4})([A-HJ-NP-TV-Z]{1,3})(\d{2,3})$/);
-  if (fni) {
-    return `${fni[1]} ${fni[2]} ${fni[3]}`;
-  }
-
-  return "";
+  return compact;
 }
 
-function nullableText(value: unknown): string | null {
-  const text = typeof value === "string" ? value.trim() : "";
-  return text.length > 0 ? text : null;
+function validYear(value: number): number | null {
+  const maximum = new Date().getUTCFullYear() + 1;
+  return Number.isInteger(value) && value >= 1886 && value <= maximum
+    ? value
+    : null;
 }
 
 function parseYear(data: JsonRecord): number | null {
-  for (const key of ["date1erCir_us", "date1erCir_fr"]) {
-    const value = nullableText(data[key]);
-    if (!value) continue;
+  const usDate = firstString(data, [
+    "AWN_date_mise_en_circulation_us",
+    "date_mise_en_circulation_us",
+  ]);
 
-    const match = value.match(/(19|20)\d{2}/);
-    if (!match) continue;
+  if (usDate !== null) {
+    const match = /^([0-9]{4})-[0-9]{2}-[0-9]{2}$/.exec(usDate);
+    if (match !== null) {
+      const year = validYear(Number(match[1]));
+      if (year !== null) return year;
+    }
+  }
 
-    const year = Number.parseInt(match[0], 10);
-    const maxYear = new Date().getUTCFullYear() + 1;
-    if (year >= 1886 && year <= maxYear) return year;
+  const frenchDate = firstString(data, [
+    "AWN_date_mise_en_circulation",
+    "date_mise_en_circulation",
+    "AWN_date_cg",
+    "date_cg",
+  ]);
+
+  if (frenchDate !== null) {
+    const match = /([0-9]{4})$/.exec(frenchDate);
+    if (match !== null) {
+      const year = validYear(Number(match[1]));
+      if (year !== null) return year;
+    }
+  }
+
+  const modelYear = firstString(data, [
+    "AWN_annee_de_debut_modele",
+    "annee_de_debut_modele",
+  ]);
+
+  if (modelYear !== null && /^[0-9]{4}$/.test(modelYear)) {
+    return validYear(Number(modelYear));
   }
 
   return null;
 }
 
-function normalizeFuel(value: unknown): string | null {
-  const raw = nullableText(value);
-  if (!raw) return null;
-
-  const normalized = raw
-    .toLowerCase()
+function fold(value: string): string {
+  return value
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .trim();
+}
 
-  if (normalized.includes("diesel") || normalized.includes("gazole")) {
-    return "Diesel";
-  }
-  if (normalized.includes("elect")) {
+function normalizeFuel(value: string | null): string | null {
+  if (value === null) return null;
+
+  const normalized = fold(value);
+  if (!normalized || normalized === "INCONNU") return null;
+
+  if (
+    normalized === "EL" ||
+    normalized.includes("ELECTR")
+  ) {
     return "Électrique";
   }
-  if (normalized.includes("hybride rechargeable") ||
-      normalized.includes("plug-in")) {
+
+  if (
+    normalized.includes("HYBR") &&
+    (normalized.includes("RECHARG") ||
+      normalized.includes("PLUG") ||
+      normalized.includes("PHEV"))
+  ) {
     return "Hybride rechargeable";
   }
-  if (normalized.includes("hybride")) {
+
+  if (normalized.includes("HYBR")) {
     return "Hybride";
   }
-  if (normalized.includes("gpl")) {
-    return "GPL";
+
+  if (
+    normalized === "GO" ||
+    normalized.includes("GAZOLE") ||
+    normalized.includes("DIESEL")
+  ) {
+    return "Diesel";
   }
-  if (normalized.includes("essence") ||
-      normalized.includes("sans plomb") ||
-      normalized.includes("gasoline")) {
+
+  if (
+    normalized === "ES" ||
+    normalized.includes("ESSENCE") ||
+    normalized.includes("GASOLINE") ||
+    normalized.includes("PETROL")
+  ) {
     return "Essence";
   }
 
-  return null;
+  if (normalized.includes("GPL") || normalized.includes("LPG")) {
+    return "GPL";
+  }
+
+  return "Autre";
 }
 
-Deno.serve(async (request: Request) => {
-  if (request.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
   }
 
-  if (request.method !== "POST") {
+  if (req.method !== "POST") {
     return jsonResponse(405, {
-      success: false,
-      error_code: "METHOD_NOT_ALLOWED",
-      message: "Méthode non autorisée.",
+      error: "METHOD_NOT_ALLOWED",
+      message: "Methode non autorisee.",
     });
   }
 
-  let payload: JsonRecord;
-  try {
-    payload = await request.json() as JsonRecord;
-  } catch {
-    return jsonResponse(400, {
-      success: false,
-      error_code: "INVALID_JSON",
-      message: "Requête invalide.",
-    });
-  }
+  const providerToken = Deno.env.get(
+    "API_PLAQUE_IMMATRICULATION_TOKEN",
+  )?.trim();
 
-  const registration = formatRegistration(
-    typeof payload.registration === "string" ? payload.registration : "",
-  );
-
-  if (!registration) {
-    return jsonResponse(400, {
-      success: false,
-      error_code: "VEHICLE_REGISTRATION_INVALID",
-      message:
-        "Format d’immatriculation français non reconnu. "
-        + "Utilisez par exemple AB-123-CD.",
-    });
-  }
-
-  const token = Deno.env.get("API_PLAQUE_IMMATRICULATION_TOKEN")?.trim();
-
-  if (!token) {
+  if (!providerToken) {
     return jsonResponse(503, {
-      success: false,
-      error_code: "VEHICLE_LOOKUP_NOT_CONFIGURED",
+      error: "PROVIDER_NOT_CONFIGURED",
       message:
-        "L’identification automatique n’est pas encore activée. "
-        + "Vous pouvez continuer manuellement.",
+        "Identification automatique indisponible. Vous pouvez continuer manuellement.",
     });
   }
 
-  const endpoint = new URL(
-    "https://api.apiplaqueimmatriculation.com/plaque",
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch (_) {
+    return jsonResponse(400, {
+      error: "INVALID_REQUEST",
+      message: "Requete invalide.",
+    });
+  }
+
+  if (!isRecord(body)) {
+    return jsonResponse(400, {
+      error: "INVALID_REQUEST",
+      message: "Requete invalide.",
+    });
+  }
+
+  const requestedRegistration = firstString(body, [
+    "registration_number",
+    "registration",
+    "plaque",
+  ]);
+
+  if (requestedRegistration === null) {
+    return jsonResponse(400, {
+      error: "REGISTRATION_REQUIRED",
+      message: "Immatriculation requise.",
+    });
+  }
+
+  const compactRegistration = normalizeRegistration(
+    requestedRegistration,
   );
-  endpoint.searchParams.set("immatriculation", registration);
-  endpoint.searchParams.set("token", token);
-  endpoint.searchParams.set("pays", "FR");
+
+  if (
+    compactRegistration.length < 5 ||
+    compactRegistration.length > 12
+  ) {
+    return jsonResponse(400, {
+      error: "INVALID_REGISTRATION",
+      message: "Format d'immatriculation invalide.",
+    });
+  }
+
+  const plate = providerRegistration(compactRegistration);
+  const providerUrl =
+    "https://api-de-plaque-d-immatriculation-france.p.rapidapi.com/" +
+    `?plaque=${encodeURIComponent(plate)}`;
 
   let providerResponse: Response;
   try {
-    providerResponse = await fetch(endpoint, {
-      method: "POST",
-      headers: { Accept: "application/json" },
-      signal: AbortSignal.timeout(9000),
+    providerResponse = await fetch(providerUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        "plaque": plate,
+        "x-rapidapi-host":
+          "api-de-plaque-d-immatriculation-france.p.rapidapi.com",
+        "x-rapidapi-key": providerToken,
+      },
     });
-  } catch {
+  } catch (_) {
     return jsonResponse(503, {
-      success: false,
-      error_code: "VEHICLE_LOOKUP_UNAVAILABLE",
+      error: "PROVIDER_UNAVAILABLE",
       message:
-        "Le service d’identification est temporairement indisponible. "
-        + "Vous pouvez continuer manuellement.",
+        "Le service d'identification est temporairement indisponible. Vous pouvez continuer manuellement.",
     });
   }
 
-  if (providerResponse.status === 429) {
-    return jsonResponse(429, {
-      success: false,
-      error_code: "VEHICLE_LOOKUP_RATE_LIMITED",
-      message:
-        "Le service d’identification reçoit trop de demandes. "
-        + "Réessayez dans quelques instants.",
-    });
-  }
-
-  if (!providerResponse.ok) {
-    return jsonResponse(502, {
-      success: false,
-      error_code: "VEHICLE_LOOKUP_PROVIDER_ERROR",
-      message:
-        "Le service d’identification n’a pas répondu correctement. "
-        + "Vous pouvez continuer manuellement.",
-    });
-  }
-
-  let providerPayload: JsonRecord;
+  let providerPayload: unknown;
   try {
-    providerPayload = await providerResponse.json() as JsonRecord;
-  } catch {
+    providerPayload = await providerResponse.json();
+  } catch (_) {
     return jsonResponse(502, {
-      success: false,
-      error_code: "VEHICLE_LOOKUP_INVALID_RESPONSE",
+      error: "INVALID_PROVIDER_RESPONSE",
       message:
-        "Le service d’identification a renvoyé une réponse invalide. "
-        + "Vous pouvez continuer manuellement.",
+        "Le service d'identification a retourne une reponse invalide. Vous pouvez continuer manuellement.",
     });
   }
 
-  const rawData = providerPayload.data;
-  if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) {
-    return jsonResponse(404, {
-      success: false,
-      error_code: "VEHICLE_NOT_FOUND",
+  if (!isRecord(providerPayload)) {
+    return jsonResponse(502, {
+      error: "INVALID_PROVIDER_RESPONSE",
       message:
-        "Aucun véhicule n’a été trouvé pour cette immatriculation. "
-        + "Complétez les informations manuellement.",
+        "Le service d'identification a retourne une reponse invalide. Vous pouvez continuer manuellement.",
     });
   }
 
-  const data = rawData as JsonRecord;
-  const providerError = nullableText(data.erreur);
+  const providerCode = Number(providerPayload["code"]);
+  const providerError = providerPayload["error"] === true;
 
-  if (providerError) {
-    return jsonResponse(404, {
-      success: false,
-      error_code: "VEHICLE_NOT_FOUND",
-      message:
-        "Aucun véhicule n’a été trouvé pour cette immatriculation. "
-        + "Complétez les informations manuellement.",
+  if (
+    !providerResponse.ok ||
+    providerError ||
+    (Number.isFinite(providerCode) && providerCode !== 200)
+  ) {
+    const notFound =
+      providerResponse.status === 404 || providerCode === 404;
+
+    return jsonResponse(notFound ? 404 : 503, {
+      error: notFound ? "VEHICLE_NOT_FOUND" : "PROVIDER_UNAVAILABLE",
+      message: notFound
+        ? "Aucun vehicule n'a ete identifie avec cette immatriculation. Vous pouvez continuer manuellement."
+        : "Le service d'identification est temporairement indisponible. Vous pouvez continuer manuellement.",
     });
   }
 
-  const make = nullableText(data.marque);
-  const model = nullableText(data.modele);
-
-  if (!make || !model) {
-    return jsonResponse(404, {
-      success: false,
-      error_code: "VEHICLE_NOT_FOUND",
+  const data = providerPayload["data"];
+  if (!isRecord(data)) {
+    return jsonResponse(502, {
+      error: "INVALID_PROVIDER_RESPONSE",
       message:
-        "Les informations techniques du véhicule sont insuffisantes. "
-        + "Complétez-les manuellement.",
+        "Le service d'identification a retourne une reponse incomplete. Vous pouvez continuer manuellement.",
+    });
+  }
+
+  const make = firstString(data, [
+    "AWN_marque",
+    "marque",
+  ]);
+
+  const model = firstString(data, [
+    "AWN_modele",
+    "modele",
+    "AWN_nom_commercial",
+    "nom_commercial",
+  ]);
+
+  const vehicleYear = parseYear(data);
+
+  const fuelType = normalizeFuel(
+    firstString(data, [
+      "AWN_energie_description",
+      "AWN_energie",
+      "energie",
+      "AWN_energie_cg",
+      "energie_cg",
+    ]),
+  );
+
+  if (make === null || model === null) {
+    return jsonResponse(422, {
+      error: "IDENTIFICATION_INCOMPLETE",
+      message:
+        "Le vehicule a ete trouve mais son identification est incomplete. Vous pouvez continuer manuellement.",
     });
   }
 
   return jsonResponse(200, {
-    success: true,
-    vehicle: {
-      registration_number: registration,
-      make,
-      model,
-      vehicle_year: parseYear(data),
-      fuel_type: normalizeFuel(data.energieNGC),
-      source_label: "API Plaque Immatriculation",
-    },
+    registration_number: plate,
+    make,
+    model,
+    vehicle_year: vehicleYear,
+    fuel_type: fuelType,
   });
 });
