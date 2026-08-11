@@ -110,7 +110,7 @@ void main() {
     expect(brief.items.first.message, 'Campagne utilitaire');
   });
 
-  test('generic upcoming action opens the visible overview section', () {
+  test('generic upcoming action opens the maintenance section', () {
     final brief = VehicleAssistantBrief.build(
       vehicle: _vehicle(model: '208', mileage: 50000),
       bundle: VehicleCareBundle(
@@ -134,7 +134,7 @@ void main() {
       now: DateTime(2026, 8, 10),
     );
 
-    expect(brief.items.first.target, VehicleAssistantTarget.overview);
+    expect(brief.items.first.target, VehicleAssistantTarget.maintenance);
     expect(brief.items.first.actionLabel, 'Voir l’échéance');
   });
 

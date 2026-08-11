@@ -15,6 +15,9 @@ class VehicleAssistantBriefCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -27,115 +30,141 @@ class VehicleAssistantBriefCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: AppColors.softPrimary,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_outlined,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(width: 11),
+              Icon(Icons.auto_awesome_rounded, color: colors.primary),
+              const SizedBox(width: 10),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Votre assistant AutoClair',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      brief.summary,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+                child: Text(
+                  'Votre assistant AutoClair',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          for (var index = 0; index < brief.items.length; index++) ...[
-            _AssistantItemTile(item: brief.items[index], onAction: onAction),
-            if (index != brief.items.length - 1) const SizedBox(height: 9),
-          ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Text(
             'Basé sur votre carnet, vos échéances, alertes et offres connues.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
           ),
+          const SizedBox(height: 10),
+          Text(
+            brief.summary,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (var index = 0; index < brief.items.length; index++) ...[
+            _AssistantItemCard(
+              key: ValueKey('vehicle-assistant-item-$index'),
+              item: brief.items[index],
+              onAction: onAction,
+            ),
+            if (index != brief.items.length - 1) const SizedBox(height: 10),
+          ],
         ],
       ),
     );
   }
 }
 
-class _AssistantItemTile extends StatelessWidget {
-  const _AssistantItemTile({required this.item, required this.onAction});
+class _AssistantItemCard extends StatelessWidget {
+  const _AssistantItemCard({
+    required this.item,
+    required this.onAction,
+    super.key,
+  });
 
   final VehicleAssistantItem item;
   final ValueChanged<VehicleAssistantTarget> onAction;
 
   @override
   Widget build(BuildContext context) {
-    final visual = _visual(item.importance);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final target = item.target;
-    final actionLabel = item.actionLabel;
+    final VoidCallback? onTap = target == null ? null : () => onAction(target);
+    final visual = _visualFor(item.importance, colors);
 
-    return Material(
-      color: visual.background,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: target == null ? null : () => onAction(target),
+    return Semantics(
+      button: onTap != null,
+      label: onTap == null
+          ? item.title
+          : '${item.title}. ${item.actionLabel ?? 'Ouvrir'}',
+      child: Material(
+        color: visual.background,
         borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(visual.icon, color: visual.foreground, size: 22),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.title,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleMedium?.copyWith(color: AppColors.text),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      item.message,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    if (target != null && actionLabel != null) ...[
-                      const SizedBox(height: 7),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(visual.icon, size: 21, color: visual.foreground),
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        actionLabel,
-                        style: TextStyle(
+                        item.title,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
                           color: visual.foreground,
-                          fontWeight: FontWeight.w800,
                         ),
                       ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.message,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          height: 1.35,
+                        ),
+                      ),
+                      if (target != null && item.actionLabel != null) ...[
+                        const SizedBox(height: 9),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                item.actionLabel!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelLarge?.copyWith(
+                                  color: colors.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 3),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 17,
+                              color: colors.primary,
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (target != null) ...[
-                const SizedBox(width: 6),
-                Icon(Icons.chevron_right_rounded, color: visual.foreground),
+                if (target != null) ...[
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -143,26 +172,29 @@ class _AssistantItemTile extends StatelessWidget {
   }
 }
 
-_AssistantVisual _visual(VehicleAssistantImportance importance) {
+_AssistantVisual _visualFor(
+  VehicleAssistantImportance importance,
+  ColorScheme colors,
+) {
   return switch (importance) {
-    VehicleAssistantImportance.urgent => const _AssistantVisual(
-      background: AppColors.errorSoft,
-      foreground: AppColors.error,
+    VehicleAssistantImportance.urgent => _AssistantVisual(
+      background: colors.errorContainer.withValues(alpha: 0.52),
+      foreground: colors.onErrorContainer,
       icon: Icons.priority_high_rounded,
     ),
-    VehicleAssistantImportance.attention => const _AssistantVisual(
-      background: AppColors.warningSoft,
-      foreground: AppColors.warning,
+    VehicleAssistantImportance.attention => _AssistantVisual(
+      background: colors.tertiaryContainer.withValues(alpha: 0.55),
+      foreground: colors.onTertiaryContainer,
       icon: Icons.schedule_rounded,
     ),
-    VehicleAssistantImportance.useful => const _AssistantVisual(
-      background: AppColors.infoSoft,
-      foreground: AppColors.info,
+    VehicleAssistantImportance.useful => _AssistantVisual(
+      background: colors.secondaryContainer.withValues(alpha: 0.55),
+      foreground: colors.onSecondaryContainer,
       icon: Icons.lightbulb_outline_rounded,
     ),
-    VehicleAssistantImportance.upToDate => const _AssistantVisual(
-      background: AppColors.successSoft,
-      foreground: AppColors.success,
+    VehicleAssistantImportance.upToDate => _AssistantVisual(
+      background: colors.primaryContainer.withValues(alpha: 0.45),
+      foreground: colors.onPrimaryContainer,
       icon: Icons.check_circle_outline_rounded,
     ),
   };

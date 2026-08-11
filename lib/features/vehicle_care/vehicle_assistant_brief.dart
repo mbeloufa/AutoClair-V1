@@ -151,7 +151,7 @@ class VehicleAssistantBrief {
               ? VehicleAssistantImportance.urgent
               : VehicleAssistantImportance.attention,
           actionLabel: 'Voir l’échéance',
-          target: VehicleAssistantTarget.overview,
+          target: VehicleAssistantTarget.maintenance,
         ),
       );
     }

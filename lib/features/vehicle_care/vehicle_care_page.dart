@@ -634,7 +634,8 @@ class _VehicleHeader extends StatelessWidget {
       if (vehicle.nickname?.trim().isNotEmpty == true) vehicle.makeAndModel,
       if (vehicle.vehicleYear != null) vehicle.vehicleYear.toString(),
       if (vehicle.fuelType?.trim().isNotEmpty == true) vehicle.fuelType!,
-      if (vehicle.mileage != null) '${_integer(vehicle.mileage!)} km',
+      if (vehicle.mileage != null)
+        '${_integer(vehicle.mileage!).replaceAll(' ', '\u202F')}\u00A0km',
     ];
     final needsAction = health.overallStatus == 'ACTION_NEEDED';
     final watch = health.overallStatus == 'WATCH';

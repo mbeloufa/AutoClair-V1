@@ -19,12 +19,16 @@ void main() {
     expect(page, contains('_showCareSection('));
     expect(page, contains('Scrollable.ensureVisible('));
     expect(page, contains('key: _careSectionKey'));
-    expect(brief, contains('VehicleAssistantTarget.overview'));
+    expect(brief, contains('VehicleAssistantTarget.maintenance'));
     expect(brief, contains('Rappel constructeur programmé'));
     expect(brief, contains('Entretien à rattraper'));
     expect(brief, contains('Kilométrage à renseigner'));
     expect(brief, contains('.take(3)'));
     expect(card, contains('Votre assistant AutoClair'));
+    expect(page, contains(r"replaceAll(' ', '\u202F')"));
+    expect(page, contains(r'\u00A0km'));
+    expect(card, contains("ValueKey('vehicle-assistant-item-\$index')"));
+    expect(card, contains('InkWell('));
   });
 
   test('assistant distinguishes recall candidates from confirmed action', () {
