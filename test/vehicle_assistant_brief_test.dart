@@ -42,12 +42,47 @@ void main() {
       now: DateTime(2026, 8, 10),
     );
 
-    expect(brief.items, hasLength(3));
+    expect(brief.items, hasLength(2));
     expect(brief.items.first.title, 'Rappel constructeur programmé');
     expect(brief.items.first.target, VehicleAssistantTarget.alerts);
-    expect(brief.items[1].title, 'Entretien à rattraper');
-    expect(brief.items[1].message, contains('Révision avec vidange'));
-    expect(brief.items[2].target, VehicleAssistantTarget.offers);
+    expect(
+      brief.items.any((item) => item.title == 'Entretien à rattraper'),
+      isFalse,
+    );
+    expect(brief.items[1].target, VehicleAssistantTarget.offers);
+  });
+
+  test('manufacturer schedule can become a real maintenance priority', () {
+    final brief = VehicleAssistantBrief.build(
+      vehicle: _vehicle(model: 'Golf 7 2.0 TDI', mileage: 82000),
+      bundle: VehicleCareBundle(
+        dashboard: _dashboard(),
+        schedules: [
+          VehicleMaintenanceSchedule.fromMap({
+            'id': 'manufacturer-maintenance',
+            'title': 'Liquide de frein',
+            'schedule_type': 'MAINTENANCE',
+            'due_mileage': 80000,
+            'status': 'ACTIVE',
+            'priority': 'HIGH',
+            'source_type': 'AUTOCLAIR_RULE',
+            'source_key': 'MFR:volkswagen:golf7:brake-fluid',
+            'source_url': 'https://www.volkswagen.fr/entretien',
+            'source_label': 'Volkswagen',
+            'source_quality': 'OFFICIAL_EXACT',
+            'calculation_basis': 'HISTORY_CONFIRMED',
+            'reason': 'Plan constructeur officiel',
+          }),
+        ],
+        suggestions: const [],
+        completedDocumentCount: 0,
+      ),
+      now: DateTime(2026, 8, 10),
+    );
+
+    expect(brief.items, hasLength(1));
+    expect(brief.items.single.title, 'Entretien à rattraper');
+    expect(brief.items.single.target, VehicleAssistantTarget.maintenance);
   });
 
   test('unconfirmed recall candidate is not promoted as vehicle urgency', () {

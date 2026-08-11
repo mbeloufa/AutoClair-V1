@@ -95,7 +95,7 @@ class VehicleAssistantBrief {
     }
 
     final maintenanceGroups = groupVehicleMaintenanceSchedules(
-      bundle.schedules,
+      assistantMaintenanceSchedules(bundle.schedules),
       currentMileage: vehicle.mileage,
       now: reference,
     );
@@ -132,7 +132,7 @@ class VehicleAssistantBrief {
     }
 
     for (final reminder in bundle.dashboard.upcomingActions.where(
-      (item) => item.sourceType.toUpperCase() != 'RECALL',
+      (item) => assistantReminderIsEligible(item, bundle.schedules),
     )) {
       final high = reminder.priority.toUpperCase() == 'HIGH';
       final displayTitle = vehicleMaintenanceDisplayTitle(reminder.title);
@@ -217,6 +217,36 @@ class VehicleAssistantBrief {
       items: List.unmodifiable(items),
     );
   }
+}
+
+List<VehicleMaintenanceSchedule> assistantMaintenanceSchedules(
+  Iterable<VehicleMaintenanceSchedule> schedules,
+) {
+  return schedules
+      .where((schedule) => !schedule.isGenericPlan)
+      .toList(growable: false);
+}
+
+bool assistantReminderIsEligible(
+  VehicleReminder reminder,
+  Iterable<VehicleMaintenanceSchedule> schedules,
+) {
+  final sourceType = reminder.sourceType.toUpperCase();
+  if (sourceType == 'RECALL') return false;
+  if (sourceType != 'SCHEDULE') return true;
+
+  final reminderTitle = _normalizedTitle(
+    vehicleMaintenanceDisplayTitle(reminder.title),
+  );
+  for (final schedule in schedules) {
+    if (!schedule.isGenericPlan) continue;
+    final raw = _normalizedTitle(schedule.title);
+    final display = _normalizedTitle(
+      vehicleMaintenanceDisplayTitle(schedule.title),
+    );
+    if (reminderTitle == raw || reminderTitle == display) return false;
+  }
+  return true;
 }
 
 class _AssistantCandidate {

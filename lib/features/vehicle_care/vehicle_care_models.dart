@@ -423,6 +423,12 @@ class VehicleMaintenanceSchedule {
     required this.priority,
     required this.sourceType,
     required this.reason,
+    this.sourceKey,
+    this.sourceUrl,
+    this.sourceLabel,
+    this.confidence,
+    this.sourceQuality,
+    this.calculationBasis,
     this.dueDate,
     this.dueMileage,
     this.intervalMonths,
@@ -436,7 +442,21 @@ class VehicleMaintenanceSchedule {
   final String priority;
   final String sourceType;
   final String reason;
+  final String? sourceKey;
+  final String? sourceUrl;
+  final String? sourceLabel;
+  final String? confidence;
+  final String? sourceQuality;
+  final String? calculationBasis;
   final DateTime? dueDate;
+
+  bool get isManufacturerPlan => sourceKey?.startsWith('MFR:') ?? false;
+
+  bool get isGenericPlan =>
+      sourceType.toUpperCase() == 'AUTOCLAIR_RULE' && !isManufacturerPlan;
+
+  bool get isHistoryConfirmed =>
+      calculationBasis?.toUpperCase() == 'HISTORY_CONFIRMED';
   final int? dueMileage;
   final int? intervalMonths;
   final int? intervalKm;
@@ -450,6 +470,12 @@ class VehicleMaintenanceSchedule {
       priority: _text(map['priority'], fallback: 'MEDIUM'),
       sourceType: _text(map['source_type'], fallback: 'AUTOCLAIR_RULE'),
       reason: _text(map['reason']),
+      sourceKey: _nullableText(map['source_key']),
+      sourceUrl: _nullableText(map['source_url']),
+      sourceLabel: _nullableText(map['source_label']),
+      confidence: _nullableText(map['confidence']),
+      sourceQuality: _nullableText(map['source_quality']),
+      calculationBasis: _nullableText(map['calculation_basis']),
       dueDate: _dateTime(map['due_date']),
       dueMileage: _nullableInteger(map['due_mileage']),
       intervalMonths: _nullableInteger(map['interval_months']),

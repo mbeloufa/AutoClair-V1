@@ -97,12 +97,27 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
       unawaited(_loadIdentificationProfile());
       unawaited(_synchronizeEventReminders(vehicle));
       unawaited(_loadSmartReminderPreference(vehicle, bundle));
+      unawaited(_refreshManufacturerMaintenancePlan());
     } on VehicleServiceException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } on VehicleCareException catch (error) {
       if (mounted) setState(() => _errorMessage = error.message);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _refreshManufacturerMaintenancePlan() async {
+    final ready = await _careService.refreshManufacturerMaintenancePlan(
+      widget.vehicleId,
+    );
+    if (!ready || !mounted) return;
+    try {
+      final refreshed = await _careService.loadBundle(widget.vehicleId);
+      if (!mounted) return;
+      setState(() => _bundle = refreshed);
+    } catch (_) {
+      // L'enrichissement constructeur reste non bloquant.
     }
   }
 
@@ -608,6 +623,9 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
               schedules: bundle.schedules,
               onApplyPlan: _applyPlan,
               onComplete: _completeSchedules,
+              onOpenSource: (url) {
+                unawaited(_openRecallUrl(url));
+              },
             ),
             _CareSection.alerts => _AlertsSection(
               recalls: recalls,
@@ -1153,12 +1171,14 @@ class _MaintenanceSection extends StatelessWidget {
     required this.schedules,
     required this.onApplyPlan,
     required this.onComplete,
+    required this.onOpenSource,
   });
 
   final Vehicle vehicle;
   final List<VehicleMaintenanceSchedule> schedules;
   final VoidCallback onApplyPlan;
   final ValueChanged<VehicleMaintenanceGroup> onComplete;
+  final ValueChanged<String> onOpenSource;
 
   @override
   Widget build(BuildContext context) {
@@ -1166,6 +1186,17 @@ class _MaintenanceSection extends StatelessWidget {
       schedules,
       currentMileage: vehicle.mileage,
     );
+    final hasManufacturerPlan = schedules.any(
+      (schedule) => schedule.isManufacturerPlan,
+    );
+    String? manufacturerSourceUrl;
+    String? manufacturerSourceLabel;
+    for (final schedule in schedules) {
+      if (!schedule.isManufacturerPlan || schedule.sourceUrl == null) continue;
+      manufacturerSourceUrl = schedule.sourceUrl;
+      manufacturerSourceLabel = schedule.sourceLabel;
+      break;
+    }
 
     if (groups.isEmpty) {
       return _EmptyPanel(
@@ -1180,12 +1211,51 @@ class _MaintenanceSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        OutlinedButton.icon(
-          onPressed: onApplyPlan,
-          icon: const Icon(Icons.add_rounded),
-          label: const Text('Compléter le plan'),
-        ),
-        const SizedBox(height: 12),
+        if (hasManufacturerPlan) ...[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Plan constructeur sourcé',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Échéances calculées à partir d’une source constructeur officielle, '
+                  'du kilométrage et de l’historique connus par AutoClair.',
+                ),
+                if (manufacturerSourceUrl != null) ...[
+                  const SizedBox(height: 6),
+                  TextButton.icon(
+                    onPressed: () => onOpenSource(manufacturerSourceUrl!),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: Text(
+                      manufacturerSourceLabel ?? 'Voir la source constructeur',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ] else ...[
+          OutlinedButton.icon(
+            onPressed: onApplyPlan,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('Compléter le plan indicatif'),
+          ),
+          const SizedBox(height: 12),
+        ],
         for (final group in groups) ...[
           _ScheduleCard(
             group: group,

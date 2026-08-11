@@ -7,3 +7,6 @@ verify_jwt = false
 
 [functions.refresh-vehicle-valuation]
 verify_jwt = false
+
+[functions.refresh-vehicle-maintenance-plan]
+verify_jwt = true

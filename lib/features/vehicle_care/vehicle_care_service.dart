@@ -29,7 +29,8 @@ class VehicleCareService {
           .from('vehicle_maintenance_schedules')
           .select(
             'id,title,schedule_type,due_date,due_mileage,interval_months,'
-            'interval_km,status,priority,source_type,reason',
+            'interval_km,status,priority,source_type,reason,source_key,source_url,'
+            'source_label,confidence,source_quality,calculation_basis',
           )
           .eq('vehicle_id', vehicleId)
           .eq('status', 'ACTIVE')
@@ -55,15 +56,21 @@ class VehicleCareService {
       final dashboardMap = Map<String, dynamic>.from(dashboardRaw);
       await _mergeEventDetails(dashboardMap, vehicleId);
 
+      final parsedSchedules = (schedulesRaw as List)
+          .map(
+            (row) => VehicleMaintenanceSchedule.fromMap(
+              Map<String, dynamic>.from(row as Map),
+            ),
+          )
+          .toList(growable: false);
+      _suppressGenericScheduleReminders(dashboardMap, parsedSchedules);
+      final effectiveSchedules = _effectiveMaintenanceSchedules(
+        parsedSchedules,
+      );
+
       return VehicleCareBundle(
         dashboard: VehicleCareDashboard.fromMap(dashboardMap),
-        schedules: (schedulesRaw as List)
-            .map(
-              (row) => VehicleMaintenanceSchedule.fromMap(
-                Map<String, dynamic>.from(row as Map),
-              ),
-            )
-            .toList(growable: false),
+        schedules: effectiveSchedules,
         suggestions: (suggestionsRaw as List)
             .map(
               (row) => VehicleDocumentSuggestion.fromMap(
@@ -78,6 +85,70 @@ class VehicleCareService {
       rethrow;
     } catch (error) {
       throw VehicleCareException(_message(error));
+    }
+  }
+
+  List<VehicleMaintenanceSchedule> _effectiveMaintenanceSchedules(
+    List<VehicleMaintenanceSchedule> schedules,
+  ) {
+    final hasManufacturerPlan = schedules.any(
+      (schedule) => schedule.isManufacturerPlan,
+    );
+    if (!hasManufacturerPlan) return schedules;
+    return schedules
+        .where((schedule) => !schedule.isGenericPlan)
+        .toList(growable: false);
+  }
+
+  void _suppressGenericScheduleReminders(
+    Map<String, dynamic> dashboard,
+    List<VehicleMaintenanceSchedule> schedules,
+  ) {
+    final genericTitles = schedules
+        .where((schedule) => schedule.isGenericPlan)
+        .map((schedule) => _maintenanceTitleKey(schedule.title))
+        .where((title) => title.isNotEmpty)
+        .toSet();
+    if (genericTitles.isEmpty) return;
+    final actions = dashboard['upcoming_actions'];
+    if (actions is! List) return;
+    dashboard['upcoming_actions'] = actions
+        .where((raw) {
+          if (raw is! Map) return true;
+          final map = Map<String, dynamic>.from(raw);
+          if ((map['source_type']?.toString().toUpperCase() ?? '') !=
+              'SCHEDULE') {
+            return true;
+          }
+          return !genericTitles.contains(
+            _maintenanceTitleKey(map['title']?.toString() ?? ''),
+          );
+        })
+        .toList(growable: false);
+  }
+
+  String _maintenanceTitleKey(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9àâäçéèêëîïôöùûüÿ]+'), ' ')
+      .trim();
+
+  Future<bool> refreshManufacturerMaintenancePlan(String vehicleId) async {
+    try {
+      final response = await _client.functions.invoke(
+        'refresh-vehicle-maintenance-plan',
+        body: <String, dynamic>{
+          'vehicle_id': vehicleId,
+          'force_refresh': false,
+        },
+      );
+      final data = response.data;
+      if (data is! Map) return false;
+      final map = Map<String, dynamic>.from(data);
+      return map['success'] == true && map['status'] == 'READY';
+    } catch (_) {
+      // Le plan constructeur enrichit le suivi mais ne doit jamais bloquer
+      // l'ouverture de la fiche vehicule ni le plan generique de secours.
+      return false;
     }
   }
 
