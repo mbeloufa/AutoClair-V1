@@ -20,6 +20,7 @@ void main() {
               onMileage: () {},
               onOffers: () {},
               onDocument: () {},
+              onTireInspection: () {},
             ),
           ),
         ),
@@ -31,6 +32,7 @@ void main() {
     expect(find.text('Mettre à jour les km'), findsOneWidget);
     expect(find.text('Voir les promos'), findsOneWidget);
     expect(find.text('Ajouter un document'), findsOneWidget);
+    expect(find.text('Contrôle pneus IA'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

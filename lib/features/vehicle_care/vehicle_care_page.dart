@@ -272,6 +272,10 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     await _loadOfferPreview();
   }
 
+  Future<void> _openTireInspection() async {
+    await context.push<void>('/vehicles/${widget.vehicleId}/tire-inspection');
+  }
+
   Future<void> _openVehicle360() async {
     await context.push<void>('/vehicles/${widget.vehicleId}/insight-report');
   }
@@ -584,6 +588,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
             onMileage: _openOdometer,
             onOffers: _openCommercialOffers,
             onDocument: _openDocumentUpload,
+            onTireInspection: _openTireInspection,
           ),
           const SizedBox(height: 18),
           KeyedSubtree(
@@ -756,6 +761,7 @@ class VehicleCarePrimaryActions extends StatelessWidget {
     required this.onMileage,
     required this.onOffers,
     required this.onDocument,
+    required this.onTireInspection,
     super.key,
   });
 
@@ -764,6 +770,7 @@ class VehicleCarePrimaryActions extends StatelessWidget {
   final VoidCallback onMileage;
   final VoidCallback onOffers;
   final VoidCallback onDocument;
+  final VoidCallback onTireInspection;
 
   @override
   Widget build(BuildContext context) {
@@ -800,6 +807,12 @@ class VehicleCarePrimaryActions extends StatelessWidget {
               icon: Icons.document_scanner_outlined,
               label: 'Ajouter un document',
               onTap: disabled ? null : onDocument,
+            ),
+            _ActionTile(
+              width: width,
+              icon: Icons.tire_repair_outlined,
+              label: 'Contrôle pneus IA',
+              onTap: disabled ? null : onTireInspection,
             ),
           ],
         );

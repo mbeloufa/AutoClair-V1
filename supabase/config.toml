@@ -10,3 +10,6 @@ verify_jwt = false
 
 [functions.refresh-vehicle-maintenance-plan]
 verify_jwt = true
+
+[functions.analyze-tire-inspection]
+verify_jwt = true

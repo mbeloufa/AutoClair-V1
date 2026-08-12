@@ -27,7 +27,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>AutoClair utilise l’appareil photo pour numériser vos devis, factures et ordres de réparation.</string>
+	<string>AutoClair utilise l’appareil photo pour numériser vos documents et photographier vos pneus lors d’un contrôle demandé par vous.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -71,6 +71,6 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>AutoClair utilise votre position uniquement pendant l’utilisation pour rechercher des services proches ou analyser un trajet demandé par vous. Aucun itinéraire n’est conservé.</string>
 <key>NSPhotoLibraryUsageDescription</key>
-<string>AutoClair accède uniquement aux photos que vous choisissez afin d’importer et d’analyser des documents automobiles, comme des devis, factures ou contrôles techniques.</string>
+<string>AutoClair accède uniquement aux photos que vous choisissez afin d’analyser vos documents automobiles ou vos pneus lors d’un contrôle demandé par vous.</string>
 </dict>
 </plist>

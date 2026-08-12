@@ -46,6 +46,7 @@ import '../../features/technical_control_readiness/technical_control_readiness_p
 import '../../features/workshop_visit/workshop_visit_preparation_page.dart';
 import '../widgets/app_state_panel.dart';
 import '../../features/tire_care/tire_care_page.dart';
+import '../../features/tire_inspection/tire_inspection_page.dart';
 import '../../features/battery_care/battery_care_page.dart';
 import '../../features/fluid_care/fluid_care_page.dart';
 import '../../features/visibility_care/visibility_care_page.dart';
@@ -139,6 +140,12 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => VehicleCarePage(
           vehicleId: state.pathParameters['vehicleId'] ?? '',
           initialSection: state.uri.queryParameters['section'],
+        ),
+      ),
+      GoRoute(
+        path: '/vehicles/:vehicleId/tire-inspection',
+        builder: (context, state) => TireInspectionPage(
+          vehicleId: state.pathParameters['vehicleId'] ?? '',
         ),
       ),
       GoRoute(
