@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
 import 'vehicle_360_access.dart';
@@ -116,16 +117,22 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Accès Premium requis'),
+        title: const Text('Passez à Premium'),
         content: const Text(
-          'Vous avez utilisé votre essai gratuit. AutoClair prévoit un '
-          'abonnement mensuel et l’achat de crédits à l’unité. Les achats '
-          'seront activés lors du branchement des stores de production.',
+          'Votre essai gratuit est utilisé. Premium vous permet de '
+          'continuer à lancer vos Bilans AutoClair 360.',
         ),
         actions: [
-          FilledButton.tonal(
+          TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Compris'),
+            child: const Text('Plus tard'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              context.push<void>('/premium');
+            },
+            child: const Text('Voir Premium'),
           ),
         ],
       ),

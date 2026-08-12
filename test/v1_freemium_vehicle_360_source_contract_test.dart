@@ -33,7 +33,7 @@ void main() {
       expect(service, contains("'claim-vehicle-360-trial'"));
       expect(page, contains('Utiliser votre essai gratuit ?'));
       expect(page, contains('Voir les options Premium'));
-      expect(page, contains('stores de production'));
+      expect(page, contains('/premium'));
     },
   );
 }

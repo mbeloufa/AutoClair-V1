@@ -47,6 +47,7 @@ import '../../features/workshop_visit/workshop_visit_preparation_page.dart';
 import '../widgets/app_state_panel.dart';
 import '../../features/tire_care/tire_care_page.dart';
 import '../../features/tire_inspection/tire_inspection_page.dart';
+import '../../features/premium/premium_page.dart';
 import '../../features/battery_care/battery_care_page.dart';
 import '../../features/fluid_care/fluid_care_page.dart';
 import '../../features/visibility_care/visibility_care_page.dart';
@@ -147,6 +148,10 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => TireInspectionPage(
           vehicleId: state.pathParameters['vehicleId'] ?? '',
         ),
+      ),
+      GoRoute(
+        path: '/premium',
+        builder: (context, state) => const PremiumPage(),
       ),
       GoRoute(
         path: '/offers',

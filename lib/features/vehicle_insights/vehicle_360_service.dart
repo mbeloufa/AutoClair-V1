@@ -24,7 +24,22 @@ class Vehicle360Service {
     return Vehicle360Precheck.fromMap(payload);
   }
 
+  Future<void> _syncPremiumEntitlementBestEffort() async {
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'sync-premium-entitlement',
+      );
+      if (response.status < 200 || response.status >= 300) {
+        return;
+      }
+    } catch (_) {
+      // Le freemium et les credits existants restent utilisables
+      // si la synchronisation du store est momentanement indisponible.
+    }
+  }
+
   Future<Vehicle360Access> access() async {
+    await _syncPremiumEntitlementBestEffort();
     final accessPayload = await _rpcMap('get_vehicle_report_access');
     final trialPayload = await _invokeTrial('status');
     return Vehicle360Access.fromMaps(
