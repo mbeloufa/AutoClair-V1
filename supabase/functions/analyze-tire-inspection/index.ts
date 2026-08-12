@@ -218,7 +218,10 @@ async function analyzeImages(openaiKey: string, images: Array<{ slot: string; da
       "Uneven wear may suggest checking pressure/alignment/suspension, but never diagnose the mechanical cause from the photo.",
       "Return exactly four wheel assessments and two sidewall assessments matching the slots.",
       "The professional_message must explicitly state in French that the AI analysis is informative and does not replace a professional tire inspection.",
-      "Write user-facing fields in clear French.",
+      "Write all user-facing fields in very simple everyday French for people with no automotive knowledge.",
+      "Avoid automotive jargon in user-facing text. Do not use words such as flanc, bande de roulement, epaulement or train avant/arriere; say cote du pneu, partie qui touche la route, bord du pneu, roues avant/arriere instead.",
+      "Keep each visible finding short (ideally under 12 words) and the summary to at most two short sentences.",
+      "Explain only what the person needs to know or do next; keep technical classifications internal.",
     ].join("\n"),
   }];
   for (const image of images) {

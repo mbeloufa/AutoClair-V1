@@ -96,4 +96,22 @@ void main() {
     expect(result.needsRetake, isTrue);
     expect(result.retakeSlots, contains('FRONT_LEFT_TREAD'));
   });
+  test('user-facing tire levels use simple everyday wording', () {
+    expect(
+      tireInspectionLevelLabel(TireInspectionLevel.ok),
+      'Rien d’inquiétant visible',
+    );
+    expect(
+      tireInspectionLevelLabel(TireInspectionLevel.replaceSoon),
+      'À changer bientôt',
+    );
+    expect(
+      tireInspectionLevelLabel(TireInspectionLevel.replaceNow),
+      'À changer rapidement',
+    );
+    expect(
+      tireInspectionLevelLabel(TireInspectionLevel.urgentProfessionalCheck),
+      'Faites contrôler rapidement',
+    );
+  });
 }

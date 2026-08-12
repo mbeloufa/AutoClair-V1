@@ -50,13 +50,12 @@ TireInspectionLevel tireInspectionLevelFromApi(String? value) =>
     };
 
 String tireInspectionLevelLabel(TireInspectionLevel value) => switch (value) {
-  TireInspectionLevel.ok => 'Aucun défaut évident détecté',
+  TireInspectionLevel.ok => 'Rien d’inquiétant visible',
   TireInspectionLevel.watch => 'À surveiller',
-  TireInspectionLevel.replaceSoon => 'Remplacement à prévoir',
-  TireInspectionLevel.replaceNow => 'Remplacement recommandé rapidement',
-  TireInspectionLevel.urgentProfessionalCheck =>
-    'Contrôle professionnel urgent',
-  TireInspectionLevel.unknown => 'Analyse insuffisante',
+  TireInspectionLevel.replaceSoon => 'À changer bientôt',
+  TireInspectionLevel.replaceNow => 'À changer rapidement',
+  TireInspectionLevel.urgentProfessionalCheck => 'Faites contrôler rapidement',
+  TireInspectionLevel.unknown => 'Photo insuffisante',
 };
 
 class TireWheelAssessment {

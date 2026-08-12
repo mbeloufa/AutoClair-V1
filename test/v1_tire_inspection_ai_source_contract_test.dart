@@ -36,12 +36,20 @@ void main() {
       ]) {
         expect(edge, contains(marker));
       }
-      expect(page, contains('25–40 cm'));
-      expect(page, contains('15–30 cm'));
-      expect(page, contains('coupez le moteur et le contact'));
-      expect(page, contains('ne remplace jamais l’avis d’un professionnel'));
-      expect(page, contains('CustomPaint'));
-      expect(page, contains('Comparer les prix des pneus'));
+      expect(page, contains('Vos pneus, vérifiés en 6 photos'));
+      expect(page, contains('Environ 3 minutes'));
+      expect(page, contains('partie du pneu qui touche la route'));
+      expect(page, contains('chiffres écrits sur le côté du pneu'));
+      expect(page, contains('À ~30 cm'));
+      expect(page, contains('À ~20 cm'));
+      expect(page, contains('coupez le moteur'));
+      expect(page, contains('_AnimatedPhotoGuide'));
+      expect(page, contains('AnimationController'));
+      expect(page, contains('_CarGuidePainter'));
+      expect(page, contains('Voir des prix en ligne'));
+      expect(page, isNot(contains('Pneu AVG')));
+      expect(page, isNot(contains('Flanc avant')));
+      expect(page, isNot(contains('bande de roulement')));
 
       expect(service, contains("'analyze-tire-inspection'"));
       expect(edge, contains('gpt-5.6-terra'));
@@ -54,6 +62,8 @@ void main() {
           'Never infer SUMMER/WINTER/ALL_SEASON from tread pattern alone',
         ),
       );
+      expect(edge, contains('very simple everyday French'));
+      expect(edge, contains('Keep each visible finding short'));
       expect(edge, contains('allowed_domains: MERCHANT_DOMAINS'));
       expect(edge, contains('allopneus.com'));
       expect(edge, contains('123pneus.fr'));
