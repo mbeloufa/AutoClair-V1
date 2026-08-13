@@ -78,7 +78,7 @@ const schema = {
     summary: { type: "string" },
     rules: {
       type: "array",
-      maxItems: 30,
+      maxItems: 18,
       items: {
         type: "object",
         additionalProperties: false,
@@ -89,7 +89,7 @@ const schema = {
             enum: [
               "SERVICE", "ENGINE_OIL", "OIL_FILTER", "BRAKE_FLUID",
               "CABIN_FILTER", "AIR_FILTER", "FUEL_FILTER", "SPARK_PLUGS",
-              "TIMING_BELT", "COOLANT", "TRANSMISSION_OIL", "OTHER",
+              "TIMING_BELT", "ACCESSORY_BELT", "COOLANT", "TRANSMISSION_OIL", "OTHER",
             ],
           },
           title: { type: "string" },
@@ -101,18 +101,18 @@ const schema = {
           source_domain: { type: "string" },
           source_title_hint: { type: "string" },
           applicability_notes: { type: "string" },
+          benefit: { type: "string" },
         },
         required: [
           "rule_key", "operation_key", "title", "interval_km",
           "interval_months", "first_due_km", "first_due_months", "confidence",
-          "source_domain", "source_title_hint", "applicability_notes",
+          "source_domain", "source_title_hint", "applicability_notes", "benefit",
         ],
       },
     },
   },
   required: ["status", "source_quality", "vehicle_match_summary", "summary", "rules"],
 };
-
 type SourceRef = { url: string; title: string; domain: string };
 type Rule = {
   rule_key: string;
@@ -126,8 +126,8 @@ type Rule = {
   source_domain: string;
   source_title_hint: string;
   applicability_notes: string;
+  benefit: string;
 };
-
 function json(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
     status,
@@ -266,12 +266,14 @@ function daysUntil(dateText: string | null): number | null {
   return Math.floor((due - Date.now()) / 86400000);
 }
 
-function operationMatches(operation: string, event: any): boolean {
-  const text = `${event?.event_type ?? ""} ${event?.title ?? ""}`
+function normalizedEventText(event: any): string {
+  return `${event?.event_type ?? ""} ${event?.title ?? ""}`
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
-  const terms: Record<string, string[]> = {
+}
+function operationTerms(): Record<string, string[]> {
+  return {
     SERVICE: ["revision", "entretien", "service"],
     ENGINE_OIL: ["vidange", "huile moteur"],
     OIL_FILTER: ["filtre huile", "filtre a huile"],
@@ -280,14 +282,105 @@ function operationMatches(operation: string, event: any): boolean {
     AIR_FILTER: ["filtre air", "filtre a air"],
     FUEL_FILTER: ["filtre carburant", "filtre gazole", "filtre diesel"],
     SPARK_PLUGS: ["bougie"],
-    TIMING_BELT: ["distribution", "courroie"],
+    TIMING_BELT: ["distribution", "courroie distribution"],
+    ACCESSORY_BELT: ["courroie accessoire", "courroie accessoires"],
     COOLANT: ["refroidissement", "liquide refroidissement"],
     TRANSMISSION_OIL: ["vidange boite", "huile boite", "transmission", "dsg"],
+    CLIMATE: ["climatisation", "recharge clim", "air conditionne"],
     OTHER: [],
   };
-  return (terms[operation] ?? []).some((term) => text.includes(term));
 }
-
+function operationMatches(operation: string, event: any): boolean {
+  const text = normalizedEventText(event);
+  return (operationTerms()[operation] ?? []).some((term) => text.includes(term));
+}
+function buildMaintenanceHistory(events: any[]): any[] {
+  const keys = [
+    "ENGINE_OIL", "OIL_FILTER", "BRAKE_FLUID", "CABIN_FILTER", "AIR_FILTER",
+    "FUEL_FILTER", "SPARK_PLUGS", "TIMING_BELT", "ACCESSORY_BELT", "COOLANT",
+    "TRANSMISSION_OIL", "CLIMATE", "SERVICE",
+  ];
+  const rows: any[] = [];
+  for (const event of events) {
+    for (const operationKey of keys) {
+      if (!operationMatches(operationKey, event)) continue;
+      const mileage = event?.mileage == null ? null : Number(event.mileage);
+      rows.push({
+        operation_key: operationKey,
+        occurred_at: String(event?.occurred_at ?? "").slice(0, 10),
+        mileage: Number.isFinite(mileage) ? Math.round(mileage) : null,
+      });
+      if (rows.length >= 80) return rows;
+    }
+  }
+  return rows;
+}
+function isRoutineCheckOnlyTitle(title: string): boolean {
+  const text = title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const excluded = [
+    "liaison au sol", "liaisons au sol", "eclairage", "niveau des liquides", "niveaux",
+    "pression des pneus", "pression pneus", "controle visuel", "inspection visuelle",
+    "essuie glace", "essuie-glace", "controle pneus", "controle freinage", "climatisation",
+  ];
+  return excluded.some((term) => text.includes(term));
+}
+function benefitFor(rule: Rule): string {
+  const proposed = String(rule.benefit ?? "").replace(/\s+/g, " ").trim().slice(0, 180);
+  if (proposed.length >= 20 && !looksSensitive(proposed)) return proposed;
+  const fallback: Record<string, string> = {
+    SERVICE: "Respecter les révisions aide à préserver la fiabilité du véhicule et à détecter plus tôt les anomalies courantes.",
+    ENGINE_OIL: "Une huile entretenue au bon intervalle aide à protéger les pièces internes du moteur contre l’usure.",
+    OIL_FILTER: "Un filtre à huile entretenu aide à limiter la circulation d’impuretés dans le moteur.",
+    BRAKE_FLUID: "Le liquide de frein vieillit avec le temps ; son entretien contribue à conserver un freinage régulier.",
+    CABIN_FILTER: "Un filtre habitacle entretenu aide à conserver un bon débit d’air et à limiter les particules dans l’habitacle.",
+    AIR_FILTER: "Un filtre à air entretenu aide le moteur à recevoir un débit d’air adapté.",
+    FUEL_FILTER: "Un filtre carburant entretenu aide à protéger le circuit d’alimentation contre les impuretés.",
+    SPARK_PLUGS: "Des bougies entretenues contribuent à un allumage régulier sur les moteurs qui en sont équipés.",
+    TIMING_BELT: "Respecter l’échéance de distribution réduit le risque de défaillance d’un organe essentiel du moteur.",
+    ACCESSORY_BELT: "Une courroie d’accessoires entretenue limite le risque de perte des équipements qu’elle entraîne.",
+    COOLANT: "Un liquide de refroidissement entretenu aide le moteur et son circuit thermique à fonctionner dans de bonnes conditions.",
+    TRANSMISSION_OIL: "Lorsque le constructeur le prévoit, l’entretien de la transmission aide à préserver son fonctionnement régulier.",
+    OTHER: "Respecter cette opération lorsqu’elle est prévue par le constructeur aide à préserver le bon fonctionnement du véhicule.",
+  };
+  return fallback[rule.operation_key] ?? fallback.OTHER;
+}
+function nextPreSummerDate(events: any[]): string {
+  const now = new Date();
+  let year = now.getUTCFullYear();
+  const targetFor = (value: number) => new Date(Date.UTC(value, 4, 15, 12));
+  if (targetFor(year).getTime() <= Date.now()) year += 1;
+  const lastClimate = events.find((event: any) => operationMatches("CLIMATE", event));
+  if (lastClimate?.occurred_at) {
+    const last = Date.parse(`${String(lastClimate.occurred_at).slice(0, 10)}T12:00:00Z`);
+    while (Number.isFinite(last) && targetFor(year).getTime() - last < 300 * 86400000) year += 1;
+  }
+  return `${year}-05-15`;
+}
+function buildSeasonalClimateSchedule(vehicleId: string, userId: string, events: any[]): any {
+  const dueDate = nextPreSummerDate(events);
+  const days = daysUntil(dueDate);
+  return {
+    vehicle_id: vehicleId,
+    user_id: userId,
+    title: "Contrôle climatisation avant l’été",
+    schedule_type: "MAINTENANCE",
+    due_date: dueDate,
+    due_mileage: null,
+    interval_months: 12,
+    interval_km: null,
+    status: "ACTIVE",
+    priority: days != null && days <= 75 ? "MEDIUM" : "LOW",
+    source_type: 'AUTOCLAIR_RULE',
+    reason: "Pourquoi ? Vérifier son fonctionnement avant les fortes chaleurs aide à éviter de découvrir une climatisation inefficace juste avant les vacances. · Conseil AutoClair : contrôle de fonctionnement, pas recharge systématique.",
+    source_key: "SEASONAL:CLIMATE",
+    source_url: null,
+    source_label: "Conseil AutoClair",
+    confidence: "HIGH",
+    source_quality: "AUTOCLAIR_GUIDANCE",
+    calculation_basis: "SEASONAL_ADVICE",
+    manufacturer_plan_id: null,
+  };
+}
 function theoreticalMileage(rule: Rule, currentMileage: number | null): number | null {
   if (currentMileage == null) return rule.first_due_km ?? rule.interval_km;
   const interval = rule.interval_km;
@@ -335,9 +428,29 @@ function selectSource(rule: Rule, sources: SourceRef[]): SourceRef | null {
     ?? null;
 }
 
+function isBundledRoutineComponent(rule: Rule, rules: Rule[]): boolean {
+  if (!['ENGINE_OIL', 'OIL_FILTER'].includes(rule.operation_key)) return false;
+  return rules.some((candidate) => {
+    if (candidate.operation_key !== 'SERVICE') return false;
+    const pairs = [
+      [rule.interval_km, candidate.interval_km],
+      [rule.interval_months, candidate.interval_months],
+      [rule.first_due_km, candidate.first_due_km],
+      [rule.first_due_months, candidate.first_due_months],
+    ];
+    let matched = false;
+    for (const [left, right] of pairs) {
+      if (left == null || right == null) continue;
+      if (left !== right) return false;
+      matched = true;
+    }
+    return matched;
+  });
+}
 async function researchPlan(
   vehicle: any,
   technicalIdentity: unknown,
+  maintenanceHistory: any[],
   domains: string[],
   openaiKey: string,
 ): Promise<{ plan: any; sources: SourceRef[] }> {
@@ -345,22 +458,28 @@ async function researchPlan(
     "You are researching an automotive manufacturer maintenance schedule for AutoClair in France.",
     "You MUST use web search and ONLY the official manufacturer domains allowed by the tool.",
     "Never use forums, dealer blogs, aggregators, generic automotive knowledge, or inferred intervals.",
-    "Return a maintenance rule only when an official source supports an interval in kilometres/months or a first due threshold.",
-    "If the official material is not precise enough for this version, return status UNAVAILABLE rather than guessing.",
+    "Use the exact make, model, year, fuel/powertrain and privacy-minimized technical identity to determine whether the official information truly applies to this vehicle variant.",
+    "The maintenance_history below is a privacy-minimized technical summary of completed work on THIS vehicle. It is context for relevance only, never a source for manufacturer intervals.",
+    "Return only standalone service or replacement operations for which the official source supports an interval in kilometres/months or a first due threshold.",
+    "Routine inspection-only checks such as lighting, fluid levels, tyre pressure, visual tyre/brake checks, suspension/liaisons au sol and wipers MUST NOT become independent maintenance rules when they are normally checked during a service.",
+    "When the official schedule treats engine oil, oil filter and routine inspections as one service at the same interval, prefer one SERVICE rule instead of several duplicate rules.",
+    "Do not return a climate/air-conditioning rule. AutoClair handles its seasonal comfort check separately and never assumes an annual refrigerant recharge.",
+    "If the official material is not precise enough for this model/year/powertrain, return status UNAVAILABLE rather than guessing.",
     "OFFICIAL_EXACT means the official source supports the exact model/version/engine information supplied.",
-    "OFFICIAL_GENERAL means the source is official but only supports the model family or a broader maintenance policy.",
-    "Do not calculate the user's personal next due date. AutoClair will do that deterministically from history and mileage.",
-    "Do not output VIN, registration plate, owner information, personal data, prices, or recalls.",
-    "Vehicle (privacy-minimized):",
+    "OFFICIAL_GENERAL means the source is official but only supports the model family or a broader maintenance policy that still clearly applies.",
+    "Do not calculate the user's personal next due date. AutoClair will calculate dates and mileage deterministically from confirmed history, current mileage and first registration.",
+    "For every returned rule, write benefit as one short French sentence explaining the practical advantage of doing that maintenance, without alarming language or guarantees.",
+    "Do not output VIN, registration plate, owner information, personal data, prices, recalls or any raw document text.",
+    "Vehicle and history (privacy-minimized):",
     JSON.stringify({
       make: vehicle.make,
       model: vehicle.model,
       vehicle_year: vehicle.vehicle_year,
       fuel_type: vehicle.fuel_type,
       technical_identity: technicalIdentity,
+      maintenance_history: maintenanceHistory,
     }),
   ].join("\n");
-
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -372,7 +491,7 @@ async function researchPlan(
       store: false,
       reasoning: { effort: "low" },
       tools: [{
-        "type": "web_search",
+        type: "web_search",
         filters: { allowed_domains: domains },
       }],
       tool_choice: "required",
@@ -381,12 +500,12 @@ async function researchPlan(
       text: {
         format: {
           type: "json_schema",
-          name: "autoclair_manufacturer_maintenance_plan",
+          name: "autoclair_manufacturer_maintenance_plan_v2",
           strict: true,
           schema,
         },
       },
-      max_output_tokens: 6000,
+      max_output_tokens: 6500,
     }),
   });
   const raw = await response.text();
@@ -398,7 +517,6 @@ async function researchPlan(
   const sources = collectSources(decoded, domains);
   return { plan, sources };
 }
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { success: false, error: "METHOD_NOT_ALLOWED" });
@@ -442,9 +560,44 @@ Deno.serve(async (req) => {
       return json(404, { success: false, error: "VEHICLE_NOT_FOUND" });
     }
 
+    const { data: events, error: eventsError } = await admin
+      .from("vehicle_events")
+      .select("event_type,title,occurred_at,mileage,status")
+      .eq("vehicle_id", vehicleId)
+      .eq("status", "COMPLETED")
+      .order("occurred_at", { ascending: false })
+      .limit(250);
+    if (eventsError) throw eventsError;
+    const completedEvents = events ?? [];
+    const maintenanceHistory = buildMaintenanceHistory(completedEvents);
+    const historyFingerprint = await sha256(maintenanceHistory);
+    const seasonalSchedule = buildSeasonalClimateSchedule(vehicleId, user.id, completedEvents);
+
     const domains = officialDomains[normalizedMake(vehicle.make)];
     if (!domains?.length) {
-      return json(200, { success: true, status: "UNAVAILABLE", reason: "UNSUPPORTED_MAKE" });
+      const { error: seasonalError } = await admin
+        .from("vehicle_maintenance_schedules")
+        .upsert([seasonalSchedule], { onConflict: "vehicle_id,source_key" });
+      if (seasonalError) throw seasonalError;
+      const { data: stale } = await admin
+        .from("vehicle_maintenance_schedules")
+        .select("id")
+        .eq("vehicle_id", vehicleId)
+        .like("source_key", "MFR:%");
+      const staleIds = (stale ?? []).map((row: any) => row.id);
+      if (staleIds.length) {
+        const { error } = await admin.from("vehicle_maintenance_schedules").delete().in("id", staleIds);
+        if (error) throw error;
+      }
+      await userClient.rpc("recalculate_vehicle_reminders", { p_vehicle_id: vehicleId });
+      return json(200, {
+        success: true,
+        status: "UNAVAILABLE",
+        reason: "UNSUPPORTED_MAKE",
+        manufacturer_schedules: 0,
+        seasonal_schedule: true,
+        history_entries: maintenanceHistory.length,
+      });
     }
 
     const { data: profile } = await admin
@@ -454,7 +607,6 @@ Deno.serve(async (req) => {
       .order("retrieved_at", { ascending: false })
       .limit(1)
       .maybeSingle();
-
     const technicalIdentity = sanitizeProfile({
       identity: profile?.identity ?? {},
       technical: profile?.technical ?? {},
@@ -468,16 +620,20 @@ Deno.serve(async (req) => {
       technical_identity: technicalIdentity,
     };
     const vehicleSignature = await sha256(signatureInput);
+    const researchSignature = await sha256({
+      vehicle_signature: vehicleSignature,
+      history_fingerprint: historyFingerprint,
+    });
 
     let cache: any = null;
     if (!forceRefresh) {
       const { data } = await admin
         .from("manufacturer_maintenance_plans")
         .select("*")
-        .eq("vehicle_signature", vehicleSignature)
+        .eq("vehicle_signature", researchSignature)
         .gt("expires_at", new Date().toISOString())
         .maybeSingle();
-      cache = data;
+      if (data?.plan_json?.history_fingerprint === historyFingerprint) cache = data;
     }
 
     let plan: any;
@@ -487,8 +643,17 @@ Deno.serve(async (req) => {
       plan = cache.plan_json;
       sources = Array.isArray(cache.sources) ? cache.sources : [];
     } else {
-      const researched = await researchPlan(vehicle, technicalIdentity, domains, openaiKey);
-      plan = researched.plan;
+      const researched = await researchPlan(
+        vehicle,
+        technicalIdentity,
+        maintenanceHistory,
+        domains,
+        openaiKey,
+      );
+      plan = {
+        ...researched.plan,
+        history_fingerprint: historyFingerprint,
+      };
       sources = researched.sources;
       if (plan?.status === "READY" && (!Array.isArray(plan.rules) || !plan.rules.length || !sources.length)) {
         plan = {
@@ -497,6 +662,7 @@ Deno.serve(async (req) => {
           vehicle_match_summary: "",
           summary: "Source constructeur officielle insuffisante.",
           rules: [],
+          history_fingerprint: historyFingerprint,
         };
       }
       const unavailable = plan?.status !== "READY";
@@ -506,7 +672,7 @@ Deno.serve(async (req) => {
       const { data: cached, error: cacheError } = await admin
         .from("manufacturer_maintenance_plans")
         .upsert({
-          vehicle_signature: vehicleSignature,
+          vehicle_signature: researchSignature,
           make: vehicle.make,
           model: vehicle.model,
           vehicle_year: vehicle.vehicle_year,
@@ -526,95 +692,76 @@ Deno.serve(async (req) => {
       planId = cached.id;
     }
 
-    if (plan?.status !== "READY" || !Array.isArray(plan.rules) || !plan.rules.length) {
-      const { data: stale } = await admin
-        .from("vehicle_maintenance_schedules")
-        .select("id,source_key")
-        .eq("vehicle_id", vehicleId)
-        .like("source_key", "MFR:%");
-      const staleIds = (stale ?? []).map((row: any) => row.id);
-      if (staleIds.length) {
-        await admin.from("vehicle_maintenance_schedules").delete().in("id", staleIds);
-      }
-      await userClient.rpc("recalculate_vehicle_reminders", { p_vehicle_id: vehicleId });
-      return json(200, { success: true, status: "UNAVAILABLE", cached: !!cache });
-    }
-
-    const { data: events, error: eventsError } = await admin
-      .from("vehicle_events")
-      .select("event_type,title,occurred_at,mileage,status")
-      .eq("vehicle_id", vehicleId)
-      .eq("status", "COMPLETED")
-      .order("occurred_at", { ascending: false })
-      .limit(250);
-    if (eventsError) throw eventsError;
-
-    const schedules: any[] = [];
+    const schedules: any[] = [seasonalSchedule];
     const keptKeys = new Set<string>();
-    for (const rule of plan.rules as Rule[]) {
-      if (!rule?.rule_key || !rule?.title) continue;
-      if (rule.interval_km == null && rule.interval_months == null &&
-          rule.first_due_km == null && rule.first_due_months == null) continue;
+    let manufacturerCount = 0;
+    const researchedRules: Rule[] = Array.isArray(plan?.rules) ? plan.rules : [];
+    if (plan?.status === "READY") {
+      for (const rule of researchedRules) {
+        if (!rule?.rule_key || !rule?.title) continue;
+        if (isRoutineCheckOnlyTitle(rule.title)) continue;
+        if (isBundledRoutineComponent(rule, researchedRules)) continue;
+        if (rule.interval_km == null && rule.interval_months == null &&
+            rule.first_due_km == null && rule.first_due_months == null) continue;
 
-      const matching = (events ?? []).find((event: any) => operationMatches(rule.operation_key, event));
-      let dueDate: string | null = null;
-      let dueMileage: number | null = null;
-      let basis = "THEORETICAL_CYCLE";
-      if (matching) {
-        basis = "HISTORY_CONFIRMED";
-        if (rule.interval_months && matching.occurred_at) {
-          dueDate = addMonths(String(matching.occurred_at).slice(0, 10), rule.interval_months);
+        const matching = completedEvents.find((event: any) => operationMatches(rule.operation_key, event));
+        let dueDate: string | null = null;
+        let dueMileage: number | null = null;
+        let basis = "THEORETICAL_CYCLE";
+        if (matching) {
+          basis = "HISTORY_CONFIRMED";
+          if (rule.interval_months && matching.occurred_at) {
+            dueDate = addMonths(String(matching.occurred_at).slice(0, 10), rule.interval_months);
+          }
+          if (rule.interval_km && matching.mileage != null) {
+            dueMileage = Number(matching.mileage) + rule.interval_km;
+          }
+        } else {
+          dueDate = theoreticalDate(rule, vehicle.first_registration_date ?? null);
+          dueMileage = theoreticalMileage(
+            rule,
+            vehicle.mileage == null ? null : Number(vehicle.mileage),
+          );
         }
-        if (rule.interval_km && matching.mileage != null) {
-          dueMileage = Number(matching.mileage) + rule.interval_km;
-        }
-      } else {
-        dueDate = theoreticalDate(rule, vehicle.first_registration_date ?? null);
-        dueMileage = theoreticalMileage(
-          rule,
+        if (dueDate == null && dueMileage == null) continue;
+        const source = selectSource(rule, sources);
+        if (!source) continue;
+        const key = `MFR:${vehicleSignature.slice(0, 16)}:${rule.rule_key}`.slice(0, 180);
+        keptKeys.add(key);
+        const priority = priorityFor(
+          basis,
+          dueDate,
+          dueMileage,
           vehicle.mileage == null ? null : Number(vehicle.mileage),
         );
+        const benefit = benefitFor(rule);
+        const calculation = basis === "HISTORY_CONFIRMED"
+          ? "calculée depuis une intervention connue du carnet"
+          : "cycle constructeur théorique à confirmer si l’historique est incomplet";
+        const reason = `Pourquoi ? ${benefit} · Préconisation constructeur sourcée · ${calculation}. ${rule.applicability_notes}`.trim();
+        schedules.push({
+          vehicle_id: vehicleId,
+          user_id: user.id,
+          title: rule.title,
+          schedule_type: "MAINTENANCE",
+          due_date: dueDate,
+          due_mileage: dueMileage,
+          interval_months: rule.interval_months,
+          interval_km: rule.interval_km,
+          status: "ACTIVE",
+          priority,
+          source_type: "AUTOCLAIR_RULE",
+          reason,
+          source_key: key,
+          source_url: source.url,
+          source_label: source.title,
+          confidence: rule.confidence,
+          source_quality: plan.source_quality,
+          calculation_basis: basis,
+          manufacturer_plan_id: planId,
+        });
+        manufacturerCount += 1;
       }
-      if (dueDate == null && dueMileage == null) continue;
-
-      const source = selectSource(rule, sources);
-      if (!source) continue;
-      const key = `MFR:${vehicleSignature.slice(0, 16)}:${rule.rule_key}`.slice(0, 180);
-      keptKeys.add(key);
-      const priority = priorityFor(
-        basis,
-        dueDate,
-        dueMileage,
-        vehicle.mileage == null ? null : Number(vehicle.mileage),
-      );
-      const reason = basis === "HISTORY_CONFIRMED"
-        ? `Préconisation constructeur sourcée · calculée depuis une intervention connue du carnet. ${rule.applicability_notes}`.trim()
-        : `Préconisation constructeur sourcée · cycle théorique à confirmer avec l'historique du véhicule. ${rule.applicability_notes}`.trim();
-      schedules.push({
-        vehicle_id: vehicleId,
-        user_id: user.id,
-        title: rule.title,
-        schedule_type: "MAINTENANCE",
-        due_date: dueDate,
-        due_mileage: dueMileage,
-        interval_months: rule.interval_months,
-        interval_km: rule.interval_km,
-        status: "ACTIVE",
-        priority,
-        source_type: 'AUTOCLAIR_RULE',
-        reason,
-        source_key: key,
-        source_url: source.url,
-        source_label: source.title,
-        confidence: rule.confidence,
-        source_quality: plan.source_quality,
-        calculation_basis: basis,
-        manufacturer_plan_id: planId,
-      });
-    }
-
-    if (!schedules.length) {
-      return json(200, { success: true, status: "UNAVAILABLE", reason: "NO_USABLE_RULE" });
     }
 
     const { error: upsertError } = await admin
@@ -640,13 +787,14 @@ Deno.serve(async (req) => {
       { p_vehicle_id: vehicleId },
     );
     if (reminderError) throw reminderError;
-
     return json(200, {
       success: true,
-      status: "READY",
+      status: manufacturerCount > 0 ? "READY" : "UNAVAILABLE",
       cached: !!cache,
-      source_quality: plan.source_quality,
-      schedules: schedules.length,
+      source_quality: manufacturerCount > 0 ? plan.source_quality : "UNAVAILABLE",
+      manufacturer_schedules: manufacturerCount,
+      seasonal_schedule: true,
+      history_entries: maintenanceHistory.length,
     });
   } catch (error) {
     console.error("refresh-vehicle-maintenance-plan", error);

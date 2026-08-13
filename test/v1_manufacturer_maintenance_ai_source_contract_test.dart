@@ -2,63 +2,72 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-String _read(String path) => File(path).readAsStringSync();
-
 void main() {
   test(
-    'V1 sources manufacturer maintenance plans without exposing vehicle identity',
+    'V2 maintenance is history-first, manufacturer-sourced and privacy-minimized',
     () {
-      final migration = _read(
-        'supabase/migrations/20260811081500_manufacturer_maintenance_ai_v1.sql',
-      );
-      final edge = _read(
+      final edge = File(
         'supabase/functions/refresh-vehicle-maintenance-plan/index.ts',
-      );
-      final service = _read(
+      ).readAsStringSync();
+      final config = File('supabase/config.toml').readAsStringSync();
+      final service = File(
         'lib/features/vehicle_care/vehicle_care_service.dart',
-      );
-      final models = _read(
+      ).readAsStringSync();
+      final models = File(
         'lib/features/vehicle_care/vehicle_care_models.dart',
-      );
-      final assistant = _read(
+      ).readAsStringSync();
+      final assistant = File(
         'lib/features/vehicle_care/vehicle_assistant_brief.dart',
-      );
-      final page = _read('lib/features/vehicle_care/vehicle_care_page.dart');
-      final config = _read('supabase/config.toml');
-
-      expect(migration, contains('manufacturer_maintenance_plans'));
-      expect(migration, contains('source_key text'));
-      expect(migration, contains('source_url text'));
-      expect(migration, contains('calculation_basis text'));
+      ).readAsStringSync();
+      final page = File(
+        'lib/features/vehicle_care/vehicle_care_page.dart',
+      ).readAsStringSync();
 
       expect(edge, contains('gpt-5.6-terra'));
-      expect(edge, contains('"type": "web_search"'));
+      expect(edge, contains('type: "web_search"'));
       expect(edge, contains('allowed_domains'));
       expect(edge, contains('tool_choice: "required"'));
       expect(edge, contains('web_search_call.action.sources'));
-      expect(edge, contains('json_schema'));
+      expect(edge, contains('type: "json_schema"'));
       expect(edge, contains('OPENAI_API_KEY'));
+      expect(edge, contains('buildMaintenanceHistory'));
+      expect(edge, contains('maintenance_history'));
+      expect(edge, contains('history_fingerprint'));
+      expect(edge, contains('researchSignature'));
       expect(edge, contains('HISTORY_CONFIRMED'));
       expect(edge, contains('THEORETICAL_CYCLE'));
-      expect(edge, contains("source_type: 'AUTOCLAIR_RULE'"));
-      expect(edge, contains('recalculate_vehicle_reminders'));
-      expect(edge, isNot(contains('RAPIDAPI_KEY')));
-      expect(
-        edge,
-        contains(
-          '.select("id,user_id,make,model,vehicle_year,fuel_type,mileage,first_registration_date")',
-        ),
-      );
+      expect(edge, contains('benefit'));
+      expect(edge, contains('Routine inspection-only checks'));
+      expect(edge, contains('isBundledRoutineComponent'));
+      expect(edge, contains('SEASONAL:CLIMATE'));
+      expect(edge, contains('AUTOCLAIR_RULE'));
+      expect(edge, contains('pas recharge systématique'));
       expect(edge, isNot(contains('registration_number')));
+      expect(edge, contains('VIN, registration plate'));
 
-      expect(service, contains('refreshManufacturerMaintenancePlan'));
-      expect(service, contains('_effectiveMaintenanceSchedules'));
-      expect(models, contains('isManufacturerPlan'));
-      expect(models, contains('isGenericPlan'));
-      expect(assistant, contains('assistantMaintenanceSchedules'));
-      expect(assistant, contains('assistantReminderIsEligible'));
-      expect(page, contains('Plan constructeur sourcé'));
-      expect(page, contains('Compléter le plan indicatif'));
+      expect(service, contains('VehicleMaintenanceRefreshResult'));
+      expect(service, contains('forceRefresh'));
+      expect(
+        service,
+        contains(".where((schedule) => !schedule.isGenericPlan)"),
+      );
+      expect(models, contains('isSeasonalAdvice'));
+      expect(models, contains('benefitText'));
+      expect(models, contains('planBadgeLabel'));
+      expect(
+        assistant,
+        contains('!schedule.isGenericPlan && !schedule.isSeasonalAdvice'),
+      );
+
+      expect(page, contains('Votre entretien, adapté à votre voiture'));
+      expect(page, contains('Actualiser mon plan d’entretien'));
+      expect(page, contains('Rechercher mon plan d’entretien'));
+      expect(page, contains('Contrôlés lors de la révision'));
+      expect(page, contains('Conseil saisonnier'));
+      expect(page, contains('Pourquoi c’est utile ?'));
+      expect(page, isNot(contains('Compléter le plan indicatif')));
+      expect(page, isNot(contains('Créer le plan d’entretien ?')));
+
       expect(config, contains('[functions.refresh-vehicle-maintenance-plan]'));
       expect(config, contains('verify_jwt = true'));
     },

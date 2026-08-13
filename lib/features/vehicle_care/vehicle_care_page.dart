@@ -108,10 +108,10 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   }
 
   Future<void> _refreshManufacturerMaintenancePlan() async {
-    final ready = await _careService.refreshManufacturerMaintenancePlan(
+    final result = await _careService.refreshManufacturerMaintenancePlan(
       widget.vehicleId,
     );
-    if (!ready || !mounted) return;
+    if (!result.success || !mounted) return;
     try {
       final refreshed = await _careService.loadBundle(widget.vehicleId);
       if (!mounted) return;
@@ -280,42 +280,28 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     await context.push<void>('/vehicles/${widget.vehicleId}/insight-report');
   }
 
-  Future<void> _applyPlan() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text("Créer le plan d’entretien ?"),
-        content: const Text(
-          'AutoClair ajoutera des échéances indicatives. '
-          'Le carnet du constructeur reste la référence.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Créer'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
+  Future<void> _refreshMaintenancePlan() async {
     await _runAction(() async {
-      final count = await _careService.applyDefaultMaintenancePlan(
+      final result = await _careService.refreshManufacturerMaintenancePlan(
         widget.vehicleId,
+        forceRefresh: true,
       );
-      if (mounted) {
+      if (!mounted) return;
+      final refreshed = await _careService.loadBundle(widget.vehicleId);
+      if (!mounted) return;
+      setState(() {
+        _bundle = refreshed;
+        _section = _CareSection.maintenance;
+      });
+      if (result.manufacturerReady) {
+        _message('Plan d’entretien actualisé avec l’historique du véhicule.');
+      } else if (result.seasonalReady) {
         _message(
-          count > 0
-              ? '$count échéance(s) ajoutée(s).'
-              : 'Le plan est déjà en place.',
+          'Conseil saisonnier actualisé. Le plan constructeur exact reste indisponible pour ce véhicule.',
         );
+      } else {
+        _message('Le plan n’a pas pu être actualisé pour le moment.');
       }
-      await _load();
-      if (mounted) setState(() => _section = _CareSection.maintenance);
     });
   }
 
@@ -628,7 +614,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
             _CareSection.maintenance => _MaintenanceSection(
               vehicle: vehicle,
               schedules: bundle.schedules,
-              onApplyPlan: _applyPlan,
+              onRefreshPlan: _refreshMaintenancePlan,
               onComplete: _completeSchedules,
               onOpenSource: (url) {
                 unawaited(_openRecallUrl(url));
@@ -1186,49 +1172,71 @@ class _MaintenanceSection extends StatelessWidget {
   const _MaintenanceSection({
     required this.vehicle,
     required this.schedules,
-    required this.onApplyPlan,
+    required this.onRefreshPlan,
     required this.onComplete,
     required this.onOpenSource,
   });
 
   final Vehicle vehicle;
   final List<VehicleMaintenanceSchedule> schedules;
-  final VoidCallback onApplyPlan;
+  final VoidCallback onRefreshPlan;
   final ValueChanged<VehicleMaintenanceGroup> onComplete;
   final ValueChanged<String> onOpenSource;
 
   @override
   Widget build(BuildContext context) {
-    final groups = groupVehicleMaintenanceSchedules(
-      schedules,
+    final manufacturerSchedules = schedules
+        .where((schedule) => schedule.isManufacturerPlan)
+        .toList(growable: false);
+    final seasonalSchedules = schedules
+        .where((schedule) => schedule.isSeasonalAdvice)
+        .toList(growable: false);
+    final manufacturerGroups = groupVehicleMaintenanceSchedules(
+      manufacturerSchedules,
       currentMileage: vehicle.mileage,
     );
-    final hasManufacturerPlan = schedules.any(
-      (schedule) => schedule.isManufacturerPlan,
+    final seasonalGroups = groupVehicleMaintenanceSchedules(
+      seasonalSchedules,
+      currentMileage: vehicle.mileage,
     );
+    final priorities = manufacturerGroups.take(3).toList(growable: false);
+    final later = manufacturerGroups.skip(3).toList(growable: false);
     String? manufacturerSourceUrl;
     String? manufacturerSourceLabel;
-    for (final schedule in schedules) {
-      if (!schedule.isManufacturerPlan || schedule.sourceUrl == null) continue;
+    for (final schedule in manufacturerSchedules) {
+      if (schedule.sourceUrl == null) continue;
       manufacturerSourceUrl = schedule.sourceUrl;
       manufacturerSourceLabel = schedule.sourceLabel;
       break;
     }
 
-    if (groups.isEmpty) {
-      return _EmptyPanel(
-        icon: Icons.event_repeat_outlined,
-        title: 'Aucun plan d’entretien',
-        message: 'Créez un plan indicatif, puis adaptez-le à votre véhicule.',
-        actionLabel: 'Créer le plan',
-        onAction: onApplyPlan,
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (hasManufacturerPlan) ...[
+        Text(
+          'Votre entretien, adapté à votre voiture',
+          style: Theme.of(
+            context,
+          ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'AutoClair croise l’historique de votre véhicule, son kilométrage, '
+          'sa marque, son année et sa motorisation pour vous montrer uniquement '
+          'les entretiens qui méritent votre attention.',
+        ),
+        const SizedBox(height: 12),
+        FilledButton.tonalIcon(
+          onPressed: onRefreshPlan,
+          icon: const Icon(Icons.auto_awesome_outlined),
+          label: Text(
+            manufacturerSchedules.isEmpty
+                ? 'Rechercher mon plan d’entretien'
+                : 'Actualiser mon plan d’entretien',
+          ),
+        ),
+        if (manufacturerSchedules.isNotEmpty) ...[
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -1248,8 +1256,9 @@ class _MaintenanceSection extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Échéances calculées à partir d’une source constructeur officielle, '
-                  'du kilométrage et de l’historique connus par AutoClair.',
+                  'Les intervalles viennent de sources constructeur. Les prochaines '
+                  'échéances sont recalculées à partir des entretiens et kilométrages '
+                  'connus par AutoClair.',
                 ),
                 if (manufacturerSourceUrl != null) ...[
                   const SizedBox(height: 6),
@@ -1264,23 +1273,108 @@ class _MaintenanceSection extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
-        ] else ...[
-          OutlinedButton.icon(
-            onPressed: onApplyPlan,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Compléter le plan indicatif'),
-          ),
-          const SizedBox(height: 12),
         ],
-        for (final group in groups) ...[
-          _ScheduleCard(
-            group: group,
-            currentMileage: vehicle.mileage,
-            onComplete: () => onComplete(group),
+        const SizedBox(height: 18),
+        if (priorities.isEmpty)
+          const _EmptyPanel(
+            icon: Icons.fact_check_outlined,
+            title: 'Aucune échéance constructeur exploitable',
+            message:
+                'AutoClair n’affiche pas d’intervalle approximatif lorsque la source '
+                'constructeur n’est pas assez précise pour ce véhicule.',
+          )
+        else ...[
+          Text(
+            'À prévoir',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 9),
+          for (final group in priorities) ...[
+            _ScheduleCard(
+              group: group,
+              currentMileage: vehicle.mileage,
+              onComplete: () => onComplete(group),
+            ),
+            const SizedBox(height: 10),
+          ],
         ],
+        if (later.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(top: 4),
+            title: Text(
+              'Plus tard (${later.length})',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            children: [
+              for (final group in later) ...[
+                _ScheduleCard(
+                  group: group,
+                  currentMileage: vehicle.mileage,
+                  onComplete: () => onComplete(group),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ],
+          ),
+        ],
+        if (seasonalGroups.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          Text(
+            'Conseil saisonnier',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Un conseil de confort utile, distinct du plan constructeur.',
+          ),
+          const SizedBox(height: 9),
+          for (final group in seasonalGroups) ...[
+            _ScheduleCard(
+              group: group,
+              currentMileage: vehicle.mileage,
+              onComplete: () => onComplete(group),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Contrôlés lors de la révision',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+              SizedBox(height: 5),
+              Text(
+                'Niveaux, éclairage, pression et état des pneus, contrôle visuel '
+                'du freinage et liaisons au sol restent des points de contrôle. '
+                'AutoClair ne crée pas une échéance séparée pour chacun.',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Ces échéances vous aident à planifier l’entretien. Le carnet du '
+          'constructeur et le professionnel restent la référence en cas de doute.',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+        ),
       ],
     );
   }
@@ -1315,13 +1409,8 @@ class _ScheduleCard extends StatelessWidget {
         : dueSoon
         ? AppColors.warning
         : AppColors.success;
-    final sourceColor = group.isManufacturerPlan
-        ? AppColors.info
-        : AppColors.textMuted;
-    final sourceBackground = group.isManufacturerPlan
-        ? AppColors.infoSoft
-        : AppColors.background;
-
+    final primary = group.primary;
+    final benefit = primary.benefitText;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1332,55 +1421,63 @@ class _ScheduleCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 7,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(
-                  color: sourceBackground,
-                  borderRadius: BorderRadius.circular(30),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      group.isManufacturerPlan
-                          ? Icons.verified_outlined
-                          : Icons.schedule_rounded,
-                      size: 15,
-                      color: sourceColor,
-                    ),
-                    const SizedBox(width: 5),
                     Text(
-                      group.sourceBadgeLabel,
-                      style: TextStyle(
-                        color: sourceColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
+                      group.title,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 6),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.softPrimary,
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Text(
+                          primary.planBadgeLabel,
+                          style: const TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
               Text(
                 status,
                 style: TextStyle(color: color, fontWeight: FontWeight.w800),
               ),
             ],
           ),
-          const SizedBox(height: 9),
-          Text(
-            group.title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
           if (due.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(due.join(' • ')),
+          ],
+          if (benefit.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Pourquoi c’est utile ?',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 3),
+            Text(benefit),
           ],
           const SizedBox(height: 12),
           FilledButton.tonal(

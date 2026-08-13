@@ -9,6 +9,18 @@ class VehicleCareException implements Exception {
   final String message;
 }
 
+class VehicleMaintenanceRefreshResult {
+  const VehicleMaintenanceRefreshResult({
+    required this.success,
+    required this.manufacturerReady,
+    required this.seasonalReady,
+  });
+
+  final bool success;
+  final bool manufacturerReady;
+  final bool seasonalReady;
+}
+
 class VehicleCareService {
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -91,10 +103,6 @@ class VehicleCareService {
   List<VehicleMaintenanceSchedule> _effectiveMaintenanceSchedules(
     List<VehicleMaintenanceSchedule> schedules,
   ) {
-    final hasManufacturerPlan = schedules.any(
-      (schedule) => schedule.isManufacturerPlan,
-    );
-    if (!hasManufacturerPlan) return schedules;
     return schedules
         .where((schedule) => !schedule.isGenericPlan)
         .toList(growable: false);
@@ -132,23 +140,41 @@ class VehicleCareService {
       .replaceAll(RegExp(r'[^a-z0-9àâäçéèêëîïôöùûüÿ]+'), ' ')
       .trim();
 
-  Future<bool> refreshManufacturerMaintenancePlan(String vehicleId) async {
+  Future<VehicleMaintenanceRefreshResult> refreshManufacturerMaintenancePlan(
+    String vehicleId, {
+    bool forceRefresh = false,
+  }) async {
     try {
       final response = await _client.functions.invoke(
         'refresh-vehicle-maintenance-plan',
         body: <String, dynamic>{
           'vehicle_id': vehicleId,
-          'force_refresh': false,
+          'force_refresh': forceRefresh,
         },
       );
       final data = response.data;
-      if (data is! Map) return false;
+      if (data is! Map) {
+        return const VehicleMaintenanceRefreshResult(
+          success: false,
+          manufacturerReady: false,
+          seasonalReady: false,
+        );
+      }
       final map = Map<String, dynamic>.from(data);
-      return map['success'] == true && map['status'] == 'READY';
+      return VehicleMaintenanceRefreshResult(
+        success: map['success'] == true,
+        manufacturerReady: map['success'] == true && map['status'] == 'READY',
+        seasonalReady:
+            map['success'] == true && map['seasonal_schedule'] == true,
+      );
     } catch (_) {
-      // Le plan constructeur enrichit le suivi mais ne doit jamais bloquer
-      // l'ouverture de la fiche vehicule ni le plan generique de secours.
-      return false;
+      // L'enrichissement reste non bloquant : le carnet et les événements
+      // restent disponibles si la recherche constructeur est momentanément indisponible.
+      return const VehicleMaintenanceRefreshResult(
+        success: false,
+        manufacturerReady: false,
+        seasonalReady: false,
+      );
     }
   }
 

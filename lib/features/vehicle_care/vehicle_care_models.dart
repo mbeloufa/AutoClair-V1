@@ -451,12 +451,37 @@ class VehicleMaintenanceSchedule {
   final DateTime? dueDate;
 
   bool get isManufacturerPlan => sourceKey?.startsWith('MFR:') ?? false;
-
+  bool get isSeasonalAdvice => sourceKey?.startsWith('SEASONAL:') == true;
   bool get isGenericPlan =>
-      sourceType.toUpperCase() == 'AUTOCLAIR_RULE' && !isManufacturerPlan;
+      sourceType.toUpperCase() == 'AUTOCLAIR_RULE' &&
+      !isManufacturerPlan &&
+      !isSeasonalAdvice;
 
   bool get isHistoryConfirmed =>
       calculationBasis?.toUpperCase() == 'HISTORY_CONFIRMED';
+
+  String get benefitText {
+    final text = reason.trim();
+    if (text.isEmpty) return '';
+    final withoutPrefix = text.startsWith('Pourquoi ? ')
+        ? text.substring('Pourquoi ? '.length)
+        : text;
+    final separator = withoutPrefix.indexOf(' · ');
+    return (separator < 0
+            ? withoutPrefix
+            : withoutPrefix.substring(0, separator))
+        .trim();
+  }
+
+  String get planBadgeLabel {
+    if (isSeasonalAdvice) return 'Conseil AutoClair';
+    if (isManufacturerPlan && isHistoryConfirmed) {
+      return 'Constructeur + historique';
+    }
+    if (isManufacturerPlan) return 'Constructeur';
+    return 'Entretien';
+  }
+
   final int? dueMileage;
   final int? intervalMonths;
   final int? intervalKm;

@@ -223,7 +223,9 @@ List<VehicleMaintenanceSchedule> assistantMaintenanceSchedules(
   Iterable<VehicleMaintenanceSchedule> schedules,
 ) {
   return schedules
-      .where((schedule) => !schedule.isGenericPlan)
+      .where(
+        (schedule) => !schedule.isGenericPlan && !schedule.isSeasonalAdvice,
+      )
       .toList(growable: false);
 }
 
@@ -239,7 +241,7 @@ bool assistantReminderIsEligible(
     vehicleMaintenanceDisplayTitle(reminder.title),
   );
   for (final schedule in schedules) {
-    if (!schedule.isGenericPlan) continue;
+    if (!schedule.isGenericPlan && !schedule.isSeasonalAdvice) continue;
     final raw = _normalizedTitle(schedule.title);
     final display = _normalizedTitle(
       vehicleMaintenanceDisplayTitle(schedule.title),
