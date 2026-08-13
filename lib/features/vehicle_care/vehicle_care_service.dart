@@ -133,8 +133,18 @@ class VehicleCareService {
   List<VehicleMaintenanceSchedule> _effectiveMaintenanceSchedules(
     List<VehicleMaintenanceSchedule> schedules,
   ) {
+    final hasManufacturerPlan = schedules.any(
+      (schedule) => schedule.isManufacturerPlan,
+    );
+    if (hasManufacturerPlan) {
+      return schedules
+          .where((schedule) => !schedule.isGenericPlan)
+          .toList(growable: false);
+    }
     return schedules
-        .where((schedule) => !schedule.isGenericPlan)
+        .where(
+          (schedule) => !schedule.isGenericPlan || schedule.isAutoClairFallback,
+        )
         .toList(growable: false);
   }
 
@@ -243,6 +253,18 @@ class VehicleCareService {
       return 'MAINTENANCE_SERVICE_ERROR';
     }
     return 'FUNCTION_UNREACHABLE';
+  }
+
+  Future<int> applyMaintenanceFallback(String vehicleId) async {
+    try {
+      final result = await _client.rpc(
+        'apply_vehicle_maintenance_fallback',
+        params: {'p_vehicle_id': vehicleId},
+      );
+      return _integer(result);
+    } catch (error) {
+      throw VehicleCareException(_message(error));
+    }
   }
 
   Future<int> applyDefaultMaintenancePlan(String vehicleId) async {

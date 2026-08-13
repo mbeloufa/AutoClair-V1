@@ -452,6 +452,8 @@ class VehicleMaintenanceSchedule {
 
   bool get isManufacturerPlan => sourceKey?.startsWith('MFR:') ?? false;
   bool get isSeasonalAdvice => sourceKey?.startsWith('SEASONAL:') == true;
+  bool get isAutoClairFallback =>
+      sourceKey?.startsWith('AUTOCLAIR_FALLBACK:') == true;
   bool get isGenericPlan =>
       sourceType.toUpperCase() == 'AUTOCLAIR_RULE' &&
       !isManufacturerPlan &&
@@ -475,6 +477,11 @@ class VehicleMaintenanceSchedule {
 
   String get planBadgeLabel {
     if (isSeasonalAdvice) return 'Conseil AutoClair';
+    if (isAutoClairFallback) return 'Repère AutoClair';
+    if (isManufacturerPlan &&
+        sourceQuality?.toUpperCase() == 'OFFICIAL_GENERAL') {
+      return 'Constructeur · à confirmer';
+    }
     if (isManufacturerPlan && isHistoryConfirmed) {
       return 'Constructeur + historique';
     }

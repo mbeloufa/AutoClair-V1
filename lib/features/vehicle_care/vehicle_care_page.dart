@@ -111,13 +111,16 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
     final result = await _careService.refreshManufacturerMaintenancePlan(
       widget.vehicleId,
     );
-    if (!result.success || !mounted) return;
+    if (!mounted) return;
     try {
+      if (!result.manufacturerReady) {
+        await _careService.applyMaintenanceFallback(widget.vehicleId);
+      }
       final refreshed = await _careService.loadBundle(widget.vehicleId);
       if (!mounted) return;
       setState(() => _bundle = refreshed);
     } catch (_) {
-      // L'enrichissement constructeur reste non bloquant.
+      // La fiche existante reste disponible si l'enrichissement échoue.
     }
   }
 
@@ -290,24 +293,28 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
         forceRefresh: alreadyHasManufacturerPlan,
       );
       if (!mounted) return;
-      if (!result.success) {
-        _message(result.userMessage);
-        return;
+
+      if (!result.manufacturerReady) {
+        await _careService.applyMaintenanceFallback(widget.vehicleId);
       }
+
       final refreshed = await _careService.loadBundle(widget.vehicleId);
       if (!mounted) return;
       setState(() {
         _bundle = refreshed;
         _section = _CareSection.maintenance;
       });
+
       if (result.manufacturerReady) {
         _message('Plan d’entretien actualisé avec l’historique du véhicule.');
-      } else if (result.seasonalReady) {
+      } else if (result.success) {
         _message(
-          'Conseil saisonnier actualisé. Le plan constructeur exact reste indisponible pour ce véhicule.',
+          'Repère AutoClair actualisé. Le plan constructeur exact reste à confirmer.',
         );
       } else {
-        _message(result.userMessage);
+        _message(
+          'Repère AutoClair actualisé. La recherche constructeur est momentanément indisponible.',
+        );
       }
     });
   }
@@ -621,6 +628,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
             _CareSection.maintenance => _MaintenanceSection(
               vehicle: vehicle,
               schedules: bundle.schedules,
+              reminders: bundle.dashboard.upcomingActions,
               onRefreshPlan: _refreshMaintenancePlan,
               onComplete: _completeSchedules,
               onOpenSource: (url) {
@@ -1179,6 +1187,7 @@ class _MaintenanceSection extends StatelessWidget {
   const _MaintenanceSection({
     required this.vehicle,
     required this.schedules,
+    required this.reminders,
     required this.onRefreshPlan,
     required this.onComplete,
     required this.onOpenSource,
@@ -1186,6 +1195,7 @@ class _MaintenanceSection extends StatelessWidget {
 
   final Vehicle vehicle;
   final List<VehicleMaintenanceSchedule> schedules;
+  final List<VehicleReminder> reminders;
   final VoidCallback onRefreshPlan;
   final ValueChanged<VehicleMaintenanceGroup> onComplete;
   final ValueChanged<String> onOpenSource;
@@ -1195,27 +1205,56 @@ class _MaintenanceSection extends StatelessWidget {
     final manufacturerSchedules = schedules
         .where((schedule) => schedule.isManufacturerPlan)
         .toList(growable: false);
+    final fallbackSchedules = schedules
+        .where((schedule) => schedule.isAutoClairFallback)
+        .toList(growable: false);
     final seasonalSchedules = schedules
         .where((schedule) => schedule.isSeasonalAdvice)
         .toList(growable: false);
+
     final manufacturerGroups = groupVehicleMaintenanceSchedules(
       manufacturerSchedules,
+      currentMileage: vehicle.mileage,
+    );
+    final fallbackGroups = groupVehicleMaintenanceSchedules(
+      fallbackSchedules,
       currentMileage: vehicle.mileage,
     );
     final seasonalGroups = groupVehicleMaintenanceSchedules(
       seasonalSchedules,
       currentMileage: vehicle.mileage,
     );
-    final priorities = manufacturerGroups.take(3).toList(growable: false);
-    final later = manufacturerGroups.skip(3).toList(growable: false);
+
+    final activeGroups = manufacturerGroups.isNotEmpty
+        ? manufacturerGroups
+        : fallbackGroups;
+    final priorities = activeGroups.take(3).toList(growable: false);
+    final later = activeGroups.skip(3).toList(growable: false);
+
+    VehicleReminder? technicalInspection;
+    for (final reminder in reminders) {
+      final source = reminder.sourceType.toUpperCase();
+      final title = reminder.title.toLowerCase();
+      if (source == 'INSPECTION' || title.contains('contrôle technique')) {
+        technicalInspection = reminder;
+        break;
+      }
+    }
+
     String? manufacturerSourceUrl;
     String? manufacturerSourceLabel;
+    var hasGeneralManufacturerSource = false;
     for (final schedule in manufacturerSchedules) {
-      if (schedule.sourceUrl == null) continue;
+      if (schedule.sourceQuality?.toUpperCase() == 'OFFICIAL_GENERAL') {
+        hasGeneralManufacturerSource = true;
+      }
+      if (manufacturerSourceUrl != null || schedule.sourceUrl == null) continue;
       manufacturerSourceUrl = schedule.sourceUrl;
       manufacturerSourceLabel = schedule.sourceLabel;
-      break;
     }
+
+    final hasManufacturer = manufacturerGroups.isNotEmpty;
+    final hasFallback = !hasManufacturer && fallbackGroups.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1228,22 +1267,22 @@ class _MaintenanceSection extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         const Text(
-          'AutoClair croise l’historique de votre véhicule, son kilométrage, '
-          'sa marque, son année et sa motorisation pour vous montrer uniquement '
-          'les entretiens qui méritent votre attention.',
+          'AutoClair croise l’historique du véhicule, son kilométrage et les '
+          'informations disponibles pour sa motorisation. Le plan constructeur '
+          'reste prioritaire ; à défaut, un repère clairement identifié est conservé.',
         ),
         const SizedBox(height: 12),
         FilledButton.tonalIcon(
           onPressed: onRefreshPlan,
           icon: const Icon(Icons.auto_awesome_outlined),
           label: Text(
-            manufacturerSchedules.isEmpty
-                ? 'Rechercher mon plan d’entretien'
-                : 'Actualiser mon plan d’entretien',
+            hasManufacturer
+                ? 'Actualiser mon plan d’entretien'
+                : 'Rechercher mon plan d’entretien',
           ),
         ),
-        if (manufacturerSchedules.isNotEmpty) ...[
-          const SizedBox(height: 12),
+        const SizedBox(height: 12),
+        if (hasManufacturer)
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -1256,16 +1295,20 @@ class _MaintenanceSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Plan constructeur sourcé',
+                  hasGeneralManufacturerSource
+                      ? 'Repère constructeur sourcé'
+                      : 'Plan constructeur sourcé',
                   style: Theme.of(
                     context,
                   ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Les intervalles viennent de sources constructeur. Les prochaines '
-                  'échéances sont recalculées à partir des entretiens et kilométrages '
-                  'connus par AutoClair.',
+                Text(
+                  hasGeneralManufacturerSource
+                      ? 'La source constructeur donne un intervalle général applicable. '
+                            'AutoClair le signale comme repère à confirmer pour cette version.'
+                      : 'Les intervalles viennent de sources constructeur. Les prochaines '
+                            'échéances sont recalculées avec l’historique connu.',
                 ),
                 if (manufacturerSourceUrl != null) ...[
                   const SizedBox(height: 6),
@@ -1279,25 +1322,54 @@ class _MaintenanceSection extends StatelessWidget {
                 ],
               ],
             ),
-          ),
-        ],
-        const SizedBox(height: 18),
-        if (priorities.isEmpty)
+          )
+        else if (hasFallback)
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Plan constructeur exact non trouvé',
+                  style: TextStyle(fontWeight: FontWeight.w900),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'AutoClair conserve un repère de révision calculé avec '
+                  'l’historique disponible. Il reste indicatif et doit être '
+                  'confirmé avec le carnet constructeur.',
+                ),
+              ],
+            ),
+          )
+        else
           const _EmptyPanel(
             icon: Icons.fact_check_outlined,
-            title: 'Aucune échéance constructeur exploitable',
+            title: 'Plan en préparation',
             message:
-                'AutoClair n’affiche pas d’intervalle approximatif lorsque la source '
-                'constructeur n’est pas assez précise pour ce véhicule.',
-          )
-        else ...[
-          Text(
-            'À prévoir',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                'La recherche constructeur n’a pas fourni de périodicité exploitable. '
+                'Relancez la recherche pour créer un repère AutoClair.',
           ),
-          const SizedBox(height: 9),
+        const SizedBox(height: 18),
+        Text(
+          'À prévoir',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 9),
+        if (technicalInspection != null) ...[
+          _TechnicalInspectionCard(reminder: technicalInspection),
+          const SizedBox(height: 10),
+        ],
+        if (priorities.isEmpty && technicalInspection == null)
+          const Text('Aucune échéance datée prioritaire pour le moment.')
+        else
           for (final group in priorities) ...[
             _ScheduleCard(
               group: group,
@@ -1306,9 +1378,8 @@ class _MaintenanceSection extends StatelessWidget {
             ),
             const SizedBox(height: 10),
           ],
-        ],
         if (later.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
             childrenPadding: const EdgeInsets.only(top: 4),
@@ -1328,6 +1399,45 @@ class _MaintenanceSection extends StatelessWidget {
             ],
           ),
         ],
+        const SizedBox(height: 18),
+        Text(
+          'À vérifier régulièrement',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Des vérifications simples utiles entre deux révisions, sans créer '
+          'une série d’alertes artificielles.',
+        ),
+        const SizedBox(height: 9),
+        const _RegularCheckRow(
+          icon: Icons.tire_repair_outlined,
+          title: 'Pression des pneus',
+          timing: 'Chaque mois et avant un long trajet',
+          benefit:
+              'Une pression adaptée aide à conserver une bonne tenue de route '
+              'et limite l’usure anormale des pneus.',
+        ),
+        const SizedBox(height: 8),
+        const _RegularCheckRow(
+          icon: Icons.water_drop_outlined,
+          title: 'Niveaux essentiels',
+          timing: 'Régulièrement et avant un long trajet',
+          benefit:
+              'Un contrôle simple des niveaux peut révéler une baisse anormale '
+              'avant qu’elle ne devienne gênante.',
+        ),
+        const SizedBox(height: 8),
+        const _RegularCheckRow(
+          icon: Icons.lightbulb_outline_rounded,
+          title: 'Éclairage',
+          timing: 'Régulièrement, surtout avant un trajet de nuit',
+          benefit:
+              'Vérifier les feux aide à rester visible et à conserver un '
+              'éclairage efficace lorsque vous en avez besoin.',
+        ),
         if (seasonalGroups.isNotEmpty) ...[
           const SizedBox(height: 18),
           Text(
@@ -1367,8 +1477,8 @@ class _MaintenanceSection extends StatelessWidget {
               ),
               SizedBox(height: 5),
               Text(
-                'Niveaux, éclairage, pression et état des pneus, contrôle visuel '
-                'du freinage et liaisons au sol restent des points de contrôle. '
+                'Le contrôle visuel du freinage, la suspension et les liaisons '
+                'au sol font partie des points à examiner lors d’une révision. '
                 'AutoClair ne crée pas une échéance séparée pour chacun.',
               ),
             ],
@@ -1376,13 +1486,131 @@ class _MaintenanceSection extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          'Ces échéances vous aident à planifier l’entretien. Le carnet du '
-          'constructeur et le professionnel restent la référence en cas de doute.',
+          'Ces repères aident à planifier. Le carnet constructeur, le contrôle '
+          'technique réalisé et le professionnel restent les références lorsque '
+          'l’historique est incomplet.',
           style: Theme.of(
             context,
           ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
         ),
       ],
+    );
+  }
+}
+
+class _RegularCheckRow extends StatelessWidget {
+  const _RegularCheckRow({
+    required this.icon,
+    required this.title,
+    required this.timing,
+    required this.benefit,
+  });
+
+  final IconData icon;
+  final String title;
+  final String timing;
+  final String benefit;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 3),
+                Text(timing),
+                const SizedBox(height: 5),
+                Text(
+                  benefit,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TechnicalInspectionCard extends StatelessWidget {
+  const _TechnicalInspectionCard({required this.reminder});
+
+  final VehicleReminder reminder;
+
+  @override
+  Widget build(BuildContext context) {
+    final due = reminder.dueAt;
+    final overdue = due != null && due.isBefore(DateTime.now());
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Contrôle technique',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.softPrimary,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: const Text(
+                  'Réglementaire',
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (due != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              '${overdue ? 'À régulariser' : 'À prévoir'} • ${_date(due)}',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: overdue ? AppColors.error : AppColors.primary,
+              ),
+            ),
+          ],
+          if (reminder.message.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(reminder.message),
+          ],
+        ],
+      ),
     );
   }
 }

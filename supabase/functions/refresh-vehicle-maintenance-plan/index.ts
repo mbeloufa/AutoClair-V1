@@ -9,6 +9,7 @@ const corsHeaders = {
 const OPENAI_MODEL = "gpt-5.6-terra";
 const CACHE_DAYS_READY = 365;
 const CACHE_DAYS_UNAVAILABLE = 90;
+const RESEARCH_POLICY_VERSION = "maintenance-v3";
 
 const officialDomains: Record<string, string[]> = {
   volkswagen: ["volkswagen.fr", "volkswagen.de"],
@@ -136,7 +137,14 @@ function json(status: number, body: unknown) {
 }
 
 function normalizedMake(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function looksSensitive(value: string): boolean {
@@ -477,9 +485,11 @@ async function researchPlan(
     "Routine inspection-only checks such as lighting, fluid levels, tyre pressure, visual tyre/brake checks, suspension/liaisons au sol and wipers MUST NOT become independent maintenance rules when they are normally checked during a service.",
     "When the official schedule treats engine oil, oil filter and routine inspections as one service at the same interval, prefer one SERVICE rule instead of several duplicate rules.",
     "Do not return a climate/air-conditioning rule. AutoClair handles its seasonal comfort check separately and never assumes an annual refrigerant recharge.",
-    "If the official material is not precise enough for this model/year/powertrain, return status UNAVAILABLE rather than guessing.",
+    "Except for the OFFICIAL_GENERAL SERVICE allowance below, if the official material is not precise enough for this model/year/powertrain, return status UNAVAILABLE rather than guessing.",
     "OFFICIAL_EXACT means the official source supports the exact model/version/engine information supplied.",
     "OFFICIAL_GENERAL means the source is official but only supports the model family or a broader maintenance policy that still clearly applies.",
+    "If an official manufacturer source clearly gives a general service/revision interval that applies to the supplied model family or maintenance regime, you MAY return a SERVICE rule with confidence MEDIUM and source_quality OFFICIAL_GENERAL instead of returning UNAVAILABLE.",
+    "This OFFICIAL_GENERAL allowance is only for a general SERVICE/revision interval. Never infer component-specific intervals such as timing belt, spark plugs, brake fluid, gearbox oil or coolant unless the official source explicitly supports them for the supplied vehicle context.",
     "Do not calculate the user's personal next due date. AutoClair will calculate dates and mileage deterministically from confirmed history, current mileage and first registration.",
     "For every returned rule, write benefit as one short French sentence explaining the practical advantage of doing that maintenance, without alarming language or guarantees.",
     "Do not output VIN, registration plate, owner information, personal data, prices, recalls or any raw document text.",
@@ -659,6 +669,7 @@ Deno.serve(async (req) => {
     };
     const vehicleSignature = await sha256(signatureInput);
     const researchSignature = await sha256({
+      policy_version: RESEARCH_POLICY_VERSION,
       vehicle_signature: vehicleSignature,
       history_fingerprint: historyFingerprint,
     });
@@ -833,6 +844,7 @@ Deno.serve(async (req) => {
       manufacturer_schedules: manufacturerCount,
       seasonal_schedule: true,
       history_entries: maintenanceHistory.length,
+      policy_version: RESEARCH_POLICY_VERSION,
     });
   } catch (error) {
     const classified = classifyMaintenanceFailure(error);
