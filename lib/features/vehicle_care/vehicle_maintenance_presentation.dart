@@ -8,6 +8,12 @@ class VehicleMaintenanceGroup {
 
   VehicleMaintenanceSchedule get primary => schedules.first;
 
+  bool get isManufacturerPlan =>
+      schedules.any((item) => item.isManufacturerPlan);
+
+  String get sourceBadgeLabel =>
+      isManufacturerPlan ? 'Plan constructeur' : 'Contrôle périodique';
+
   DateTime? get dueDate {
     final dates =
         schedules

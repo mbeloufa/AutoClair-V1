@@ -736,18 +736,7 @@ class _CommercialOfferCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final compatibilityColor = switch (offer.compatibility) {
-      'COMPATIBLE' => AppColors.success,
-      'LIKELY' => AppColors.info,
-      _ => AppColors.warning,
-    };
-
-    final compatibilityBackground = switch (offer.compatibility) {
-      'COMPATIBLE' => AppColors.successSoft,
-      'LIKELY' => AppColors.infoSoft,
-      _ => AppColors.warningSoft,
-    };
-
+    final conditions = offer.conditionsPreview;
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -761,7 +750,7 @@ class _CommercialOfferCard extends StatelessWidget {
         ),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -796,15 +785,6 @@ class _CommercialOfferCard extends StatelessWidget {
                           foreground: AppColors.primary,
                           background: AppColors.softPrimary,
                         ),
-                        _SmallBadge(
-                          label: offer.contextLabel,
-                          foreground: offer.isPurchaseOffer
-                              ? AppColors.info
-                              : AppColors.success,
-                          background: offer.isPurchaseOffer
-                              ? AppColors.infoSoft
-                              : AppColors.successSoft,
-                        ),
                         if (offer.relevantNow)
                           const _SmallBadge(
                             label: 'Utile maintenant',
@@ -819,10 +799,14 @@ class _CommercialOfferCard extends StatelessWidget {
                           ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 7),
                     Text(
                       offer.title,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ],
                 ),
@@ -843,134 +827,87 @@ class _CommercialOfferCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 13),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(13),
-            decoration: BoxDecoration(
-              color: compatibilityBackground,
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  offer.compatibility == 'COMPATIBLE'
-                      ? Icons.verified_outlined
-                      : Icons.fact_check_outlined,
-                  color: compatibilityColor,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    offer.compatibilityLabel,
-                    style: TextStyle(
-                      color: compatibilityColor,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 13),
+          const SizedBox(height: 12),
           Text(
-            offer.benefitLabel,
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(color: AppColors.primary),
+            offer.clearBenefitLabel,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-          if (offer.summary.isNotEmpty) ...[
-            const SizedBox(height: 7),
-            Text(offer.summary),
-          ],
-          if (offer.why.isNotEmpty) ...[
-            const SizedBox(height: 13),
-            for (final reason in offer.why.take(4))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.check_circle_outline_rounded,
-                      size: 17,
-                      color: AppColors.success,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(
-                      child: Text(
-                        reason,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Row(
             children: [
-              const Icon(
-                Icons.event_outlined,
-                size: 17,
+              Icon(
+                offer.compatibility == 'COMPATIBLE'
+                    ? Icons.verified_outlined
+                    : Icons.fact_check_outlined,
+                size: 18,
                 color: AppColors.textMuted,
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  offer.validityLabel,
+                  offer.compatibilityLabel,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
             ],
           ),
+          if (conditions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Conditions essentielles',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    conditions,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
+          Text(
+            offer.validityLabel,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          ),
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(bottom: 8),
-            title: const Text('Conditions et source'),
+            childrenPadding: const EdgeInsets.only(bottom: 6),
+            title: const Text('Détails et source'),
             children: [
-              if (offer.conditionsSummary.isNotEmpty)
-                _InfoLine(
-                  title: 'Conditions principales',
-                  value: offer.conditionsSummary,
-                ),
+              if (offer.summary.isNotEmpty)
+                _InfoLine(title: 'Résumé', value: offer.summary),
               if (offer.eligibilityNotes.isNotEmpty)
-                _InfoLine(title: 'À confirmer', value: offer.eligibilityNotes),
-              if (offer.requiresExistingContract)
-                const _InfoLine(
-                  title: 'Condition',
-                  value: 'Un contrat existant doit être confirmé.',
-                ),
-              if (offer.requiresNetworkParticipation)
-                const _InfoLine(
-                  title: 'Réseau',
-                  value:
-                      'La participation du réparateur ou du point de vente '
-                      'doit être confirmée.',
-                ),
-              if (offer.autoExtracted)
-                _InfoLine(
-                  title: 'Extraction',
-                  value: offer.extractionConfidence == null
-                      ? 'Offre structurée automatiquement puis contrôlée.'
-                      : 'Offre structurée automatiquement avec un niveau de '
-                            'confiance de ${offer.extractionConfidence}/100.',
-                ),
+                _InfoLine(title: 'À vérifier', value: offer.eligibilityNotes),
               _InfoLine(
                 title: 'Source',
                 value: '${offer.sourceName}\n${offer.verificationLabel}',
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           FilledButton.icon(
             onPressed: disabled ? null : onOpen,
             icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('Voir l’offre à la source'),
+            label: const Text('Voir l’offre officielle'),
           ),
-          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(

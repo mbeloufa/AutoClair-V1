@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../technical_control/technical_control_location_service.dart';
 import 'nearby_location.dart';
 import 'nearby_location_service.dart';
 
@@ -17,90 +16,48 @@ class NearbyLocationPickerCard extends StatefulWidget {
 
 class _NearbyLocationPickerCardState extends State<NearbyLocationPickerCard> {
   final _service = NearbyLocationService.instance;
-  final _controller = TextEditingController();
-
-  bool _locating = false;
-  bool _searching = false;
+  bool _openingSearch = false;
   String? _errorMessage;
 
   NearbySearchLocation? get _selected => _service.sessionLocation;
+  bool get _usesCurrentPosition =>
+      _selected == null || _selected!.isDevicePosition;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller.text = _selected?.label ?? '';
+  void _selectCurrentPosition() {
+    if (_openingSearch) return;
+    _service.clearRememberedLocation();
+    setState(() => _errorMessage = null);
+    widget.onChanged?.call(null);
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _useCurrentLocation() async {
-    if (_locating || _searching) return;
+  Future<void> _choosePlace() async {
+    if (_openingSearch) return;
     setState(() {
-      _locating = true;
+      _openingSearch = true;
       _errorMessage = null;
     });
-
     try {
-      final location = await _service.useCurrentLocation();
-      if (!mounted) return;
-      _controller.text = location.label;
-      setState(() {});
-      widget.onChanged?.call(location);
-    } on TechnicalControlLocationException catch (error) {
-      if (mounted) setState(() => _errorMessage = error.message);
-    } finally {
-      if (mounted) setState(() => _locating = false);
-    }
-  }
-
-  Future<void> _searchAddress() async {
-    if (_locating || _searching) return;
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _searching = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final suggestions = await _service.searchLocations(_controller.text);
-      if (!mounted) return;
-
       final selected = await showModalBottomSheet<NearbyLocationSuggestion>(
         context: context,
         useSafeArea: true,
         showDragHandle: true,
         isScrollControlled: true,
         builder: (sheetContext) =>
-            _NearbyLocationResultsSheet(suggestions: suggestions),
+            _NearbyLocationSearchSheet(service: _service),
       );
       if (selected == null || !mounted) return;
-
       _service.remember(selected);
-      _controller.text = selected.label;
       setState(() {});
       widget.onChanged?.call(selected);
-    } on NearbyLocationSearchException catch (error) {
-      if (mounted) setState(() => _errorMessage = error.message);
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted) setState(() => _openingSearch = false);
     }
-  }
-
-  void _clear() {
-    _service.clearRememberedLocation();
-    _controller.clear();
-    setState(() => _errorMessage = null);
-    widget.onChanged?.call(null);
   }
 
   @override
   Widget build(BuildContext context) {
     final selected = _selected;
-
+    final customLabel = !_usesCurrentPosition ? selected!.label : null;
     return Container(
       key: const ValueKey('category-location-search'),
       padding: const EdgeInsets.all(16),
@@ -112,93 +69,44 @@ class _NearbyLocationPickerCardState extends State<NearbyLocationPickerCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.location_searching_rounded,
-                color: AppColors.primary,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Text(
-                  'Où voulez-vous chercher ?',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              if (selected != null)
-                IconButton(
-                  tooltip: 'Effacer le lieu choisi',
-                  onPressed: _locating || _searching ? null : _clear,
-                  icon: const Icon(Icons.close_rounded),
-                ),
-            ],
+          Text(
+            'Zone de recherche',
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           ),
-          if (selected != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              key: const ValueKey('category-selected-location'),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.softPrimary,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    selected.isDevicePosition
-                        ? Icons.my_location_rounded
-                        : Icons.place_outlined,
-                    color: AppColors.primary,
-                  ),
-                  const SizedBox(width: 9),
-                  Expanded(
-                    child: Text(
-                      selected.label,
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            key: const ValueKey('category-use-current-location'),
-            onPressed: _locating || _searching ? null : _useCurrentLocation,
-            icon: _locating
-                ? const SizedBox.square(
-                    dimension: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2.2),
-                  )
-                : const Icon(Icons.my_location_rounded),
-            label: Text(_locating ? 'Localisation…' : 'Utiliser ma position'),
+          const SizedBox(height: 4),
+          Text(
+            'Choisissez simplement où AutoClair doit chercher.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
-          TextField(
-            key: const ValueKey('category-address-field'),
-            controller: _controller,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _searchAddress(),
-            decoration: const InputDecoration(
-              labelText: 'Ville, code postal ou adresse',
-              hintText: 'Ex. Dijon ou 21000',
-              prefixIcon: Icon(Icons.search_rounded),
-            ),
+          _LocationChoiceTile(
+            key: const ValueKey('category-location-current'),
+            icon: Icons.my_location_rounded,
+            title: 'Autour de moi',
+            subtitle: 'Position du téléphone au moment de la recherche',
+            selected: _usesCurrentPosition,
+            enabled: !_openingSearch,
+            onTap: _selectCurrentPosition,
           ),
-          const SizedBox(height: 10),
-          FilledButton.icon(
-            key: const ValueKey('category-address-search'),
-            onPressed: _locating || _searching ? null : _searchAddress,
-            icon: _searching
+          const SizedBox(height: 9),
+          _LocationChoiceTile(
+            key: const ValueKey('category-location-custom'),
+            icon: Icons.place_outlined,
+            title: 'Choisir un lieu',
+            subtitle: customLabel ?? 'Ville, code postal ou adresse',
+            selected: !_usesCurrentPosition,
+            enabled: !_openingSearch,
+            trailing: _openingSearch
                 ? const SizedBox.square(
                     dimension: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.2,
-                      color: Colors.white,
-                    ),
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.travel_explore_rounded),
-            label: Text(_searching ? 'Recherche…' : 'Choisir cette zone'),
+                : const Icon(Icons.chevron_right_rounded),
+            onTap: _choosePlace,
           ),
           if (_errorMessage != null) ...[
             const SizedBox(height: 10),
@@ -211,61 +119,221 @@ class _NearbyLocationPickerCardState extends State<NearbyLocationPickerCard> {
               ),
             ),
           ],
-          const SizedBox(height: 8),
-          Text(
-            'La recherche d’adresse utilise la Géoplateforme IGN et la Base Adresse Nationale.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
         ],
       ),
     );
   }
 }
 
-class _NearbyLocationResultsSheet extends StatelessWidget {
-  const _NearbyLocationResultsSheet({required this.suggestions});
+class _LocationChoiceTile extends StatelessWidget {
+  const _LocationChoiceTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+    this.trailing,
+  });
 
-  final List<NearbyLocationSuggestion> suggestions;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+    return Material(
+      color: selected ? AppColors.softPrimary : AppColors.background,
+      borderRadius: BorderRadius.circular(15),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: enabled ? onTap : null,
+        child: Container(
+          padding: const EdgeInsets.all(13),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(15),
+            border: Border.all(
+              color: selected ? AppColors.primary : AppColors.border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: selected ? AppColors.primary : AppColors.textMuted,
+              ),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              trailing ??
+                  Icon(
+                    selected
+                        ? Icons.check_circle_rounded
+                        : Icons.circle_outlined,
+                    color: selected ? AppColors.primary : AppColors.textMuted,
+                  ),
+            ],
+          ),
+        ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-            child: Text(
+    );
+  }
+}
+
+class _NearbyLocationSearchSheet extends StatefulWidget {
+  const _NearbyLocationSearchSheet({required this.service});
+
+  final NearbyLocationService service;
+
+  @override
+  State<_NearbyLocationSearchSheet> createState() =>
+      _NearbyLocationSearchSheetState();
+}
+
+class _NearbyLocationSearchSheetState
+    extends State<_NearbyLocationSearchSheet> {
+  final _controller = TextEditingController();
+  List<NearbyLocationSuggestion> _suggestions = const [];
+  bool _searching = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    if (_searching) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _searching = true;
+      _error = null;
+    });
+    try {
+      final results = await widget.service.searchLocations(_controller.text);
+      if (!mounted) return;
+      setState(() => _suggestions = results);
+    } on NearbyLocationSearchException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error.message;
+        _suggestions = const [];
+      });
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        0,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
               'Choisir un lieu',
-              style: Theme.of(context).textTheme.titleLarge,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
             ),
-          ),
-          const Divider(height: 1),
-          Flexible(
-            child: ListView.separated(
-              shrinkWrap: true,
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              itemCount: suggestions.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (context, index) {
-                final suggestion = suggestions[index];
-                return ListTile(
-                  key: ValueKey('category-location-result-$index'),
-                  leading: const Icon(Icons.place_outlined),
-                  title: Text(suggestion.label),
-                  subtitle: suggestion.secondaryLabel == null
-                      ? null
-                      : Text(suggestion.secondaryLabel!),
-                  onTap: () => Navigator.of(context).pop(suggestion),
-                );
-              },
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('category-address-field'),
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.search,
+              onSubmitted: (_) => _search(),
+              decoration: const InputDecoration(
+                labelText: 'Ville, code postal ou adresse',
+                hintText: 'Ex. Dijon ou 21000',
+                prefixIcon: Icon(Icons.search_rounded),
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              key: const ValueKey('category-address-search'),
+              onPressed: _searching ? null : _search,
+              icon: _searching
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.travel_explore_rounded),
+              label: Text(_searching ? 'Recherche…' : 'Rechercher'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: const TextStyle(
+                  color: AppColors.error,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+            if (_suggestions.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _suggestions.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final suggestion = _suggestions[index];
+                    return ListTile(
+                      key: ValueKey('category-location-result-$index'),
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.place_outlined),
+                      title: Text(suggestion.label),
+                      subtitle: suggestion.secondaryLabel == null
+                          ? null
+                          : Text(suggestion.secondaryLabel!),
+                      onTap: () => Navigator.of(context).pop(suggestion),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

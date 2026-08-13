@@ -618,6 +618,8 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
               onAddEvent: _openEventForm,
               onOpenTimeline: () =>
                   setState(() => _section = _CareSection.timeline),
+              onOpenMaintenance: () =>
+                  setState(() => _section = _CareSection.maintenance),
             ),
             _CareSection.timeline => _TimelineSection(
               events: bundle.dashboard.recentEvents,
@@ -928,6 +930,7 @@ class _OverviewSection extends StatelessWidget {
     required this.onDismissSuggestion,
     required this.onAddEvent,
     required this.onOpenTimeline,
+    required this.onOpenMaintenance,
   });
 
   final Vehicle vehicle;
@@ -941,6 +944,7 @@ class _OverviewSection extends StatelessWidget {
   final ValueChanged<VehicleDocumentSuggestion> onDismissSuggestion;
   final VoidCallback onAddEvent;
   final VoidCallback onOpenTimeline;
+  final VoidCallback onOpenMaintenance;
 
   @override
   Widget build(BuildContext context) {
@@ -981,7 +985,7 @@ class _OverviewSection extends StatelessWidget {
           const _UpToDatePanel()
         else
           for (final reminder in reminders.take(4)) ...[
-            _ReminderCard(reminder: reminder),
+            _ReminderCard(reminder: reminder, onOpen: onOpenMaintenance),
             const SizedBox(height: 9),
           ],
         const SizedBox(height: 18),
@@ -1311,6 +1315,12 @@ class _ScheduleCard extends StatelessWidget {
         : dueSoon
         ? AppColors.warning
         : AppColors.success;
+    final sourceColor = group.isManufacturerPlan
+        ? AppColors.info
+        : AppColors.textMuted;
+    final sourceBackground = group.isManufacturerPlan
+        ? AppColors.infoSoft
+        : AppColors.background;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1322,12 +1332,37 @@ class _ScheduleCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          Wrap(
+            spacing: 8,
+            runSpacing: 7,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(
-                child: Text(
-                  group.title,
-                  style: Theme.of(context).textTheme.titleMedium,
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: sourceBackground,
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      group.isManufacturerPlan
+                          ? Icons.verified_outlined
+                          : Icons.schedule_rounded,
+                      size: 15,
+                      color: sourceColor,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      group.sourceBadgeLabel,
+                      style: TextStyle(
+                        color: sourceColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Text(
@@ -1335,6 +1370,13 @@ class _ScheduleCard extends StatelessWidget {
                 style: TextStyle(color: color, fontWeight: FontWeight.w800),
               ),
             ],
+          ),
+          const SizedBox(height: 9),
+          Text(
+            group.title,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           if (due.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -1390,9 +1432,10 @@ class _AlertsSection extends StatelessWidget {
 }
 
 class _ReminderCard extends StatelessWidget {
-  const _ReminderCard({required this.reminder});
+  const _ReminderCard({required this.reminder, required this.onOpen});
 
   final VehicleReminder reminder;
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -1430,6 +1473,17 @@ class _ReminderCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(reminder.message),
                 ],
+                const SizedBox(height: 6),
+                TextButton.icon(
+                  onPressed: onOpen,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: const Text('Voir l’échéance'),
+                ),
               ],
             ),
           ),

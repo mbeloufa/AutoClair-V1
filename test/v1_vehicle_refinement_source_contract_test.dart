@@ -20,10 +20,14 @@ void main() {
           'lib/features/technical_control/technical_control_compare_page.dart',
         ),
       ];
-
       expect(nearby, isNot(contains('Un garage automobile')));
       expect(nearby, isNot(contains('Ville, code postal ou adresse')));
-      expect(picker, contains('Où voulez-vous chercher ?'));
+      expect(picker, contains('Zone de recherche'));
+      expect(picker, contains('Autour de moi'));
+      expect(picker, contains('Choisir un lieu'));
+      expect(picker, isNot(contains('Ma position')));
+      expect(picker, contains("ValueKey('category-location-current')"));
+      expect(picker, contains("ValueKey('category-location-custom')"));
       expect(picker, contains("ValueKey('category-address-field')"));
       for (final page in pages) {
         expect(page, contains('NearbyLocationPickerCard('));
@@ -35,7 +39,6 @@ void main() {
     final home = _read('lib/features/home/home_page.dart');
     final onboarding = _read('lib/features/onboarding/onboarding_page.dart');
     final router = _read('lib/core/router/app_router.dart');
-
     expect(home, contains('Votre copilote AutoClair'));
     expect(home, contains('Vos raccourcis'));
     expect(home, isNot(contains("title: 'Mes économies'")));
@@ -55,7 +58,6 @@ void main() {
     final assistant = _read(
       'lib/features/vehicle_care/vehicle_assistant_brief.dart',
     );
-
     expect(helper, contains("return 'Révision avec vidange'"));
     expect(care, contains('VehicleMaintenanceGroup'));
     expect(care, contains('Cela ne confirme pas que ce véhicule est concerné'));

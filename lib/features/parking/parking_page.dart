@@ -276,6 +276,9 @@ class _ParkingPageState extends State<ParkingPage> {
   }
 
   Widget _searchCard(BuildContext context) {
+    final selectedLocation = _locationService.sessionLocation;
+    final usesCurrent =
+        selectedLocation == null || selectedLocation.isDevicePosition;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -313,128 +316,143 @@ class _ParkingPageState extends State<ParkingPage> {
                 selected: _preference == 'free',
                 onTap: () => _setPreference('free'),
               ),
-              _PreferenceChip(
-                label: 'Recharge',
-                icon: Icons.ev_station_rounded,
-                selected: _preference == 'ev',
-                onTap: () => _setPreference('ev'),
-              ),
             ],
           ),
           const SizedBox(height: 18),
-          DropdownButtonFormField<int>(
-            initialValue: _arrivalMinutes,
-            decoration: const InputDecoration(
-              labelText: 'Arrivée prévue',
-              prefixIcon: Icon(Icons.schedule_rounded),
-            ),
-            items: _arrivalChoices
-                .map(
-                  (minutes) => DropdownMenuItem(
-                    value: minutes,
-                    child: Text(
-                      minutes == 0 ? 'Maintenant' : 'Dans $minutes minutes',
-                    ),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: _searching
-                ? null
-                : (value) {
-                    if (value != null) _setArrival(value);
-                  },
-          ),
-          const SizedBox(height: 14),
-          DropdownButtonFormField<String>(
-            initialValue: _parkingType,
-            decoration: const InputDecoration(
-              labelText: 'Type de stationnement',
-              prefixIcon: Icon(Icons.local_parking_rounded),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('Tous les parkings')),
-              DropdownMenuItem(
-                value: 'covered',
-                child: Text('Parkings couverts'),
-              ),
-              DropdownMenuItem(
-                value: 'surface',
-                child: Text('Parkings de surface'),
-              ),
-              DropdownMenuItem(
-                value: 'street',
-                child: Text('Stationnement sur voirie'),
-              ),
-              DropdownMenuItem(
-                value: 'park_and_ride',
-                child: Text('Parcs relais'),
-              ),
-            ],
-            onChanged: _searching
-                ? null
-                : (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _parkingType = value;
-                      _resetResults();
-                    });
-                  },
-          ),
-          const SizedBox(height: 14),
           NearbyLocationPickerCard(
             key: const ValueKey('parking-location-picker'),
             onChanged: (_) => setState(_resetResults),
           ),
-          const SizedBox(height: 12),
-          NearbyRadiusSlider(
-            key: const ValueKey('parking-radius-slider'),
-            value: _radiusKm,
-            min: 1,
-            max: 20,
-            divisions: 19,
-            enabled: !_searching,
-            onChanged: (value) {
-              setState(() {
-                _radiusKm = value.roundToDouble();
-                _resetResults();
-              });
-            },
-          ),
           const SizedBox(height: 10),
-          _FilterSwitch(
-            title: 'Gratuits uniquement',
-            subtitle: 'Les tarifs inconnus sont exclus.',
-            value: _freeOnly,
-            onChanged: _searching
-                ? null
-                : (value) => setState(() {
-                    _freeOnly = value;
-                    _resetResults();
-                  }),
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              key: const ValueKey('parking-advanced-search'),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(top: 6),
+              leading: const Icon(Icons.tune_rounded),
+              title: const Text(
+                'Recherche avancée',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              subtitle: const Text('Horaires, type, rayon et équipements'),
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: _arrivalMinutes,
+                  decoration: const InputDecoration(
+                    labelText: 'Arrivée prévue',
+                    prefixIcon: Icon(Icons.schedule_rounded),
+                  ),
+                  items: _arrivalChoices
+                      .map(
+                        (minutes) => DropdownMenuItem(
+                          value: minutes,
+                          child: Text(
+                            minutes == 0
+                                ? 'Maintenant'
+                                : 'Dans $minutes minutes',
+                          ),
+                        ),
+                      )
+                      .toList(growable: false),
+                  onChanged: _searching
+                      ? null
+                      : (value) {
+                          if (value != null) _setArrival(value);
+                        },
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  initialValue: _parkingType,
+                  decoration: const InputDecoration(
+                    labelText: 'Type de stationnement',
+                    prefixIcon: Icon(Icons.local_parking_rounded),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'all',
+                      child: Text('Tous les parkings'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'covered',
+                      child: Text('Parkings couverts'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'surface',
+                      child: Text('Parkings de surface'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'street',
+                      child: Text('Stationnement sur voirie'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'park_and_ride',
+                      child: Text('Parcs relais'),
+                    ),
+                  ],
+                  onChanged: _searching
+                      ? null
+                      : (value) {
+                          if (value == null) return;
+                          setState(() {
+                            _parkingType = value;
+                            _resetResults();
+                          });
+                        },
+                ),
+                const SizedBox(height: 12),
+                NearbyRadiusSlider(
+                  key: const ValueKey('parking-radius-slider'),
+                  value: _radiusKm,
+                  min: 1,
+                  max: 20,
+                  divisions: 19,
+                  enabled: !_searching,
+                  onChanged: (value) {
+                    setState(() {
+                      _radiusKm = value.roundToDouble();
+                      _resetResults();
+                    });
+                  },
+                ),
+                const SizedBox(height: 4),
+                _FilterSwitch(
+                  title: 'Gratuits uniquement',
+                  subtitle: 'Les tarifs inconnus sont exclus.',
+                  value: _freeOnly,
+                  onChanged: _searching
+                      ? null
+                      : (value) => setState(() {
+                          _freeOnly = value;
+                          _resetResults();
+                        }),
+                ),
+                _FilterSwitch(
+                  title: 'Places PMR déclarées',
+                  subtitle: 'Au moins une place accessible renseignée.',
+                  value: _accessibleOnly,
+                  onChanged: _searching
+                      ? null
+                      : (value) => setState(() {
+                          _accessibleOnly = value;
+                          _resetResults();
+                        }),
+                ),
+                _FilterSwitch(
+                  title: 'Recharge déclarée',
+                  subtitle: 'Au moins un emplacement de recharge renseigné.',
+                  value: _evOnly,
+                  onChanged: _searching
+                      ? null
+                      : (value) => setState(() {
+                          _evOnly = value;
+                          _resetResults();
+                        }),
+                ),
+              ],
+            ),
           ),
-          _FilterSwitch(
-            title: 'Places PMR déclarées',
-            subtitle: 'Au moins une place accessible renseignée.',
-            value: _accessibleOnly,
-            onChanged: _searching
-                ? null
-                : (value) => setState(() {
-                    _accessibleOnly = value;
-                    _resetResults();
-                  }),
-          ),
-          _FilterSwitch(
-            title: 'Recharge déclarée',
-            subtitle: 'Au moins un emplacement de recharge renseigné.',
-            value: _evOnly,
-            onChanged: _searching
-                ? null
-                : (value) => setState(() {
-                    _evOnly = value;
-                    _resetResults();
-                  }),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: _searching ? null : _search,
             icon: _searching
@@ -449,9 +467,9 @@ class _ParkingPageState extends State<ParkingPage> {
             label: Text(
               _searching
                   ? 'Analyse en cours…'
-                  : _locationService.sessionLocation == null
-                  ? 'Trouver le meilleur parking'
-                  : 'Rechercher près de ${_locationService.sessionLocation!.label}',
+                  : usesCurrent
+                  ? 'Trouver autour de moi'
+                  : 'Rechercher près de ${selectedLocation.label}',
             ),
           ),
         ],

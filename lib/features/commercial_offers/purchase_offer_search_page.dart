@@ -367,6 +367,7 @@ class _PurchaseOfferCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final conditions = offer.conditionsPreview;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -378,63 +379,74 @@ class _PurchaseOfferCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: 7,
+            runSpacing: 7,
             children: [
-              _Tag(label: offer.categoryLabel),
-              _Tag(label: offer.compatibilityLabel),
+              for (final badge in offer.purchaseBadgeLabels) _Tag(label: badge),
             ],
           ),
           const SizedBox(height: 12),
           Text(
+            offer.clearBenefitLabel,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
             offer.title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: Theme.of(
               context,
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
-          if (offer.benefitLabel.trim().isNotEmpty) ...[
+          if (offer.priceAmount != null) ...[
             const SizedBox(height: 6),
             Text(
-              offer.benefitLabel,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w800,
-              ),
+              'Prix affiché : ${offer.priceLabel}',
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
             ),
           ],
-          if (offer.summary.trim().isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Text(offer.summary),
+          if (conditions.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Conditions essentielles',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    conditions,
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
           ],
           const SizedBox(height: 10),
           Text(
             offer.validityLabel,
             style: const TextStyle(color: AppColors.textMuted),
           ),
-          if (offer.why.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            for (final reason in offer.why.take(3))
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.check_rounded,
-                      size: 17,
-                      color: AppColors.success,
-                    ),
-                    const SizedBox(width: 7),
-                    Expanded(child: Text(reason)),
-                  ],
-                ),
-              ),
-          ],
           const SizedBox(height: 12),
-          FilledButton.tonalIcon(
-            onPressed: offer.officialUrl.trim().isEmpty ? null : onOpen,
+          FilledButton.icon(
+            onPressed: onOpen,
             icon: const Icon(Icons.open_in_new_rounded),
-            label: const Text('Voir sur le site officiel'),
+            label: const Text('Voir l’offre officielle'),
           ),
         ],
       ),

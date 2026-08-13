@@ -97,6 +97,68 @@ class TireInspectionService {
     }
   }
 
+  Future<TirePhotoQualityCheck> validatePhoto({
+    required String inspectionId,
+    required TirePhotoSlot slot,
+  }) async {
+    try {
+      final response = await _client.functions.invoke(
+        _function,
+        body: {
+          'action': 'validate_photo',
+          'inspection_id': inspectionId,
+          'slot': slot.apiValue,
+        },
+      );
+      if (response.status < 200 ||
+          response.status >= 300 ||
+          response.data is! Map) {
+        throw const TireInspectionException(
+          'Impossible de vérifier cette photo. Réessayez.',
+        );
+      }
+      final payload = Map<String, dynamic>.from(response.data as Map);
+      if (payload['success'] != true || payload['quality'] is! Map) {
+        throw TireInspectionException(
+          _messageForError(payload['error']?.toString()),
+        );
+      }
+      return TirePhotoQualityCheck.fromJson(
+        Map<String, dynamic>.from(payload['quality'] as Map),
+      );
+    } on TireInspectionException {
+      rethrow;
+    } catch (_) {
+      throw const TireInspectionException(
+        'Impossible de vérifier cette photo. Réessayez.',
+      );
+    }
+  }
+
+  Future<void> discardPhoto({
+    required String inspectionId,
+    required String vehicleId,
+    required TirePhotoSlot slot,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) return;
+    final path = '$userId/$vehicleId/$inspectionId/${slot.apiValue}.jpg';
+    try {
+      await _client.storage.from(_bucket).remove([path]);
+    } catch (_) {
+      // Le prochain upload remplace ce chemin ; le nettoyage ne bloque pas l UX.
+    }
+    try {
+      await _client
+          .from('tire_ai_photos')
+          .delete()
+          .eq('inspection_id', inspectionId)
+          .eq('slot', slot.apiValue);
+    } catch (_) {
+      // Même principe : une reprise fera un upsert sur le même slot.
+    }
+  }
+
   Future<TireInspectionResult> analyze(String inspectionId) async {
     try {
       final response = await _client.functions.invoke(
@@ -170,6 +232,9 @@ class TireInspectionService {
   }
 
   String _messageForError(String? code) => switch (code) {
+    'PHOTO_NOT_FOUND' => 'La photo doit être envoyée avant sa vérification.',
+    'PHOTO_SLOT_INVALID' =>
+      'Cette photo ne correspond pas à une étape du contrôle.',
     'PHOTOS_INCOMPLETE' => 'Les 6 photos sont nécessaires avant l’analyse.',
     'ANALYSIS_NOT_READY' =>
       'Le diagnostic doit être terminé avant de comparer les prix.',

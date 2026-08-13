@@ -376,37 +376,6 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
             },
           ),
           const SizedBox(height: 20),
-          Text(
-            'Quantité à recharger',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 5),
-          Text(
-            'Quantité d’électricité que vous prévoyez d’ajouter à la batterie. Elle sert uniquement à estimer le coût.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final energy in ChargingCatalog.energyChoicesKwh)
-                ChoiceChip(
-                  label: Text('${energy.toInt()} kWh'),
-                  selected: _energyKwh == energy,
-                  onSelected: _searching
-                      ? null
-                      : (selected) {
-                          if (!selected) return;
-                          setState(() {
-                            _energyKwh = energy;
-                            _resetResults();
-                          });
-                        },
-                ),
-            ],
-          ),
-          const SizedBox(height: 20),
           NearbyLocationPickerCard(
             key: const ValueKey('charging-location-picker'),
             onChanged: (_) => setState(_resetResults),
@@ -441,9 +410,10 @@ class _ChargingComparePageState extends State<ChargingComparePage> {
             label: Text(
               _searching
                   ? 'Recherche en cours…'
-                  : _locationService.sessionLocation == null
+                  : _locationService.sessionLocation == null ||
+                        _locationService.sessionLocation!.isDevicePosition
                   ? 'Comparer autour de moi'
-                  : 'Comparer autour de ${_locationService.sessionLocation!.label}',
+                  : 'Comparer près de ${_locationService.sessionLocation!.label}',
             ),
           ),
         ],

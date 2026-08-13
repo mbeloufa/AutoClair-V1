@@ -94,6 +94,10 @@ class CommercialOffer {
     this.originalPriceAmount,
     this.startsAt,
     this.endsAt,
+    this.brands = const [],
+    this.modelPatterns = const [],
+    this.fuelTypes = const [],
+    this.commercialValueScore = 0,
   });
 
   final String id;
@@ -128,6 +132,10 @@ class CommercialOffer {
   final DateTime lastVerifiedAt;
   final bool autoExtracted;
   final int? extractionConfidence;
+  final List<String> brands;
+  final List<String> modelPatterns;
+  final List<String> fuelTypes;
+  final int commercialValueScore;
 
   bool get isPurchaseOffer => offerContext == 'VEHICLE_PURCHASE';
 
@@ -170,6 +178,68 @@ class CommercialOffer {
       'LIKELY' => 'Probablement compatible',
       _ => 'Conditions à vérifier',
     };
+  }
+
+  List<String> get purchaseBadgeLabels {
+    final values = <String>[categoryLabel];
+    if (brands.isNotEmpty && brands.first.trim().isNotEmpty) {
+      values.add(brands.first.trim());
+    }
+    if (modelPatterns.isNotEmpty) {
+      final cleaned = modelPatterns.first
+          .replaceAll('*', ' ')
+          .replaceAll('.', ' ')
+          .replaceAll('?', ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      if (cleaned.isNotEmpty) {
+        values.add(cleaned);
+      }
+    }
+    if (fuelTypes.isNotEmpty) {
+      final fuel = switch (fuelTypes.first.toLowerCase()) {
+        'petrol' => 'Essence',
+        'diesel' => 'Diesel',
+        'hybrid' => 'Hybride',
+        'plug_in_hybrid' => 'Hybride rechargeable',
+        'electric' => 'Électrique',
+        _ => fuelTypes.first.trim(),
+      };
+      if (fuel.isNotEmpty) {
+        values.add(fuel);
+      }
+    }
+    return values.toSet().take(4).toList(growable: false);
+  }
+
+  String get clearBenefitLabel {
+    final saving = calculatedSavings;
+    if (saving != null && saving > 0) {
+      return '${_money(saving)} € de remise';
+    }
+    final value = benefitValue;
+    final kind = benefitKind.toUpperCase();
+    if (value != null && value > 0 && kind.contains('PERCENT')) {
+      return '${_money(value)} % de remise';
+    }
+    if (value != null &&
+        value > 0 &&
+        (kind.contains('DISCOUNT') ||
+            kind.contains('AMOUNT') ||
+            kind == 'FIXED')) {
+      return '${_money(value)} € de remise';
+    }
+    return benefitLabel.trim().isEmpty ? priceLabel : benefitLabel.trim();
+  }
+
+  String get conditionsPreview {
+    if (conditionsSummary.trim().isNotEmpty) {
+      return conditionsSummary.trim();
+    }
+    if (eligibilityNotes.trim().isNotEmpty) {
+      return eligibilityNotes.trim();
+    }
+    return summary.trim();
   }
 
   String get validityLabel {
@@ -221,6 +291,10 @@ class CommercialOffer {
       benefitValue: _nullableDecimal(map['benefit_value']),
       priceAmount: _nullableDecimal(map['price_amount']),
       originalPriceAmount: _nullableDecimal(map['original_price_amount']),
+      brands: _stringList(map['brands']),
+      modelPatterns: _stringList(map['model_patterns']),
+      fuelTypes: _stringList(map['fuel_types']),
+      commercialValueScore: _integer(map['commercial_value_score']),
       currency: map['currency']?.toString() ?? 'EUR',
       startsAt: _dateTime(map['starts_at']),
       endsAt: _dateTime(map['ends_at']),
@@ -253,6 +327,16 @@ class CommercialOffer {
           : _integer(map['extraction_confidence']),
     );
   }
+}
+
+List<String> _stringList(Object? value) {
+  if (value is! List) {
+    return const [];
+  }
+  return value
+      .map((item) => item?.toString().trim() ?? '')
+      .where((item) => item.isNotEmpty)
+      .toList(growable: false);
 }
 
 int _integer(Object? value) {

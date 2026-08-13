@@ -105,6 +105,17 @@ const analysisSchema = {
   ],
 };
 
+const singlePhotoQualitySchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    status: { type: "string", enum: ["GOOD", "ACCEPTABLE", "RETAKE"] },
+    message: { type: "string" },
+    tip: { type: ["string", "null"] },
+  },
+  required: ["status", "message", "tip"],
+};
+
 const offersSchema = {
   type: "object",
   additionalProperties: false,
@@ -263,6 +274,67 @@ async function analyzeImages(openaiKey: string, images: Array<{ slot: string; da
   return analysis;
 }
 
+async function validateSinglePhoto(
+  openaiKey: string,
+  slot: string,
+  dataUrl: string,
+): Promise<any> {
+  const tread = slot.endsWith("_TREAD");
+  const expected = tread
+    ? "the tire area that contacts the road must be large, sharp and useful for a visual wear check"
+    : "the side of the tire and its markings must be large enough to read";
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${openaiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      store: false,
+      reasoning: { effort: "low" },
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: [
+              `Validate capture quality only for slot ${slot}.`,
+              `Expected: ${expected}.`,
+              "Do NOT diagnose wear, safety, brand or tire condition in this step.",
+              "Return RETAKE when the intended tire/area is missing, too small, blurred, too dark/bright, strongly obstructed, or the angle does not allow the expected visual check.",
+              "GOOD means clearly usable. ACCEPTABLE means usable despite a minor imperfection. RETAKE means a new photo is required before continuing.",
+              "Write message and tip in very simple French for a driver with no automotive knowledge. Maximum 12 words per field.",
+            ].join("\\n"),
+          },
+          { type: "input_image", image_url: dataUrl, detail: "low" },
+        ],
+      }],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "autoclair_tire_single_photo_quality",
+          strict: true,
+          schema: singlePhotoQualitySchema,
+        },
+      },
+      max_output_tokens: 220,
+    }),
+  });
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`OPENAI_PHOTO_QUALITY_${response.status}:${raw.slice(0, 500)}`);
+  }
+  const decoded = JSON.parse(raw);
+  const text = outputText(decoded);
+  if (!text) throw new Error("OPENAI_PHOTO_QUALITY_EMPTY");
+  const quality = JSON.parse(text);
+  if (!["GOOD", "ACCEPTABLE", "RETAKE"].includes(String(quality?.status))) {
+    throw new Error("OPENAI_PHOTO_QUALITY_INVALID");
+  }
+  return quality;
+}
+
 async function researchOffers(
   openaiKey: string,
   dimensions: string[],
@@ -350,6 +422,31 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (inspectionError || !inspection || inspection.user_id !== user.id) {
       return json(404, { success: false, error: "INSPECTION_NOT_FOUND" });
+    }
+
+    if (action === "validate_photo") {
+      const slot = String(body?.slot ?? "").trim().toUpperCase();
+      if (!REQUIRED_SLOTS.includes(slot as any)) {
+        return json(400, { success: false, error: "PHOTO_SLOT_INVALID" });
+      }
+      const { data: photo, error: photoError } = await admin
+        .from("tire_ai_photos")
+        .select("slot,storage_path,content_type")
+        .eq("inspection_id", inspectionId)
+        .eq("slot", slot)
+        .maybeSingle();
+      if (photoError) throw photoError;
+      if (!photo) return json(404, { success: false, error: "PHOTO_NOT_FOUND" });
+
+      const { data, error: downloadError } = await admin.storage
+        .from(BUCKET)
+        .download(photo.storage_path);
+      if (downloadError || !data) throw new Error(`PHOTO_DOWNLOAD_FAILED:${slot}`);
+      const bytes = new Uint8Array(await data.arrayBuffer());
+      const contentType = String(photo.content_type ?? "image/jpeg");
+      const dataUrl = `data:${contentType};base64,${toBase64(bytes)}`;
+      const quality = await validateSinglePhoto(openaiKey, slot, dataUrl);
+      return json(200, { success: true, quality });
     }
 
     if (action === "offers") {

@@ -154,6 +154,28 @@ class TirePhotoQuality {
   final String reason;
 }
 
+class TirePhotoQualityCheck {
+  const TirePhotoQualityCheck({
+    required this.status,
+    required this.message,
+    required this.tip,
+  });
+
+  factory TirePhotoQualityCheck.fromJson(Map<String, dynamic> json) {
+    return TirePhotoQualityCheck(
+      status: json['status']?.toString() ?? 'RETAKE',
+      message: json['message']?.toString() ?? 'Photo à reprendre.',
+      tip: _nullableText(json['tip']),
+    );
+  }
+
+  final String status;
+  final String message;
+  final String? tip;
+
+  bool get accepted => status == 'GOOD' || status == 'ACCEPTABLE';
+}
+
 class TireInspectionResult {
   const TireInspectionResult({
     required this.status,
