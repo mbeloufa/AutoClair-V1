@@ -344,6 +344,19 @@ function benefitFor(rule: Rule): string {
   };
   return fallback[rule.operation_key] ?? fallback.OTHER;
 }
+function confidenceScore(level: unknown): number {
+  switch (String(level ?? "").toUpperCase()) {
+    case "HIGH":
+      return 0.90;
+    case "MEDIUM":
+      return 0.70;
+    case "LOW":
+      return 0.50;
+    default:
+      return 0.50;
+  }
+}
+
 function nextPreSummerDate(events: any[]): string {
   const now = new Date();
   let year = now.getUTCFullYear();
@@ -375,7 +388,7 @@ function buildSeasonalClimateSchedule(vehicleId: string, userId: string, events:
     source_key: "SEASONAL:CLIMATE",
     source_url: null,
     source_label: "Conseil AutoClair",
-    confidence: "HIGH",
+    confidence: confidenceScore("HIGH"),
     source_quality: "AUTOCLAIR_GUIDANCE",
     calculation_basis: "SEASONAL_ADVICE",
     manufacturer_plan_id: null,
@@ -536,6 +549,9 @@ function classifyMaintenanceFailure(error: unknown): {
     return { code: "AI_TEMPORARILY_UNAVAILABLE", retryable: true };
   }
   if (message.startsWith("OPENAI_")) return { code: "AI_REQUEST_FAILED", retryable: true };
+  if (message.includes('invalid input syntax for type numeric')) {
+    return { code: "MAINTENANCE_DATA_ERROR", retryable: false };
+  }
   return { code: "MAINTENANCE_SERVICE_ERROR", retryable: true };
 }
 
@@ -777,7 +793,7 @@ Deno.serve(async (req) => {
           source_key: key,
           source_url: source.url,
           source_label: source.title,
-          confidence: rule.confidence,
+          confidence: confidenceScore(rule.confidence),
           source_quality: plan.source_quality,
           calculation_basis: basis,
           manufacturer_plan_id: planId,
