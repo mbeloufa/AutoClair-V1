@@ -282,11 +282,18 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
 
   Future<void> _refreshMaintenancePlan() async {
     await _runAction(() async {
+      final alreadyHasManufacturerPlan =
+          _bundle?.schedules.any((schedule) => schedule.isManufacturerPlan) ??
+          false;
       final result = await _careService.refreshManufacturerMaintenancePlan(
         widget.vehicleId,
-        forceRefresh: true,
+        forceRefresh: alreadyHasManufacturerPlan,
       );
       if (!mounted) return;
+      if (!result.success) {
+        _message(result.userMessage);
+        return;
+      }
       final refreshed = await _careService.loadBundle(widget.vehicleId);
       if (!mounted) return;
       setState(() {
@@ -300,7 +307,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
           'Conseil saisonnier actualisé. Le plan constructeur exact reste indisponible pour ce véhicule.',
         );
       } else {
-        _message('Le plan n’a pas pu être actualisé pour le moment.');
+        _message(result.userMessage);
       }
     });
   }

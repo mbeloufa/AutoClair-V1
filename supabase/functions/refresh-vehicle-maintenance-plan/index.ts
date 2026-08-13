@@ -505,18 +505,40 @@ async function researchPlan(
           schema,
         },
       },
-      max_output_tokens: 6500,
+      max_output_tokens: 30000,
     }),
   });
   const raw = await response.text();
   if (!response.ok) throw new Error(`OPENAI_${response.status}:${raw.slice(0, 600)}`);
   const decoded = JSON.parse(raw);
+  if (decoded?.status === "incomplete") {
+    const reason = String(decoded?.incomplete_details?.reason ?? "unknown");
+    throw new Error(`OPENAI_INCOMPLETE:${reason}`);
+  }
   const text = outputText(decoded);
   if (!text) throw new Error("OPENAI_EMPTY_OUTPUT");
   const plan = JSON.parse(text);
   const sources = collectSources(decoded, domains);
   return { plan, sources };
 }
+function classifyMaintenanceFailure(error: unknown): {
+  code: string;
+  retryable: boolean;
+} {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.startsWith("OPENAI_INCOMPLETE:") || message === "OPENAI_EMPTY_OUTPUT") {
+    return { code: "AI_RESPONSE_INCOMPLETE", retryable: true };
+  }
+  if (message.startsWith("OPENAI_401") || message.startsWith("OPENAI_403")) {
+    return { code: "AI_CONFIGURATION_ERROR", retryable: false };
+  }
+  if (message.startsWith("OPENAI_429") || /^OPENAI_5\d\d/.test(message)) {
+    return { code: "AI_TEMPORARILY_UNAVAILABLE", retryable: true };
+  }
+  if (message.startsWith("OPENAI_")) return { code: "AI_REQUEST_FAILED", retryable: true };
+  return { code: "MAINTENANCE_SERVICE_ERROR", retryable: true };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { success: false, error: "METHOD_NOT_ALLOWED" });
@@ -797,7 +819,18 @@ Deno.serve(async (req) => {
       history_entries: maintenanceHistory.length,
     });
   } catch (error) {
-    console.error("refresh-vehicle-maintenance-plan", error);
-    return json(500, { success: false, error: "MAINTENANCE_PLAN_REFRESH_FAILED" });
+    const classified = classifyMaintenanceFailure(error);
+    const internalMessage = error instanceof Error
+      ? error.message.slice(0, 1200)
+      : String(error).slice(0, 1200);
+    console.error("refresh-vehicle-maintenance-plan", {
+      code: classified.code,
+      message: internalMessage,
+    });
+    return json(500, {
+      success: false,
+      error: classified.code,
+      retryable: classified.retryable,
+    });
   }
 });

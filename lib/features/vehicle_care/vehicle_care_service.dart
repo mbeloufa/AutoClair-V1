@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'vehicle_care_models.dart';
@@ -14,11 +16,39 @@ class VehicleMaintenanceRefreshResult {
     required this.success,
     required this.manufacturerReady,
     required this.seasonalReady,
+    this.errorCode,
+    this.retryable = false,
   });
 
   final bool success;
   final bool manufacturerReady;
   final bool seasonalReady;
+  final String? errorCode;
+  final bool retryable;
+
+  String get userMessage {
+    switch (errorCode) {
+      case 'AUTH_REQUIRED':
+        return 'Votre session a expiré. Reconnectez-vous puis relancez la recherche.';
+      case 'VEHICLE_NOT_FOUND':
+        return 'Ce véhicule n’a pas pu être retrouvé. Rechargez sa fiche puis réessayez.';
+      case 'BACKEND_NOT_CONFIGURED':
+      case 'AI_CONFIGURATION_ERROR':
+        return 'La recherche constructeur est indisponible à cause d’un problème de configuration du service.';
+      case 'AI_RESPONSE_INCOMPLETE':
+        return 'La recherche constructeur n’a pas pu aller au bout. Réessayez dans quelques instants.';
+      case 'AI_TEMPORARILY_UNAVAILABLE':
+      case 'AI_REQUEST_FAILED':
+        return 'Le service de recherche constructeur est momentanément indisponible. Réessayez dans quelques instants.';
+      case 'FUNCTION_UNREACHABLE':
+        return 'Impossible de joindre le service d’entretien. Vérifiez votre connexion puis réessayez.';
+      case 'MAINTENANCE_SERVICE_ERROR':
+      case 'INVALID_RESPONSE':
+        return 'Le service d’entretien a rencontré une erreur. Réessayez dans quelques instants.';
+      default:
+        return 'Le plan n’a pas pu être actualisé. Réessayez dans quelques instants.';
+    }
+  }
 }
 
 class VehicleCareService {
@@ -158,24 +188,61 @@ class VehicleCareService {
           success: false,
           manufacturerReady: false,
           seasonalReady: false,
+          errorCode: 'INVALID_RESPONSE',
         );
       }
       final map = Map<String, dynamic>.from(data);
+      final success = map['success'] == true;
       return VehicleMaintenanceRefreshResult(
-        success: map['success'] == true,
-        manufacturerReady: map['success'] == true && map['status'] == 'READY',
-        seasonalReady:
-            map['success'] == true && map['seasonal_schedule'] == true,
+        success: success,
+        manufacturerReady: success && map['status'] == 'READY',
+        seasonalReady: success && map['seasonal_schedule'] == true,
+        errorCode: success ? null : map['error']?.toString(),
+        retryable: map['retryable'] == true,
       );
-    } catch (_) {
-      // L'enrichissement reste non bloquant : le carnet et les événements
-      // restent disponibles si la recherche constructeur est momentanément indisponible.
-      return const VehicleMaintenanceRefreshResult(
+    } catch (error) {
+      return VehicleMaintenanceRefreshResult(
         success: false,
         manufacturerReady: false,
         seasonalReady: false,
+        errorCode: _maintenanceFunctionErrorCode(error),
+        retryable: true,
       );
     }
+  }
+
+  String _maintenanceFunctionErrorCode(Object error) {
+    dynamic details;
+    int? status;
+    if (error is FunctionException) {
+      details = error.details;
+      status = error.status;
+    } else {
+      try {
+        details = (error as dynamic).details;
+        status = (error as dynamic).status as int?;
+      } catch (_) {}
+    }
+    if (details is Map) {
+      final code = details['error']?.toString().trim();
+      if (code != null && code.isNotEmpty) return code;
+    }
+    if (details is String && details.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(details);
+        if (decoded is Map) {
+          final code = decoded['error']?.toString().trim();
+          if (code != null && code.isNotEmpty) return code;
+        }
+      } catch (_) {}
+    }
+    if (status == 401) return 'AUTH_REQUIRED';
+    if (status == 404) return 'VEHICLE_NOT_FOUND';
+    if (status == 429 || status == 504) return 'AI_TEMPORARILY_UNAVAILABLE';
+    if (status == 500 || status == 502 || status == 503 || status == 546) {
+      return 'MAINTENANCE_SERVICE_ERROR';
+    }
+    return 'FUNCTION_UNREACHABLE';
   }
 
   Future<int> applyDefaultMaintenancePlan(String vehicleId) async {
