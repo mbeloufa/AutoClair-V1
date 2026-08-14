@@ -15,6 +15,7 @@ import '../../features/home/action_center_page.dart';
 import '../../features/home/history_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/home/nearby_page.dart';
+import '../../features/smart_trip/smart_trip_page.dart';
 import '../../features/home/vehicles_page.dart';
 import '../../features/onboarding/onboarding_page.dart';
 import '../../features/parking/parking_page.dart';
@@ -196,6 +197,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/documents/new',
         builder: (context, state) => const DocumentUploadPage(),
+      ),
+      GoRoute(
+        path: '/smart-trip',
+        builder: (context, state) => const SmartTripPage(),
       ),
       GoRoute(path: '/nearby', builder: (context, state) => const NearbyPage()),
       GoRoute(

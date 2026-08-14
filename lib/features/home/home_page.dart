@@ -383,6 +383,8 @@ class _HomePageState extends State<HomePage> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
+            _SmartTripHomeCard(onTap: () => context.push<void>('/smart-trip')),
+            const SizedBox(height: 18),
             _HomeMenuGrid(
               hasVehicle: vehicle != null,
               documentCount: _documents.length,
@@ -836,6 +838,65 @@ class _EmptyVehicleCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SmartTripHomeCard extends StatelessWidget {
+  const _SmartTripHomeCard({required this.onTap});
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Material(
+    key: const ValueKey('home-smart-trip-card'),
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(22),
+      side: const BorderSide(color: AppColors.border),
+    ),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppColors.softPrimary,
+                borderRadius: BorderRadius.circular(17),
+              ),
+              child: const Icon(
+                Icons.alt_route_outlined,
+                color: AppColors.primary,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Trajet intelligent',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Comparez péages, carburant et temps avant de partir.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textMuted,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, color: AppColors.primary),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _HomeMenuGrid extends StatelessWidget {
