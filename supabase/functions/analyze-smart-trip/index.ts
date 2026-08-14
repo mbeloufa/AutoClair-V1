@@ -18,13 +18,12 @@ const OFFICIAL_FUEL_DATA_URL =
 const MIN_SAVING_EUR = 2.50;
 const MIN_SAVING_RATIO = 0.03;
 const REQUEST_TIMEOUT_MS = 12000;
-const MAX_ROUTE_REQUESTS = 24;
+const MAX_ROUTE_REQUESTS = 18;
 const SEARCH_CONTEXT_FRANCE = { lat: 46.603354, lng: 1.888334 };
-const SINGLE_FRACTIONS = [0.30, 0.45, 0.60, 0.72, 0.82, 0.90];
+const SINGLE_FRACTIONS = [0.35, 0.50, 0.68, 0.82];
 const WINDOW_FRACTIONS: Array<[number, number]> = [
-  [0.28, 0.52],
-  [0.48, 0.73],
-  [0.70, 0.92],
+  [0.32, 0.60],
+  [0.55, 0.82],
 ];
 
 type Point = { lat: number; lng: number };
@@ -41,6 +40,7 @@ type Candidate = {
   energy_quantity: number;
   energy_cost_eur: number;
   total_cost_eur: number;
+  via_points: Point[];
   points: Point[];
 };
 
@@ -346,6 +346,7 @@ function candidateFromRoute(
   label: string,
   strategy: string,
   complexity: number,
+  viaPoints: Point[],
   consumption: number,
   price: number,
 ): Candidate | null {
@@ -391,6 +392,7 @@ function candidateFromRoute(
     energy_quantity: round(energyQuantity, 2),
     energy_cost_eur: round(energyCost),
     total_cost_eur: round(toll + energyCost),
+    via_points: [...viaPoints],
     points,
   };
 }
@@ -490,6 +492,7 @@ async function routeCandidates(
         : options.label,
       index ? "ALTERNATIVE" : options.strategy,
       options.complexity ?? 0,
+      [...(options.via ?? [])],
       consumption,
       price,
     );
@@ -742,6 +745,9 @@ function publicCandidate(candidate: Candidate) {
 }
 
 function navigationPoints(candidate: Candidate): Point[] {
+  if (candidate.via_points.length) {
+    return candidate.via_points.slice(0, 2);
+  }
   if (candidate.points.length < 6) return [];
   return [pointAt(candidate.points, 0.34), pointAt(candidate.points, 0.67)]
     .filter((value): value is Point => value != null);
@@ -757,6 +763,62 @@ function explorationScore(
     candidate.duration_minutes - baseline.duration_minutes,
   );
   return saving - delay * 0.04 - candidate.complexity_steps * 0.15;
+}
+
+function maxNaturalExtraDistanceKm(baseline: Candidate): number {
+  return round(
+    Math.max(12, Math.min(60, baseline.distance_km * 0.25)),
+    1,
+  );
+}
+
+function extraDistanceKm(
+  candidate: Candidate,
+  baseline: Candidate,
+): number {
+  return candidate.distance_km - baseline.distance_km;
+}
+
+function isNaturalCandidate(
+  candidate: Candidate,
+  baseline: Candidate,
+  maxDelay: number,
+): boolean {
+  const delay =
+    candidate.duration_minutes - baseline.duration_minutes;
+  const extraDistance = extraDistanceKm(candidate, baseline);
+  return delay <= maxDelay + 0.25 &&
+    extraDistance <= maxNaturalExtraDistanceKm(baseline) + 0.1;
+}
+
+function isExplorationCandidate(
+  candidate: Candidate,
+  baseline: Candidate,
+  maxDelay: number,
+): boolean {
+  const delay =
+    candidate.duration_minutes - baseline.duration_minutes;
+  const extraDistance = extraDistanceKm(candidate, baseline);
+  return delay <= maxDelay + 5 &&
+    extraDistance <= maxNaturalExtraDistanceKm(baseline) * 1.4;
+}
+
+function savingAgainst(
+  candidate: Candidate,
+  baseline: Candidate,
+): number {
+  return baseline.total_cost_eur - candidate.total_cost_eur;
+}
+
+function isEligibleDirectCandidate(
+  candidate: Candidate,
+  baseline: Candidate,
+  threshold: number,
+  maxDelay: number,
+): boolean {
+  return candidate.id !== baseline.id &&
+    isNaturalCandidate(candidate, baseline, maxDelay) &&
+    savingAgainst(candidate, baseline) >= threshold;
 }
 
 Deno.serve(async (request) => {
@@ -948,6 +1010,10 @@ Deno.serve(async (request) => {
       withPrice(candidate, fuel.price)
     );
     const baseline = fastest[0];
+    const threshold = Math.max(
+      MIN_SAVING_EUR,
+      baseline.total_cost_eur * MIN_SAVING_RATIO,
+    );
 
     let noToll: Candidate[] = [];
     try {
@@ -975,7 +1041,34 @@ Deno.serve(async (request) => {
     const all: Candidate[] = [...fastest, ...noToll];
     const noTollReference = noToll[0];
 
-    if (noTollReference) {
+    const directCandidates = dedupe(all);
+    const directSavingExists = directCandidates.some((candidate) =>
+      isEligibleDirectCandidate(
+        candidate,
+        baseline,
+        threshold,
+        maxDelay,
+      )
+    );
+
+    const noTollPotential = noTollReference != null &&
+      baseline.toll_eur >= 1.50 &&
+      (
+        baseline.toll_eur - noTollReference.toll_eur
+      ) >= Math.max(1.50, threshold * 0.45) &&
+      (
+        noTollReference.duration_minutes -
+        baseline.duration_minutes
+      ) <= Math.max(maxDelay + 8, 12) &&
+      extraDistanceKm(noTollReference, baseline) <=
+        maxNaturalExtraDistanceKm(baseline) * 1.8;
+
+    const adaptiveSearchUsed =
+      !directSavingExists &&
+      maxDelay >= 3 &&
+      noTollPotential;
+
+    if (noTollReference && adaptiveSearchUsed) {
       const singleTasks = SINGLE_FRACTIONS
         .map((fraction, index) => {
           const via = pointAt(noTollReference.points, fraction);
@@ -1058,16 +1151,17 @@ Deno.serve(async (request) => {
       const promisingSingles = singleResults
         .filter((result) => result.candidate != null)
         .filter((result) =>
-          (
-            result.candidate!.duration_minutes -
-            baseline.duration_minutes
-          ) <= maxDelay + 10
+          isExplorationCandidate(
+            result.candidate!,
+            baseline,
+            maxDelay,
+          )
         )
         .sort((left, right) =>
           explorationScore(right.candidate!, baseline) -
           explorationScore(left.candidate!, baseline)
         )
-        .slice(0, 3);
+        .slice(0, 2);
 
       const comboTasks: Array<() => Promise<Candidate | null>> = [];
       for (let left = 0; left < promisingSingles.length; left += 1) {
@@ -1109,11 +1203,11 @@ Deno.serve(async (request) => {
     }
 
     const candidates = dedupe(all);
-    const frontier = pareto(candidates);
-    const threshold = Math.max(
-      MIN_SAVING_EUR,
-      baseline.total_cost_eur * MIN_SAVING_RATIO,
+    const sensibleCandidates = candidates.filter((candidate) =>
+      candidate.id === baseline.id ||
+      isNaturalCandidate(candidate, baseline, maxDelay)
     );
+    const frontier = pareto(sensibleCandidates);
 
     const eligible = frontier
       .filter((candidate) => candidate.id !== baseline.id)
@@ -1210,9 +1304,14 @@ Deno.serve(async (request) => {
           : 0,
       },
       navigation_waypoints: navigationPoints(winner),
+      adaptive_search_used: adaptiveSearchUsed,
+      selection_policy: "NATURAL_ROUTE_GUARD_V2_2",
       tested_routes: candidates.length,
+      considered_routes: sensibleCandidates.length,
       pareto_routes: frontier.length,
       route_requests: routeRequests,
+      max_natural_extra_distance_km:
+        maxNaturalExtraDistanceKm(baseline),
       saving_threshold_eur: round(threshold),
     });
   } catch (error) {

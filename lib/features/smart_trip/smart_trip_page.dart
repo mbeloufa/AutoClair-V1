@@ -548,6 +548,16 @@ class _PlaceSearchFieldState extends State<_PlaceSearchField> {
   int _requestSerial = 0;
   SmartTripSuggestion? _selected;
 
+  void _clearField() {
+    _debounce?.cancel();
+    _controller.clear();
+    setState(() {
+      _suggestions = const [];
+      _loading = false;
+    });
+    widget.onSelected(null);
+  }
+
   @override
   void dispose() {
     _debounce?.cancel();
@@ -623,7 +633,19 @@ class _PlaceSearchFieldState extends State<_PlaceSearchField> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   )
-                : null,
+                : ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: _controller,
+                    builder: (context, value, child) {
+                      if (value.text.trim().isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return IconButton(
+                        tooltip: 'Vider le champ',
+                        onPressed: _clearField,
+                        icon: const Icon(Icons.close_rounded),
+                      );
+                    },
+                  ),
           ),
         ),
         if (_suggestions.isNotEmpty)
