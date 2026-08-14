@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -9,6 +10,7 @@ import '../../core/theme/app_theme.dart';
 import '../vehicles/vehicle.dart';
 import '../vehicles/vehicle_service.dart';
 import 'smart_trip_models.dart';
+import 'smart_trip_navigation.dart';
 import 'smart_trip_service.dart';
 
 class SmartTripPage extends StatefulWidget {
@@ -246,18 +248,13 @@ class _SmartTripPageState extends State<SmartTripPage> {
     if (result == null) {
       return;
     }
-    final parameters = <String, String>{
-      'api': '1',
-      'origin': result.origin.coordinate,
-      'destination': result.destination.coordinate,
-      'travelmode': 'driving',
-    };
-    if (result.navigationWaypoints.isNotEmpty) {
-      parameters['waypoints'] = result.navigationWaypoints
-          .map((point) => point.coordinate)
-          .join('|');
-    }
-    await _launch(Uri.https('www.google.com', '/maps/dir/', parameters));
+    await _launch(
+      buildSmartTripGoogleMapsUri(
+        origin: result.origin.coordinate,
+        destination: result.destination.coordinate,
+        waypoints: result.navigationWaypoints.map((point) => point.coordinate),
+      ),
+    );
   }
 
   Future<void> _apple() async {
@@ -266,11 +263,15 @@ class _SmartTripPageState extends State<SmartTripPage> {
       return;
     }
     await _launch(
-      Uri.https('maps.apple.com', '/', {
-        'saddr': result.origin.coordinate,
-        'daddr': result.destination.coordinate,
-        'dirflg': 'd',
-      }),
+      buildSmartTripAppleMapsUri(
+        origin: result.origin.coordinate,
+        destination: result.destination.coordinate,
+        waypoints: result.navigationWaypoints.map((point) => point.coordinate),
+        supportsWaypoints: supportsAppleSmartTripWaypoints(
+          isIOS: Platform.isIOS,
+          operatingSystemVersion: Platform.operatingSystemVersion,
+        ),
+      ),
     );
   }
 
@@ -279,11 +280,21 @@ class _SmartTripPageState extends State<SmartTripPage> {
     if (result == null) {
       return;
     }
+    if (result.hasSaving) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Waze n’est pas proposé pour ce trajet optimisé : '
+              'il recalculerait l’itinéraire.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
     await _launch(
-      Uri.https('www.waze.com', '/ul', {
-        'll': result.destination.coordinate,
-        'navigate': 'yes',
-      }),
+      buildSmartTripWazeUri(destination: result.destination.coordinate),
     );
   }
 
@@ -769,6 +780,10 @@ class _Result extends StatelessWidget {
     final consumption = result.consumptionReference;
     final fuel = result.fuelReference;
     final complexity = result.recommended.complexitySteps;
+    final applePreferred = supportsAppleSmartTripWaypoints(
+      isIOS: Platform.isIOS,
+      operatingSystemVersion: Platform.operatingSystemVersion,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -845,37 +860,56 @@ class _Result extends StatelessWidget {
         const SizedBox(height: 16),
         FilledButton.icon(
           key: const ValueKey('smart-trip-open-google'),
-          onPressed: onGoogle,
+          onPressed: applePreferred ? onApple : onGoogle,
           icon: const Icon(Icons.navigation_outlined),
           label: Text(
-            result.hasSaving
-                ? 'Utiliser ce trajet dans Google Maps'
-                : 'Ouvrir dans Google Maps',
+            applePreferred
+                ? 'Démarrer ce trajet dans Plans'
+                : 'Démarrer ce trajet dans Google Maps',
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: onApple,
-                child: const Text('Plans'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: onWaze,
-                child: const Text('Waze'),
-              ),
-            ),
-          ],
-        ),
+        if (Platform.isIOS && applePreferred) ...[
+          const SizedBox(height: 8),
+          OutlinedButton(
+            key: const ValueKey('smart-trip-open-google-alternative'),
+            onPressed: onGoogle,
+            child: const Text('Google Maps'),
+          ),
+        ],
+        if (Platform.isIOS && !applePreferred && !result.hasSaving) ...[
+          const SizedBox(height: 8),
+          OutlinedButton(
+            key: const ValueKey('smart-trip-open-apple-legacy'),
+            onPressed: onApple,
+            child: const Text('Plans'),
+          ),
+        ],
+        if (!result.hasSaving) ...[
+          const SizedBox(height: 8),
+          OutlinedButton(
+            key: const ValueKey('smart-trip-open-waze'),
+            onPressed: onWaze,
+            child: const Text('Waze'),
+          ),
+        ] else ...[
+          const SizedBox(height: 8),
+          Text(
+            'Waze n’est pas proposé pour ce trajet optimisé : '
+            'il recalculerait l’itinéraire.',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.textMuted),
+          ),
+        ],
         if (result.hasSaving) ...[
           const SizedBox(height: 8),
           Text(
-            'Google Maps reçoit des points de passage pour conserver le '
-            'corridor optimisé. Plans et Waze peuvent recalculer.',
+            applePreferred
+                ? 'Plans et Google Maps reçoivent les points de passage '
+                      'AutoClair pour rester au plus près du trajet proposé.'
+                : 'Google Maps reçoit les points de passage AutoClair pour '
+                      'rester au plus près du trajet proposé.',
             textAlign: TextAlign.center,
             style: Theme.of(
               context,
