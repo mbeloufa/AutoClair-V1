@@ -18,10 +18,14 @@ void main() {
     final edge = source('supabase/functions/analyze-tire-inspection/index.ts');
 
     expect(page, contains('assets/tire_inspection/tire_intro.png'));
-    expect(page, contains('assets/tire_inspection/tire_tread_photo.png'));
-    expect(page, contains('assets/tire_inspection/tire_sidewall_photo.png'));
     expect(page, contains('ImageSource.camera'));
     expect(page, contains('ImageSource.gallery'));
+    expect(page, contains('assets/tire_inspection/tire_front_left.png'));
+    expect(page, contains('assets/tire_inspection/tire_front_right.png'));
+    expect(page, contains('assets/tire_inspection/tire_rear_left.png'));
+    expect(page, contains('assets/tire_inspection/tire_rear_right.png'));
+    expect(page, contains('assets/tire_inspection/tire_front_sidewall.png'));
+    expect(page, contains('assets/tire_inspection/tire_rear_sidewall.png'));
     expect(page, contains('Vérification de la photo'));
     expect(page, contains('Photo validée'));
     expect(page, isNot(contains('_CarGuidePainter')));
@@ -42,11 +46,7 @@ void main() {
     expect(edge, contains('Do NOT diagnose wear'));
     expect(edge, contains('detail: "original"'));
 
-    for (final asset in [
-      'assets/tire_inspection/tire_intro.png',
-      'assets/tire_inspection/tire_tread_photo.png',
-      'assets/tire_inspection/tire_sidewall_photo.png',
-    ]) {
+    for (final asset in ['assets/tire_inspection/tire_intro.png']) {
       expect(File(asset).existsSync(), isTrue, reason: asset);
       expect(File(asset).lengthSync(), greaterThan(5000), reason: asset);
     }

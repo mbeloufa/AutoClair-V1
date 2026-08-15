@@ -805,21 +805,35 @@ class _PhotoGuideImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final asset = slot.isTread
-        ? 'assets/tire_inspection/tire_tread_photo.png'
-        : 'assets/tire_inspection/tire_sidewall_photo.png';
-    final semantics = slot.isTread
-        ? 'Personne accroupie prenant la partie du pneu qui touche la route en photo, avec position, distance et angle visibles'
-        : 'Personne accroupie photographiant les inscriptions sur le côté du pneu, avec position, distance et angle visibles';
+    final String assetPath;
+
+    if (slot == TirePhotoSlot.frontLeftTread) {
+      assetPath = 'assets/tire_inspection/tire_front_left.png';
+    } else if (slot == TirePhotoSlot.frontRightTread) {
+      assetPath = 'assets/tire_inspection/tire_front_right.png';
+    } else if (slot == TirePhotoSlot.rearLeftTread) {
+      assetPath = 'assets/tire_inspection/tire_rear_left.png';
+    } else if (slot == TirePhotoSlot.rearRightTread) {
+      assetPath = 'assets/tire_inspection/tire_rear_right.png';
+    } else if (slot == TirePhotoSlot.frontSidewall) {
+      assetPath = 'assets/tire_inspection/tire_front_sidewall.png';
+    } else if (slot == TirePhotoSlot.rearSidewall) {
+      assetPath = 'assets/tire_inspection/tire_rear_sidewall.png';
+    } else {
+      throw StateError('Position de photo pneu non reconnue.');
+    }
+
     return Semantics(
-      label: semantics,
+      label: 'Exemple visuel de la position du téléphone pour cette photo',
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
-        child: Image.asset(
-          asset,
-          height: 250,
-          width: double.infinity,
-          fit: BoxFit.cover,
+        child: AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Image.asset(
+            assetPath,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
+          ),
         ),
       ),
     );
