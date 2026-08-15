@@ -72,5 +72,7 @@
 	<string>AutoClair utilise votre position uniquement pendant l’utilisation pour rechercher des services proches ou analyser un trajet demandé par vous. Aucun itinéraire n’est conservé.</string>
 <key>NSPhotoLibraryUsageDescription</key>
 <string>AutoClair accède uniquement aux photos que vous choisissez afin d’analyser vos documents automobiles ou vos pneus lors d’un contrôle demandé par vous.</string>
+<key>NSMicrophoneUsageDescription</key>
+<string>AutoClair utilise le microphone uniquement lorsque vous choisissez d’enregistrer un bruit du véhicule pour votre dossier d’assistance.</string>
 </dict>
 </plist>

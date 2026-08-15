@@ -17,6 +17,7 @@ import '../../features/home/home_page.dart';
 import '../../features/home/nearby_page.dart';
 import '../../features/smart_trip/smart_trip_page.dart';
 import '../../features/legal_support/legal_support_page.dart';
+import '../../features/emergency_assistance/emergency_assistance_page.dart';
 import '../../features/home/vehicles_page.dart';
 import '../../features/onboarding/onboarding_page.dart';
 import '../../features/parking/parking_page.dart';
@@ -198,6 +199,10 @@ GoRouter createAppRouter(AppController controller) {
       GoRoute(
         path: '/documents/new',
         builder: (context, state) => const DocumentUploadPage(),
+      ),
+      GoRoute(
+        path: '/emergency-assistance',
+        builder: (context, state) => const EmergencyAssistancePage(),
       ),
       GoRoute(
         path: '/legal-support',

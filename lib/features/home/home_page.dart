@@ -385,6 +385,10 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 12),
             _SmartTripHomeCard(onTap: () => context.push<void>('/smart-trip')),
             const SizedBox(height: 18),
+            _EmergencyAssistanceHomeCard(
+              onTap: () => context.push<void>('/emergency-assistance'),
+            ),
+            const SizedBox(height: 18),
             _LegalSupportHomeCard(
               onTap: () => context.push<void>('/legal-support'),
             ),
@@ -901,6 +905,51 @@ class _SmartTripHomeCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _EmergencyAssistanceHomeCard extends StatelessWidget {
+  const _EmergencyAssistanceHomeCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: const ValueKey('home-emergency-assistance-card'),
+      color: Theme.of(context).colorScheme.errorContainer,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.health_and_safety_outlined, size: 30),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Assistance immédiate',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Voyant, bruit, panne ou comportement inhabituel : savoir quoi faire maintenant.',
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LegalSupportHomeCard extends StatelessWidget {
