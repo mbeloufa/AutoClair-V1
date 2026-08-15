@@ -385,6 +385,10 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(height: 12),
             _SmartTripHomeCard(onTap: () => context.push<void>('/smart-trip')),
             const SizedBox(height: 18),
+            _LegalSupportHomeCard(
+              onTap: () => context.push<void>('/legal-support'),
+            ),
+            const SizedBox(height: 18),
             _HomeMenuGrid(
               hasVehicle: vehicle != null,
               documentCount: _documents.length,
@@ -897,6 +901,51 @@ class _SmartTripHomeCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _LegalSupportHomeCard extends StatelessWidget {
+  const _LegalSupportHomeCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: const ValueKey('home-legal-support-card'),
+      color: Theme.of(context).colorScheme.secondaryContainer,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(Icons.fact_check_outlined, size: 28),
+              SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Litiges & démarches',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    SizedBox(height: 3),
+                    Text(
+                      'Organiser un dossier, vérifier les sources officielles et préparer la prochaine démarche.',
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _HomeMenuGrid extends StatelessWidget {
