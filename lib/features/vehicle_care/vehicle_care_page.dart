@@ -17,6 +17,7 @@ import 'vehicle_assistant_brief.dart';
 import 'vehicle_assistant_brief_card.dart';
 import 'vehicle_care_models.dart';
 import 'vehicle_maintenance_presentation.dart';
+import 'vehicle_care_section_navigation.dart';
 import 'vehicle_care_service.dart';
 import 'vehicle_event_notification_service.dart';
 import 'vehicle_smart_reminder.dart';
@@ -47,6 +48,7 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   final _notificationService = VehicleEventNotificationService.instance;
   final _smartReminderStore = VehicleSmartReminderStore();
   final _careSectionKey = GlobalKey();
+  final _careContentKey = GlobalKey();
 
   Vehicle? _vehicle;
   VehicleIdentificationProfile? _identificationProfile;
@@ -442,20 +444,27 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
   }
 
   void _showCareSection(_CareSection section) {
-    setState(() => _section = section);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (!mounted) return;
+    final needsRebuild = _section != section;
+    if (needsRebuild) {
+      setState(() => _section = section);
+    }
+    unawaited(_revealCareSection(waitForRebuild: needsRebuild));
+  }
+
+  Future<void> _revealCareSection({required bool waitForRebuild}) async {
+    if (waitForRebuild) {
+      await WidgetsBinding.instance.endOfFrame;
       if (!mounted) return;
-      final sectionContext = _careSectionKey.currentContext;
-      if (sectionContext == null) return;
-      unawaited(
-        Scrollable.ensureVisible(
-          sectionContext,
-          duration: const Duration(milliseconds: 360),
-          curve: Curves.easeOutCubic,
-          alignment: 0.04,
-        ),
-      );
-    });
+    }
+
+    final revealed = await ensureVehicleCareSectionVisible(
+      contentKey: _careContentKey,
+      fallbackKey: _careSectionKey,
+    );
+    if (!revealed && mounted) {
+      _message('Impossible d’afficher cette section. Réessayez.');
+    }
   }
 
   void _handleAssistantTarget(VehicleAssistantTarget target) {
@@ -561,87 +570,97 @@ class _VehicleCarePageState extends State<VehicleCarePage> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 104),
         children: [
-          _VehicleHeader(vehicle: vehicle, health: bundle.dashboard.health),
-          if (_identificationProfileLoading) ...[
-            const SizedBox(height: 12),
-            const LinearProgressIndicator(minHeight: 2),
-          ] else if (_identificationProfile != null) ...[
-            const SizedBox(height: 12),
-            VehicleIdentificationProfileCard(profile: _identificationProfile!),
-          ],
-          const SizedBox(height: 14),
-          VehicleAssistantBriefCard(
-            brief: assistantBrief,
-            onAction: _handleAssistantTarget,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _VehicleHeader(vehicle: vehicle, health: bundle.dashboard.health),
+              if (_identificationProfileLoading) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(minHeight: 2),
+              ] else if (_identificationProfile != null) ...[
+                const SizedBox(height: 12),
+                VehicleIdentificationProfileCard(
+                  profile: _identificationProfile!,
+                ),
+              ],
+              const SizedBox(height: 14),
+              VehicleAssistantBriefCard(
+                brief: assistantBrief,
+                onAction: _handleAssistantTarget,
+              ),
+              const SizedBox(height: 12),
+              VehicleSmartReminderCard(
+                enabled: _smartRemindersEnabled,
+                busy: _smartReminderBusy || !_smartReminderPreferenceLoaded,
+                availableCount: smartReminderPlans.length,
+                onChanged: (value) => unawaited(_setSmartReminders(value)),
+              ),
+              const SizedBox(height: 14),
+              VehicleCarePrimaryActions(
+                disabled: _actionInProgress,
+                onEvent: _openEventForm,
+                onMileage: _openOdometer,
+                onOffers: _openCommercialOffers,
+                onDocument: _openDocumentUpload,
+                onTireInspection: _openTireInspection,
+              ),
+              const SizedBox(height: 18),
+              KeyedSubtree(
+                key: _careSectionKey,
+                child: _SectionPicker(
+                  selected: _section,
+                  alertCount: recalls.length + bundle.dashboard.risks.length,
+                  onSelected: (value) => setState(() => _section = value),
+                ),
+              ),
+              if (_actionInProgress) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+              ],
+              const SizedBox(height: 18),
+              KeyedSubtree(
+                key: _careContentKey,
+                child: switch (_section) {
+                  _CareSection.overview => _OverviewSection(
+                    vehicle: vehicle,
+                    bundle: bundle,
+                    offerBundle: _offerBundle,
+                    offersLoading: _offersLoading,
+                    onOpenOffers: _openCommercialOffers,
+                    onOpenVehicle360: _openVehicle360,
+                    onExtractSuggestions: _extractSuggestions,
+                    onConfirmSuggestion: _confirmSuggestion,
+                    onDismissSuggestion: _dismissSuggestion,
+                    onAddEvent: _openEventForm,
+                    onOpenTimeline: () =>
+                        _showCareSection(_CareSection.timeline),
+                    onOpenMaintenance: () =>
+                        _showCareSection(_CareSection.maintenance),
+                  ),
+                  _CareSection.timeline => _TimelineSection(
+                    events: bundle.dashboard.recentEvents,
+                    onAddEvent: _openEventForm,
+                  ),
+                  _CareSection.maintenance => _MaintenanceSection(
+                    vehicle: vehicle,
+                    schedules: bundle.schedules,
+                    reminders: bundle.dashboard.upcomingActions,
+                    onRefreshPlan: _refreshMaintenancePlan,
+                    onComplete: _completeSchedules,
+                    onOpenSource: (url) {
+                      unawaited(_openRecallUrl(url));
+                    },
+                  ),
+                  _CareSection.alerts => _AlertsSection(
+                    recalls: recalls,
+                    risks: bundle.dashboard.risks,
+                    onRecallStatus: _updateRecall,
+                    onOpenRecall: _openRecallUrl,
+                  ),
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          VehicleSmartReminderCard(
-            enabled: _smartRemindersEnabled,
-            busy: _smartReminderBusy || !_smartReminderPreferenceLoaded,
-            availableCount: smartReminderPlans.length,
-            onChanged: (value) => unawaited(_setSmartReminders(value)),
-          ),
-          const SizedBox(height: 14),
-          VehicleCarePrimaryActions(
-            disabled: _actionInProgress,
-            onEvent: _openEventForm,
-            onMileage: _openOdometer,
-            onOffers: _openCommercialOffers,
-            onDocument: _openDocumentUpload,
-            onTireInspection: _openTireInspection,
-          ),
-          const SizedBox(height: 18),
-          KeyedSubtree(
-            key: _careSectionKey,
-            child: _SectionPicker(
-              selected: _section,
-              alertCount: recalls.length + bundle.dashboard.risks.length,
-              onSelected: (value) => setState(() => _section = value),
-            ),
-          ),
-          if (_actionInProgress) ...[
-            const SizedBox(height: 12),
-            const LinearProgressIndicator(),
-          ],
-          const SizedBox(height: 18),
-          switch (_section) {
-            _CareSection.overview => _OverviewSection(
-              vehicle: vehicle,
-              bundle: bundle,
-              offerBundle: _offerBundle,
-              offersLoading: _offersLoading,
-              onOpenOffers: _openCommercialOffers,
-              onOpenVehicle360: _openVehicle360,
-              onExtractSuggestions: _extractSuggestions,
-              onConfirmSuggestion: _confirmSuggestion,
-              onDismissSuggestion: _dismissSuggestion,
-              onAddEvent: _openEventForm,
-              onOpenTimeline: () =>
-                  setState(() => _section = _CareSection.timeline),
-              onOpenMaintenance: () =>
-                  setState(() => _section = _CareSection.maintenance),
-            ),
-            _CareSection.timeline => _TimelineSection(
-              events: bundle.dashboard.recentEvents,
-              onAddEvent: _openEventForm,
-            ),
-            _CareSection.maintenance => _MaintenanceSection(
-              vehicle: vehicle,
-              schedules: bundle.schedules,
-              reminders: bundle.dashboard.upcomingActions,
-              onRefreshPlan: _refreshMaintenancePlan,
-              onComplete: _completeSchedules,
-              onOpenSource: (url) {
-                unawaited(_openRecallUrl(url));
-              },
-            ),
-            _CareSection.alerts => _AlertsSection(
-              recalls: recalls,
-              risks: bundle.dashboard.risks,
-              onRecallStatus: _updateRecall,
-              onOpenRecall: _openRecallUrl,
-            ),
-          },
         ],
       ),
     );

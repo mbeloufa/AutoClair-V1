@@ -17,8 +17,16 @@ void main() {
     expect(page, contains('VehicleAssistantBrief.build('));
     expect(page, contains('VehicleAssistantBriefCard('));
     expect(page, contains('_showCareSection('));
-    expect(page, contains('Scrollable.ensureVisible('));
+    expect(page, contains('_revealCareSection('));
+    expect(page, contains('waitForRebuild: needsRebuild'));
+    expect(page, contains('WidgetsBinding.instance.endOfFrame'));
     expect(page, contains('key: _careSectionKey'));
+    expect(page, contains('key: _careContentKey'));
+    final navigation = _read(
+      'lib/features/vehicle_care/vehicle_care_section_navigation.dart',
+    );
+    expect(navigation, contains('Scrollable.ensureVisible('));
+    expect(navigation, isNot(contains('endOfFrame')));
     expect(brief, contains('VehicleAssistantTarget.maintenance'));
     expect(brief, contains('Rappel constructeur programmé'));
     expect(brief, contains('Entretien à rattraper'));
