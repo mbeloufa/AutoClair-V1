@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" role="img" aria-labelledby="title desc">
+<title id="title">Où va l'argent d'un plein de 100 euros ?</title>
+<desc id="desc">Pour 50 litres de SP95-E10 à 2 euros le litre, environ 50,42 euros correspondent à l'accise et à la TVA, et 49,58 euros couvrent le reste de la chaîne.</desc>
+<rect width="800" height="420" rx="24" fill="#f5f9fd"/>
+<rect x="1" y="1" width="798" height="418" rx="23" fill="none" stroke="#d7e8f6"/>
+<text x="40" y="55" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#0b3558">Où va l'argent de votre plein de 100 € ?</text>
+<text x="40" y="88" font-family="Arial,sans-serif" font-size="18" fill="#52677a">50 litres de SP95-E10 à 2 €/L — exemple pédagogique</text>
+<rect x="40" y="125" width="720" height="78" rx="14" fill="#d8eaf8"/>
+<rect x="40" y="125" width="363" height="78" rx="14" fill="#1479bd"/>
+<text x="64" y="173" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#fff">50,42 € fiscalité</text>
+<text x="424" y="173" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#0b3558">49,58 € reste de la chaîne</text>
+<rect x="40" y="238" width="218" height="104" rx="16" fill="#e9f3fb"/>
+<text x="60" y="276" font-family="Arial,sans-serif" font-size="18" fill="#52677a">Accise</text>
+<text x="60" y="316" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#0b3558">33,75 €</text>
+<rect x="291" y="238" width="218" height="104" rx="16" fill="#e9f3fb"/>
+<text x="311" y="276" font-family="Arial,sans-serif" font-size="18" fill="#52677a">TVA comprise</text>
+<text x="311" y="316" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#0b3558">16,67 €</text>
+<rect x="542" y="238" width="218" height="104" rx="16" fill="#fff4dd"/>
+<text x="562" y="276" font-family="Arial,sans-serif" font-size="18" fill="#7a5b16">À retenir</text>
+<text x="562" y="307" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#5f4813">≈ 50 % du plein</text>
+<text x="562" y="332" font-family="Arial,sans-serif" font-size="16" fill="#5f4813">dans cet exemple</text>
+<text x="40" y="387" font-family="Arial,sans-serif" font-size="15" fill="#6b7780">Accise 0,675 €/L + TVA incluse dans un prix TTC de 2 €/L.</text>
+</svg>
