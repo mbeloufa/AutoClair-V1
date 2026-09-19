@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 390" role="img" aria-labelledby="title desc">
+<title id="title">Raffinage : forte hausse en 2026</title>
+<desc id="desc">La marge brute théorique de raffinage DGEC passe d'une moyenne 2026 disponible de 12,3 centimes par litre à 20,6 en août et 23,6 en septembre.</desc>
+<rect width="800" height="390" rx="24" fill="#f5f9fd"/>
+<rect x="1" y="1" width="798" height="388" rx="23" fill="none" stroke="#d7e8f6"/>
+<text x="40" y="52" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#0b3558">Raffinage : le poste qui grimpe en 2026</text>
+<text x="40" y="82" font-family="Arial,sans-serif" font-size="17" fill="#52677a">Marge brute théorique DGEC — ce n'est pas le bénéfice net d'une raffinerie</text>
+<line x1="70" y1="310" x2="740" y2="310" stroke="#9fbfd6" stroke-width="2"/>
+<rect x="115" y="207" width="130" height="103" rx="10" fill="#8ec8ed"/>
+<text x="180" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" font-weight="700" fill="#0b3558">12,3 c€/L</text>
+<text x="180" y="340" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" fill="#52677a">Moyenne 2026</text>
+<rect x="335" y="138" width="130" height="172" rx="10" fill="#3d9bd5"/>
+<text x="400" y="120" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" font-weight="700" fill="#0b3558">20,6 c€/L</text>
+<text x="400" y="340" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" fill="#52677a">Août 2026</text>
+<rect x="555" y="113" width="130" height="197" rx="10" fill="#1479bd"/>
+<text x="620" y="95" text-anchor="middle" font-family="Arial,sans-serif" font-size="24" font-weight="700" fill="#0b3558">23,6 c€/L</text>
+<text x="620" y="340" text-anchor="middle" font-family="Arial,sans-serif" font-size="17" fill="#52677a">Septembre 2026</text>
+<text x="40" y="375" font-family="Arial,sans-serif" font-size="14" fill="#6b7780">Source : DGEC, bulletin du 11 septembre 2026.</text>
+</svg>
