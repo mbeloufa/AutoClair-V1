@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 390" role="img" aria-labelledby="title desc">
+<title id="title">Une hausse de 30 centimes par litre peut venir de plusieurs maillons</title>
+<desc id="desc">La hausse peut venir du pétrole brut, du raffinage, de la distribution, puis la TVA suit la base taxable. Ce n'est pas une répartition automatique.</desc>
+<rect width="800" height="390" rx="24" fill="#f5f9fd"/>
+<rect x="1" y="1" width="798" height="388" rx="23" fill="none" stroke="#d7e8f6"/>
+<text x="40" y="54" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#0b3558">+30 c€/L : où peut naître la hausse ?</text>
+<text x="40" y="84" font-family="Arial,sans-serif" font-size="17" fill="#52677a">Des causes possibles — pas une répartition automatique.</text>
+<circle cx="400" cy="210" r="78" fill="#1479bd"/>
+<text x="400" y="203" text-anchor="middle" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#fff">+30</text>
+<text x="400" y="239" text-anchor="middle" font-family="Arial,sans-serif" font-size="23" font-weight="700" fill="#fff">c€/L</text>
+<rect x="45" y="125" width="220" height="78" rx="14" fill="#e5f2fb"/>
+<text x="65" y="158" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#0b3558">Pétrole brut</text>
+<text x="65" y="184" font-family="Arial,sans-serif" font-size="15" fill="#52677a">si le marché monte</text>
+<rect x="535" y="125" width="220" height="78" rx="14" fill="#e5f2fb"/>
+<text x="555" y="158" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#0b3558">Raffinage</text>
+<text x="555" y="184" font-family="Arial,sans-serif" font-size="15" fill="#52677a">si la marge brute s'envole</text>
+<rect x="45" y="235" width="220" height="78" rx="14" fill="#e5f2fb"/>
+<text x="65" y="268" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#0b3558">Distribution</text>
+<text x="65" y="294" font-family="Arial,sans-serif" font-size="15" fill="#52677a">si les coûts de chaîne montent</text>
+<rect x="535" y="235" width="220" height="78" rx="14" fill="#fff4dd"/>
+<text x="555" y="268" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#5f4813">TVA</text>
+<text x="555" y="294" font-family="Arial,sans-serif" font-size="15" fill="#5f4813">elle suit la base taxable</text>
+<text x="40" y="360" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#0b3558">À retenir : +30 c€/L ne signifie pas +30 c€ de marge pour la station.</text>
+</svg>
