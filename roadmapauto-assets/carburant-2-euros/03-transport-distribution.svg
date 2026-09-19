@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 430" role="img" aria-labelledby="title desc">
+<title id="title">Les 23,3 centimes par litre ne sont pas la marge de la station</title>
+<desc id="desc">La composante transport-distribution couvre la raffinerie ou importation, le dépôt et stockage, le camionnage, l'exploitation de la station, les obligations réglementaires et la marge des opérateurs.</desc>
+<rect width="800" height="430" rx="24" fill="#f5f9fd"/>
+<rect x="1" y="1" width="798" height="428" rx="23" fill="none" stroke="#d7e8f6"/>
+<text x="40" y="54" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#0b3558">23,3 c€/L : ce n'est pas la marge de la station</text>
+<text x="40" y="84" font-family="Arial,sans-serif" font-size="17" fill="#52677a">Transport-distribution du SP95-E10 — 11 septembre 2026</text>
+<rect x="36" y="125" width="118" height="155" rx="16" fill="#e5f2fb"/>
+<text x="95" y="175" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#0b3558">Raffinerie</text>
+<text x="95" y="201" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#52677a">ou import</text>
+<text x="169" y="208" font-family="Arial,sans-serif" font-size="28" fill="#1479bd">→</text>
+<rect x="195" y="125" width="118" height="155" rx="16" fill="#e5f2fb"/>
+<text x="254" y="175" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#0b3558">Dépôt</text>
+<text x="254" y="201" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#52677a">stockage</text>
+<text x="328" y="208" font-family="Arial,sans-serif" font-size="28" fill="#1479bd">→</text>
+<rect x="354" y="125" width="118" height="155" rx="16" fill="#e5f2fb"/>
+<text x="413" y="175" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#0b3558">Camion</text>
+<text x="413" y="201" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#52677a">livraison</text>
+<text x="487" y="208" font-family="Arial,sans-serif" font-size="28" fill="#1479bd">→</text>
+<rect x="513" y="125" width="118" height="155" rx="16" fill="#e5f2fb"/>
+<text x="572" y="175" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#0b3558">Station</text>
+<text x="572" y="201" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" fill="#52677a">exploitation</text>
+<text x="646" y="208" font-family="Arial,sans-serif" font-size="28" fill="#1479bd">→</text>
+<rect x="672" y="125" width="92" height="155" rx="16" fill="#fff4dd"/>
+<text x="718" y="166" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="#5f4813">Obligations</text>
+<text x="718" y="194" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="#5f4813">+</text>
+<text x="718" y="222" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="700" fill="#5f4813">marge</text>
+<rect x="40" y="315" width="720" height="70" rx="14" fill="#dceefa"/>
+<text x="60" y="344" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#0b3558">Les 23,3 c€/L additionnent plusieurs coûts.</text>
+<text x="60" y="370" font-family="Arial,sans-serif" font-size="16" fill="#52677a">Dire qu'une station « gagne 23,3 centimes » par litre serait donc faux.</text>
+<text x="40" y="414" font-family="Arial,sans-serif" font-size="14" fill="#6b7780">Sources : DGEC et ministère de la Transition écologique.</text>
+</svg>
