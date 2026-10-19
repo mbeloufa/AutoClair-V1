@@ -108,6 +108,7 @@ class PremiumCatalog {
   static const freeBenefits = <String>[
     'Gérer vos véhicules, votre carnet et vos rappels',
     'Consulter vos documents et résultats déjà acquis',
+    '1 première analyse documentaire offerte',
     '1 premier Bilan AutoClair 360 offert',
   ];
 
