@@ -111,7 +111,11 @@ Deno.serve(async (request) => {
 
     if (type === "CANCELLATION" || type === "REFUND") {
       const {error}=await admin.rpc("commercial_revoke_purchase",{
-        p_store:store,p_transaction_id:transactionId,
+        p_user_id:userId,
+        p_product_code:product.code,
+        p_store:store,
+        p_transaction_id:transactionId,
+        p_environment:environment,
       });
       if (error) throw new Error("REFUND_RECONCILIATION_FAILED");
       return json(200,{ accepted:true, refunded:true });
