@@ -16,6 +16,7 @@ values
  ('tire_offers',2,8,200,true),
  ('legal',2,10,150,true),
  ('smart_trip',2,10,250,true),
+ ('smart_trip_autocomplete',40,120,500,true),
  ('emergency',3,15,300,true),
  ('maintenance',2,8,200,true),
  ('identification',3,12,300,true),
