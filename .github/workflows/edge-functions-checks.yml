@@ -1,0 +1,37 @@
+name: V1 commerciale — validation Edge Functions
+on:
+  pull_request:
+    paths:
+      - 'supabase/functions/**'
+      - '.github/workflows/edge-functions-checks.yml'
+  workflow_dispatch:
+concurrency:
+  group: commercial-deno-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  deno-typecheck:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Check each commercial Edge Function
+        run: |
+          deno check --node-modules-dir=auto \
+            supabase/functions/_shared/commercial_budget.ts \
+            supabase/functions/revenuecat-commercial-webhook/index.ts \
+            supabase/functions/sync-commercial-purchases/index.ts \
+            supabase/functions/sync-premium-entitlement/index.ts \
+            supabase/functions/generate-vehicle-360-report/index.ts \
+            supabase/functions/analyze-document/index.ts \
+            supabase/functions/analyze-tire-inspection/index.ts \
+            supabase/functions/analyze-legal-case/index.ts \
+            supabase/functions/analyze-smart-trip/index.ts \
+            supabase/functions/analyze-emergency/index.ts \
+            supabase/functions/refresh-vehicle-maintenance-plan/index.ts \
+            supabase/functions/identify-vehicle/index.ts \
+            supabase/functions/refresh-vehicle-valuation/index.ts \
+            supabase/functions/delete-account/index.ts
