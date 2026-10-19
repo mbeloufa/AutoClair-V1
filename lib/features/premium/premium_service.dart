@@ -148,7 +148,7 @@ class PremiumService {
       }
 
       await _syncServerRequired();
-      return load();
+      return await load();
     } on PlatformException catch (error) {
       final code = PurchasesErrorHelper.getErrorCode(error);
       if (code == PurchasesErrorCode.purchaseCancelledError) {
@@ -184,7 +184,7 @@ class PremiumService {
       await _ensureConfigured(user.id);
       await Purchases.restorePurchases();
       await _syncServerRequired();
-      return load();
+      return await load();
     } catch (_) {
       throw const PremiumException(
         'Impossible de restaurer vos achats pour le moment.',
