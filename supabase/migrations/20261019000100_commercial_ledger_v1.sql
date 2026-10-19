@@ -182,12 +182,26 @@ declare v_op public.commercial_credit_operations%rowtype;
         v_lot public.commercial_credit_lots%rowtype;
 begin
  if length(trim(coalesce(p_request_key,'')))<12 then raise exception 'REQUEST_KEY_INVALID'; end if;
- perform pg_advisory_xact_lock(hashtextextended(p_user_id::text||':'||p_kind||':'||p_request_key,0));
+ -- Serialize all credits of this account + feature, not just matching requests.
+ perform pg_advisory_xact_lock(hashtextextended(p_user_id::text||':'||p_kind,0));
  select * into v_op from public.commercial_credit_operations
  where user_id=p_user_id and kind=p_kind and operation_key=p_request_key for update;
- if found then
-   return jsonb_build_object('ok',v_op.status in ('reserved','consumed'),
-                            'status',v_op.status,'operation_id',v_op.id);
+ if found and v_op.status in ('reserved','consumed') then
+   return jsonb_build_object('ok',true,'status',v_op.status,'operation_id',v_op.id);
+ end if;
+ -- Single complete documentary trial per account. Existing completed
+ -- analyses are not retroactively given another free treatment.
+ if p_kind='document' and not exists (
+   select 1 from public.commercial_credit_lots
+   where user_id=p_user_id and kind='document'
+     and source='trial' and source_key='trial:document:v1'
+ ) and not exists (
+   select 1 from public.document_analyses where user_id=p_user_id
+ ) then
+   insert into public.commercial_credit_lots
+    (user_id,kind,source,source_key,units_total)
+   values(p_user_id,'document','trial','trial:document:v1',1)
+   on conflict (user_id,kind,source_key) do nothing;
  end if;
  select * into v_lot from public.commercial_credit_lots
  where user_id=p_user_id and kind=p_kind and revoked_at is null
@@ -199,10 +213,17 @@ begin
  if not found then return jsonb_build_object('ok',false,'status','insufficient'); end if;
  update public.commercial_credit_lots set units_reserved=units_reserved+1
  where id=v_lot.id;
- insert into public.commercial_credit_operations
- (user_id,kind,operation_key,lot_id,status,reservation_expires_at)
- values(p_user_id,p_kind,p_request_key,v_lot.id,'reserved',now()+interval '45 minutes')
- returning * into v_op;
+ if v_op.id is null then
+   insert into public.commercial_credit_operations
+    (user_id,kind,operation_key,lot_id,status,reservation_expires_at)
+   values(p_user_id,p_kind,p_request_key,v_lot.id,'reserved',now()+interval '45 minutes')
+   returning * into v_op;
+ else
+   update public.commercial_credit_operations
+     set lot_id=v_lot.id,status='reserved',
+         reservation_expires_at=now()+interval '45 minutes',updated_at=now()
+     where id=v_op.id returning * into v_op;
+ end if;
  return jsonb_build_object('ok',true,'status','reserved','operation_id',v_op.id);
 end;$$;
 revoke all on function private.commercial_reserve_credit(uuid,text,text) from public,anon,authenticated;
