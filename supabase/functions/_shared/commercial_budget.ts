@@ -1,5 +1,3 @@
-import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-
 /**
  * Called ONLY after authenticating the user, checking object ownership and
  * rejecting cached/no-cost requests. A fresh server UUID prevents clients
@@ -10,11 +8,22 @@ import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
  * deterministic safety guidance must remain accessible if AI is throttled.
  */
 export async function requireCommercialBudget(
-  admin: SupabaseClient,
+  admin: unknown,
   userId: string,
   feature: string,
 ): Promise<void> {
-  const { data, error } = await admin.rpc("commercial_try_feature", {
+  if (!admin || typeof (admin as {rpc?:unknown}).rpc !== "function") {
+    throw new Error("COMMERCIAL_BUDGET_UNAVAILABLE");
+  }
+  // Supabase 2.x can be loaded through npm: or esm.sh in legacy functions.
+  // Cross-package types are structurally incompatible despite identical APIs.
+  const client = admin as {
+    rpc: (name:string,args:Record<string,unknown>)=>Promise<{
+      data:Record<string,unknown>|null;
+      error:{message:string}|null;
+    }>;
+  };
+  const { data, error } = await client.rpc("commercial_try_feature", {
     p_user_id: userId,
     p_feature: feature,
     p_operation_key: crypto.randomUUID(),
