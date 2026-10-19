@@ -120,6 +120,8 @@ class _PremiumPageState extends State<PremiumPage> {
                 benefits: PremiumCatalog.premiumBenefits,
                 highlighted: true,
               ),
+              const SizedBox(height: 14),
+              const _PacksSummary(),
               const SizedBox(height: 20),
               if (_loading)
                 const Center(
@@ -160,6 +162,28 @@ class _PremiumPageState extends State<PremiumPage> {
       );
     }
 
+    if (!PremiumCatalog.checkoutEnabled) {
+      return Column(
+        children: [
+          _MessageCard(
+            icon: state.active ? Icons.verified_outlined : Icons.info_outline,
+            title: state.active ? 'Abonnement actuel reconnu' : 'Achats en préparation',
+            message: state.active
+                ? 'Votre abonnement existant reste pris en compte. '
+                  'Les prochains achats ouvriront une fois les quotas sécurisés.'
+                : 'Les tarifs et quantités des packs seront affichés '
+                  'avant toute mise en vente. Aucun paiement n’est demandé.',
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _restore,
+            icon: const Icon(Icons.restore),
+            label: const Text('Restaurer mes achats'),
+          ),
+        ],
+      );
+    }
+
     if (state.active) {
       return Column(
         children: [
@@ -167,7 +191,7 @@ class _PremiumPageState extends State<PremiumPage> {
             icon: Icons.verified_outlined,
             title: 'Premium actif',
             message:
-                'Vous pouvez lancer vos Bilans AutoClair 360 sans utiliser de crédit.',
+                'Votre abonnement est reconnu. Le compteur des nouveaux traitements doit être confirmé côté serveur.',
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -250,6 +274,44 @@ class _PremiumPageState extends State<PremiumPage> {
   }
 }
 
+class _PacksSummary extends StatelessWidget {
+  const _PacksSummary();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Achats ponctuels, sans abonnement',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            for (final pack in PremiumCatalog.packs)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    const Icon(Icons.inventory_2_outlined, size: 18),
+                    const SizedBox(width: 9),
+                    Expanded(child: Text(pack.name)),
+                    const SizedBox(width: 8),
+                    const Text('À préciser'),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+            Text('Les quantités et prix des packs seront publiés après '
+                 'validation des coûts et du suivi des crédits.',
+              style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PremiumHero extends StatelessWidget {
   const _PremiumHero();
 
@@ -280,7 +342,7 @@ class _PremiumHero extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Premium prolonge l’accès au Bilan AutoClair 360 après votre essai offert.',
+          'Découvrez le Bilan 360 offert et consultez les formules annuelles ou les futurs packs, sans abonnement obligatoire pour un pack.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyLarge,
         ),
