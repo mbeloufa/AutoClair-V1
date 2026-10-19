@@ -317,7 +317,8 @@ function buildMaintenanceHistory(events: any[]): any[] {
       rows.push({
         operation_key: operationKey,
         occurred_at: String(event?.occurred_at ?? "").slice(0, 10),
-        mileage: Number.isFinite(mileage) ? Math.round(mileage) : null,
+        mileage: mileage != null && Number.isFinite(mileage)
+          ? Math.round(mileage) : null,
       });
       if (rows.length >= 80) return rows;
     }
