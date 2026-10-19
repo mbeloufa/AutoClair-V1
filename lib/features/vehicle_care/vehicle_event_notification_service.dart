@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -24,6 +25,17 @@ class VehicleEventNotificationService {
       FlutterLocalNotificationsPlugin();
 
   bool _initialized = false;
+  final StreamController<String> _notificationPayloads =
+      StreamController<String>.broadcast();
+  Stream<String> get notificationPayloads => _notificationPayloads.stream;
+  String? _initialPayload;
+
+  Future<String?> takeInitialNotification() async {
+    await _initialize();
+    final current = _initialPayload;
+    _initialPayload = null;
+    return current;
+  }
 
   Future<void> scheduleReminder({
     required String vehicleId,
@@ -231,7 +243,19 @@ class VehicleEventNotificationService {
         requestSoundPermission: false,
       ),
     );
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (response) {
+        final payload = response.payload;
+        if (payload != null && payload.isNotEmpty) {
+          _notificationPayloads.add(payload);
+        }
+      },
+    );
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true) {
+      _initialPayload = launch?.notificationResponse?.payload;
+    }
     _initialized = true;
   }
 
