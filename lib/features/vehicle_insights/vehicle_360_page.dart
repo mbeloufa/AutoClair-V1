@@ -236,6 +236,13 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
         title: const Text('Bilan AutoClair 360'),
         actions: [
           IconButton(
+            onPressed: _generating ? null : () => context.push(
+              '/feedback?source=vehicle360&reference=${widget.vehicleId}',
+            ),
+            tooltip: 'Signaler une erreur du bilan',
+            icon: const Icon(Icons.flag_outlined),
+          ),
+          IconButton(
             onPressed: _loading || _generating ? null : _load,
             tooltip: 'Actualiser les informations',
             icon: const Icon(Icons.refresh_outlined),
