@@ -176,10 +176,11 @@ Deno.serve(async (request) => {
   // Store-verified annual allocations are granted per renewal cycle.
   // Inactive products or unconfigured quotas allocate nothing.
   if (active && effectiveExpiry && typeof entitlement?.product_identifier === "string") {
+    // Stable renewal identifier: purchase_date changes at renewal,
+    // but expiration/grace dates can move inside the same paid period.
     const cycle = [
       entitlement.product_identifier,
       entitlement.purchase_date ?? "",
-      effectiveExpiry.toISOString(),
     ].join(":");
     const { error: cycleError } = await adminClient.rpc(
       "commercial_grant_subscription_cycle", {
