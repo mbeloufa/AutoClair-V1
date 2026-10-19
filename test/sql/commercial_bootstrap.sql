@@ -40,9 +40,9 @@ insert into public.document_analyses(user_id)
 -- Stand-ins for two actual legacy SECURITY DEFINER functions. Test that
 -- anonymous users lose execute, while signed-in user RPCs still work.
 create function public.get_vehicle_report_access()
-returns int language sql security definer as $select 1$;
+returns int language sql security definer as $mock$ select 1 $mock$;
 create function public.maintain_commercial_offers_v6()
-returns int language sql security definer as $select 1$;
+returns int language sql security definer as $mock$ select 1 $mock$;
 
 create table public.user_entitlements(
  id uuid primary key default gen_random_uuid(),
