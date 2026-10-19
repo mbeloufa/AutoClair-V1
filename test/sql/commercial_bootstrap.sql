@@ -37,6 +37,13 @@ values ('33333333-3333-4333-8333-333333333333','trial',
 insert into public.document_analyses(user_id)
  values('11111111-1111-4111-8111-111111111111');
 
+-- Stand-ins for two actual legacy SECURITY DEFINER functions. Test that
+-- anonymous users lose execute, while signed-in user RPCs still work.
+create function public.get_vehicle_report_access()
+returns int language sql security definer as $select 1$;
+create function public.maintain_commercial_offers_v6()
+returns int language sql security definer as $select 1$;
+
 create table public.user_entitlements(
  id uuid primary key default gen_random_uuid(),
  user_id uuid not null references auth.users(id),
