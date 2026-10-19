@@ -20,7 +20,7 @@ jobs:
         with:
           deno-version: v2.x
       - name: Test commercial AI budget guard
-        run: deno test --node-modules-dir=auto test/deno/commercial_budget_test.ts
+        run: deno test --node-modules-dir=auto test/deno/*.ts
       - name: Check each commercial Edge Function
         run: |
           deno check --node-modules-dir=auto \
