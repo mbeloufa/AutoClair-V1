@@ -6,7 +6,7 @@ Statut : **préparation non commercialisable**. Les catalogues et les textes de 
 
 | Code interne | Offre | Prix TTC | Unités | Durée / règle | ID store | Vente |
 |---|---|---:|---|---|---|---|
-| premium_annual | Abonnement annuel | 29,99 € (cible, vérifier prix store) | Quotats document/360 à mesurer | 12 mois, renouvellement automatique selon Store | À confirmer | Fermée |
+| premium_annual | Abonnement annuel | 29,99 € (cible, vérifier prix store) | Quotas documents / Bilan 360 à mesurer | 12 mois, renouvellement automatique selon Store | À confirmer | Fermée |
 | analysis_small | Petit pack d’analyses documentaires | À chiffrer | À définir | Crédit acheté conservé indépendamment de Premium | À créer | Fermée |
 | analysis_large | Grand pack d’analyses documentaires | À chiffrer | À définir | Crédit acheté conservé indépendamment de Premium | À créer | Fermée |
 | vehicle360_single | Bilan 360 à l’unité | À chiffrer | 1 | Crédit acheté conservé indépendamment de Premium | À créer | Fermée |
