@@ -141,7 +141,7 @@ begin
  select * into v_tx from public.commercial_store_transactions
  where store=p_store and store_transaction_id=p_transaction_id for update;
  if v_tx.user_id <> p_user_id or v_tx.product_code <> p_product_code
- or v_tx.status <> 'confirmed' then
+ or v_tx.environment <> p_environment or v_tx.status <> 'confirmed' then
    raise exception 'PURCHASE_CONFLICT_OR_REFUNDED';
  end if;
  insert into public.commercial_credit_lots
@@ -167,8 +167,11 @@ begin
  values (p_user_id,p_store,p_transaction_id,p_product_code,p_environment,'refunded')
  on conflict (store,store_transaction_id) do update
    set status='refunded',updated_at=now()
+   where commercial_store_transactions.user_id=excluded.user_id
+     and commercial_store_transactions.product_code=excluded.product_code
+     and commercial_store_transactions.environment=excluded.environment
  returning * into v_tx;
- if v_tx.user_id<>p_user_id or v_tx.product_code<>p_product_code then
+ if v_tx.id is null then
     raise exception 'REFUND_PURCHASE_OWNER_MISMATCH';
  end if;
  update public.commercial_credit_lots
