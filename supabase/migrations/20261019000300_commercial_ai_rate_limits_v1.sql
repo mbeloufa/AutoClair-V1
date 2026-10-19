@@ -12,7 +12,7 @@ insert into public.commercial_ai_daily_limits
  (feature,free_per_day,premium_per_day,per_feature_global_per_day,enabled)
 values
  ('tire_ai',2,10,200,true),
- ('tire_photo',5,20,300,true),
+ ('tire_photo',8,40,300,true),
  ('tire_offers',2,8,200,true),
  ('legal',2,10,150,true),
  ('smart_trip',2,10,250,true),
