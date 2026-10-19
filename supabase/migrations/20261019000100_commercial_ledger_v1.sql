@@ -155,22 +155,29 @@ revoke all on function private.commercial_grant_verified_purchase(uuid,text,text
 grant execute on function private.commercial_grant_verified_purchase(uuid,text,text,text,text,timestamptz) to service_role;
 
 create or replace function private.commercial_revoke_purchase(
- p_store text,p_transaction_id text
+ p_user_id uuid,p_product_code text,p_store text,
+ p_transaction_id text,p_environment text
 ) returns boolean language plpgsql security definer set search_path=''
 as $$
-declare v_tx_id uuid;
+declare v_tx public.commercial_store_transactions%rowtype;
 begin
- update public.commercial_store_transactions set status='refunded',updated_at=now()
- where store=p_store and store_transaction_id=p_transaction_id
- returning id into v_tx_id;
- if v_tx_id is null then return false; end if;
- -- Previously consumed units remain auditable; unused become non-spendable.
- update public.commercial_credit_lots set revoked_at=coalesce(revoked_at,now())
- where transaction_id=v_tx_id;
+ -- Refund tombstones protect against out-of-order webhook notifications.
+ insert into public.commercial_store_transactions
+  (user_id,store,store_transaction_id,product_code,environment,status)
+ values (p_user_id,p_store,p_transaction_id,p_product_code,p_environment,'refunded')
+ on conflict (store,store_transaction_id) do update
+   set status='refunded',updated_at=now()
+ returning * into v_tx;
+ if v_tx.user_id<>p_user_id or v_tx.product_code<>p_product_code then
+    raise exception 'REFUND_PURCHASE_OWNER_MISMATCH';
+ end if;
+ update public.commercial_credit_lots
+   set revoked_at=coalesce(revoked_at,now())
+ where transaction_id=v_tx.id;
  return true;
 end;$$;
-revoke all on function private.commercial_revoke_purchase(text,text) from public,anon,authenticated;
-grant execute on function private.commercial_revoke_purchase(text,text) to service_role;
+revoke all on function private.commercial_revoke_purchase(uuid,text,text,text,text) from public,anon,authenticated;
+grant execute on function private.commercial_revoke_purchase(uuid,text,text,text,text) to service_role;
 
 -- Atomic reservation. Idempotence is bound to authenticated user, feature
 -- and a stable request key; the external API is called only after success.
@@ -293,11 +300,13 @@ revoke all on function public.commercial_grant_verified_purchase(uuid,text,text,
 grant execute on function public.commercial_grant_verified_purchase(uuid,text,text,text,text,timestamptz) to service_role;
 
 create or replace function public.commercial_revoke_purchase(
- p_store text,p_transaction_id text
+ p_user_id uuid,p_product_code text,p_store text,
+ p_transaction_id text,p_environment text
 ) returns boolean language sql security invoker set search_path=''
-as $$ select private.commercial_revoke_purchase(p_store,p_transaction_id); $$;
-revoke all on function public.commercial_revoke_purchase(text,text) from public,anon,authenticated;
-grant execute on function public.commercial_revoke_purchase(text,text) to service_role;
+as $ select private.commercial_revoke_purchase(
+ p_user_id,p_product_code,p_store,p_transaction_id,p_environment); $;
+revoke all on function public.commercial_revoke_purchase(uuid,text,text,text,text) from public,anon,authenticated;
+grant execute on function public.commercial_revoke_purchase(uuid,text,text,text,text) to service_role;
 
 create or replace function public.commercial_reserve_credit(
  p_user_id uuid,p_kind text,p_request_key text
