@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'account_deletion_confirmation.dart';
+import '../vehicle_care/vehicle_event_notification_service.dart';
 
 class AccountDeletionException implements Exception {
   const AccountDeletionException(this.message);
@@ -48,6 +49,7 @@ class AccountDeletionService {
         );
       }
 
+      await VehicleEventNotificationService.instance.clearForAccountSwitch();
       await _client.auth.signOut(scope: SignOutScope.local);
     } on FunctionException catch (error) {
       throw AccountDeletionException(_functionMessage(error));
