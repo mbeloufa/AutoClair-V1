@@ -216,8 +216,7 @@ async function loadPredictions(
   const { data, error } = await auth.adminClient
     .from("parking_availability_snapshots")
     .select(
-      "provider_code,external_id,available_spaces," +
-        "availability_status,observed_at",
+      "provider_code,external_id,available_spaces,availability_status,observed_at",
     )
     .in("external_id", externalIds)
     .gte("observed_at", since)
