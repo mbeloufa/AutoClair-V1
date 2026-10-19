@@ -116,7 +116,14 @@ class PremiumService {
       var annualReady = false;
       try {
         final flags = await _client.rpc('get_commercial_flags');
-        salesEnabled = flags is Map && flags['sales_enabled'] == true;
+        // Never sell a paid report when the backend would still use the
+        // legacy unmetered consumption path, nor before costly endpoints
+        // are protected by the production abuse budget.
+        salesEnabled = flags is Map &&
+            flags['sales_enabled'] == true &&
+            flags['document_credits_enabled'] == true &&
+            flags['vehicle360_credits_enabled'] == true &&
+            flags['other_credits_enabled'] == true;
         if (salesEnabled && current?.annual != null) {
           final configured = await _client
               .from('commercial_products')
@@ -342,7 +349,13 @@ class PremiumService {
   }) async {
     try {
       final flags = await _client.rpc('get_commercial_flags');
-      if (flags is! Map || flags['sales_enabled'] != true) return false;
+      if (flags is! Map ||
+          flags['sales_enabled'] != true ||
+          flags['document_credits_enabled'] != true ||
+          flags['vehicle360_credits_enabled'] != true ||
+          flags['other_credits_enabled'] != true) {
+        return false;
+      }
       final product = await _client
           .from('commercial_products')
           .select('store_product_id')
