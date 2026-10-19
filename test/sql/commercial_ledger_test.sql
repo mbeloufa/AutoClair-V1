@@ -1,0 +1,98 @@
+\set ON_ERROR_STOP on
+-- Test environment, not production. Exercise the actual same SQL functions.
+update public.commercial_products
+set active=true,quantity=3,price_ttc_cents=490,
+    store_product_id='autoclair.qa.document3'
+where code='analysis_small';
+
+do $test$
+declare
+  u1 uuid := '11111111-1111-4111-8111-111111111111';
+  u2 uuid := '22222222-2222-4222-8222-222222222222';
+  got jsonb;
+  n int;
+begin
+  got := public.commercial_grant_verified_purchase(
+    u1,'play_store','GPA.qa.000001','analysis_small','PRODUCTION');
+  if got->>'ok' <> 'true' then raise exception 'purchase not granted';end if;
+
+  -- Repeated webhook delivery must not double allocate credits.
+  perform public.commercial_grant_verified_purchase(
+    u1,'play_store','GPA.qa.000001','analysis_small','PRODUCTION');
+  select count(*) into n from public.commercial_credit_lots
+   where user_id=u1 and source='purchase';
+  if n<>1 then raise exception 'duplicate credit lot %',n;end if;
+
+  got:=public.commercial_reserve_credit(u1,'document','request-document-one');
+  if got->>'status'<>'reserved' then raise exception 'reservation failed %',got;end if;
+  got:=public.commercial_reserve_credit(u1,'document','request-document-one');
+  if got->>'status'<>'reserved' then raise exception 'idempotency failed %',got;end if;
+  select units_reserved into n from public.commercial_credit_lots
+    where user_id=u1 and source='purchase';
+  if n<>1 then raise exception 'double reservation %',n;end if;
+
+  got:=public.commercial_finish_credit(u1,'document','request-document-one',true);
+  if got->>'status'<>'consumed' then raise exception 'finish failed %',got;end if;
+  got:=public.commercial_finish_credit(u1,'document','request-document-one',true);
+  select units_used into n from public.commercial_credit_lots
+    where user_id=u1 and source='purchase';
+  if n<>1 then raise exception 'double consumption %',n;end if;
+
+  got:=public.commercial_reserve_credit(u1,'document','request-document-two');
+  if got->>'status'<>'reserved' then raise exception 'second reservation failed';end if;
+  perform public.commercial_finish_credit(u1,'document','request-document-two',false);
+  select units_used into n from public.commercial_credit_lots
+    where user_id=u1 and source='purchase';
+  if n<>1 then raise exception 'failed job debited credit';end if;
+
+  -- Fresh account: ONE free documentary trial, no second trial.
+  got:=public.commercial_reserve_credit(u2,'document','request-free-trial1');
+  if got->>'status'<>'reserved' then raise exception 'trial not created %',got;end if;
+  perform public.commercial_finish_credit(u2,'document','request-free-trial1',true);
+  got:=public.commercial_reserve_credit(u2,'document','request-free-trial2');
+  if got->>'status'<>'insufficient' then raise exception 'double trial vulnerability %',got;end if;
+
+  -- Refund event before grant: persistent tombstone blocks later purchases.
+  perform public.commercial_revoke_purchase(
+     u2,'analysis_small','play_store','GPA.qa.refund-first','PRODUCTION');
+  begin
+    perform public.commercial_grant_verified_purchase(
+     u2,'play_store','GPA.qa.refund-first','analysis_small','PRODUCTION');
+    raise exception 'REFUND_REGRANT_VULNERABILITY';
+  exception when others then
+    if sqlerrm='REFUND_REGRANT_VULNERABILITY' then raise; end if;
+  end;
+
+  -- Previously granted purchase is revoked without deleting its audit trail.
+  perform public.commercial_revoke_purchase(
+    u1,'analysis_small','play_store','GPA.qa.000001','PRODUCTION');
+  select count(*) into n from public.commercial_credit_lots
+    where user_id=u1 and source='purchase' and revoked_at is not null;
+  if n<>1 then raise exception 'refund failed %',n;end if;
+  got:=public.commercial_reserve_credit(u1,'document','request-after-refund');
+  if got->>'status'<>'insufficient' then raise exception 'spent refunded credits %',got;end if;
+
+  -- A receipt already owned by another user cannot be reassigned by refund.
+  begin
+    perform public.commercial_revoke_purchase(
+      u2,'analysis_small','play_store','GPA.qa.000001','PRODUCTION');
+    raise exception 'CROSS_ACCOUNT_REFUND_VULNERABILITY';
+  exception when others then
+    if sqlerrm='CROSS_ACCOUNT_REFUND_VULNERABILITY' then raise;end if;
+  end;
+end
+$test$;
+
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+do $rls$
+declare n int;
+begin
+  select count(*) into n from public.commercial_store_transactions;
+  if n <> 1 then raise exception 'RLS transactions leak: %',n;end if;
+  select count(*) into n from public.commercial_credit_lots;
+  if n <> 1 then raise exception 'RLS credits leak: %',n;end if;
+end
+$rls$;
+reset role;
+select 'PASS: idempotency, credit lifecycle, trials, refund tombstones, RLS' as result;
