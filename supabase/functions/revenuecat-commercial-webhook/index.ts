@@ -39,7 +39,7 @@ function transactionPresent(
   });
 }
 
-async function syncPremium(admin: ReturnType<typeof createClient>, userId: string, subscriber: RecordAny) {
+async function syncPremium(admin: ReturnType<typeof createClient<any>>, userId: string, subscriber: RecordAny) {
   const entitlement = asObject(subscriber.entitlements).premium;
   const e = asObject(entitlement);
   const expiresAt = typeof e.expires_date === "string" ? e.expires_date : null;
@@ -85,7 +85,7 @@ Deno.serve(async (request) => {
     if (environment === "SANDBOX" &&
        Deno.env.get("COMMERCIAL_ALLOW_SANDBOX_PURCHASES") !== "true")
       return json(200,{ accepted:true, sandbox_ignored:true });
-    const admin = createClient(url,serviceKey,{auth:{persistSession:false}});
+    const admin = createClient<any>(url,serviceKey,{auth:{persistSession:false}});
     const subscriber = await subscriberFor(userId,apiKey);
     if (type !== "NON_RENEWING_PURCHASE" && type !== "REFUND") {
       await syncPremium(admin,userId,subscriber);
