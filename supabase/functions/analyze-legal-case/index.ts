@@ -328,7 +328,7 @@ function documentContext(result: unknown): JsonRecord {
 }
 
 async function saveAssessment(
-  admin: ReturnType<typeof createClient>,
+  admin: ReturnType<typeof createClient<any>>,
   caseRow: LegalCaseRow,
   result: JsonRecord,
   model: string | null,
@@ -364,7 +364,7 @@ Deno.serve(async (req: Request) => {
     const openAiApiKey = env("OPENAI_API_KEY");
     const model = Deno.env.get("OPENAI_LEGAL_MODEL")?.trim() || env("OPENAI_MODEL");
 
-    const admin = createClient(supabaseUrl, serviceRoleKey, {
+    const admin = createClient<any>(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
