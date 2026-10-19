@@ -6,6 +6,9 @@ set -euo pipefail
 user="44444444-4444-4444-8444-444444444444"
 psql -X -v ON_ERROR_STOP=1 -q <<SQL
 insert into auth.users(id) values ('$user');
+-- No automatic first-document trial: the account already has a
+-- historical analysis, leaving EXACTLY one purchased/manual unit.
+insert into public.document_analyses(user_id) values ('$user');
 insert into public.commercial_credit_lots
   (user_id,kind,source,source_key,units_total)
 values ('$user','document','manual','ci:single-credit',1);
