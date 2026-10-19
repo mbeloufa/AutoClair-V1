@@ -145,3 +145,30 @@ begin
 end
 $annual$;
 select 'PASS: annual cycles, unique 360 discovery, revocation' as result;
+
+update public.commercial_settings set other_credits_enabled=true where singleton=true;
+do $rate$
+declare
+ u1 uuid:='11111111-1111-4111-8111-111111111111';
+ u2 uuid:='22222222-2222-4222-8222-222222222222';
+ got jsonb;
+ n integer;
+begin
+ got:=public.commercial_try_feature(u1,'tire_ai','rate-request-000001');
+ if got->>'allowed'<>'true' then raise exception 'first free AI action denied: %',got;end if;
+ got:=public.commercial_try_feature(u1,'tire_ai','rate-request-000001');
+ if got->>'mode'<>'duplicate' then raise exception 'request idempotency failed: %',got;end if;
+ got:=public.commercial_try_feature(u1,'tire_ai','rate-request-000002');
+ if got->>'allowed'<>'true' then raise exception 'second free AI action denied: %',got;end if;
+ got:=public.commercial_try_feature(u1,'tire_ai','rate-request-000003');
+ if got->>'allowed'<>'false' then raise exception 'daily limit bypass: %',got;end if;
+ select count(*) into n from public.commercial_ai_rate_events
+  where user_id=u1 and feature='tire_ai';
+ if n<>2 then raise exception 'rate counter wrong: %',n;end if;
+ got:=public.commercial_try_feature(u2,'tire_ai','rate-other-user001');
+ if got->>'allowed'<>'true' then raise exception 'rate limits leaked between accounts';end if;
+ got:=public.commercial_try_feature(u1,'not_configured','invalid-feature0001');
+ if got->>'allowed'<>'false' then raise exception 'unknown service fail-open';end if;
+end
+$rate$;
+select 'PASS: atomic daily AI rate budget and per-account isolation' as result;
