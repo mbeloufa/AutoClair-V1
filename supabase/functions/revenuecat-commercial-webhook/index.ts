@@ -48,15 +48,17 @@ async function syncPremium(admin: ReturnType<typeof createClient<any>>, userId: 
   const validDates = [expiresAt,graceAt].filter((v): v is string => v !== null)
     .map((v) => new Date(v)).filter((v) => !Number.isNaN(v.valueOf()));
   const expiry = validDates.sort((a,b)=>b.valueOf()-a.valueOf())[0] ?? null;
-  // No fake lifetime access when provider returns no expiration.
-  const active = entitlement !== undefined && expiry !== null && expiry > new Date();
+  // Mirror the existing subscriber sync: a provider-confirmed lifetime
+  // entitlement remains active, but can never mint yearly credit allocations.
+  const active = entitlement !== undefined &&
+    (expiry === null || expiry > new Date());
   const { error } = await admin.rpc("upsert_vehicle_360_entitlement", {
     p_user_id: userId,
     p_status: active ? "active" : entitlement ? "expired" : "inactive",
     p_source: "revenuecat",
     p_external_reference: "premium",
     p_starts_at: typeof e.purchase_date === "string" ? e.purchase_date : new Date().toISOString(),
-    p_expires_at: expiry?.toISOString() ?? new Date().toISOString(),
+    p_expires_at: expiry?.toISOString() ?? null,
     p_metadata: { provider:"revenuecat",product_identifier:e.product_identifier ?? null },
   });
   if (error) throw new Error("PREMIUM_SYNC_FAILED");
@@ -64,7 +66,7 @@ async function syncPremium(admin: ReturnType<typeof createClient<any>>, userId: 
   // Every purchase / renewal must credit the account EVEN when the customer
   // never reopens AutoClair. Both webhook and authenticated resync use the
   // same canonical cycle key. Expiration/grace changes never mint units.
-  if (active) {
+  if (active && expiry !== null) {
     const productId = typeof e.product_identifier === "string"
       ? e.product_identifier : "";
     const purchaseDate = typeof e.purchase_date === "string"
@@ -82,7 +84,7 @@ async function syncPremium(admin: ReturnType<typeof createClient<any>>, userId: 
       },
     );
     if (allocationError) throw new Error("PREMIUM_ALLOCATION_PENDING");
-  } else {
+  } else if (!active) {
     // Inactive/expired subscriber: revoke only subscription-sourced units.
     // Bought consumable packs remain available.
     const { error: revokeError } = await admin.rpc(
