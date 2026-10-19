@@ -132,7 +132,7 @@ async function callOpenAi(input: JsonMap): Promise<{
 }
 
 async function loadReport(
-  adminClient: ReturnType<typeof import("npm:@supabase/supabase-js@2")["createClient"]>,
+  adminClient: import("npm:@supabase/supabase-js@2").SupabaseClient<any>,
   reportId: string,
   userId: string,
 ): Promise<JsonMap | null> {
@@ -239,8 +239,9 @@ Deno.serve(async (req: Request) => {
   let reportId: string | null = null;
   let userId: string | null = null;
   let creditWasReserved = false;
+  let commercialReserved = false;
   let adminClient:
-    | ReturnType<typeof import("npm:@supabase/supabase-js@2")["createClient"]>
+    | import("npm:@supabase/supabase-js@2").SupabaseClient<any>
     | null = null;
 
   try {
@@ -388,7 +389,17 @@ Deno.serve(async (req: Request) => {
       throw new Error("OPENAI_MODEL_MISSING");
     }
 
-    const billingMode = "credits";
+    // Read the same server-side switch as the document analysis service.
+    const { data: commercialPolicy, error: policyError } = await adminClient
+      .from("commercial_settings")
+      .select("vehicle360_credits_enabled")
+      .eq("singleton", true)
+      .single();
+    if (policyError || !commercialPolicy) {
+      throw new Error("COMMERCIAL_POLICY_UNAVAILABLE");
+    }
+    const commercialMode = commercialPolicy.vehicle360_credits_enabled === true;
+    const billingMode = commercialMode ? "commercial" : "credits";
 
     const { data: report, error: reportError } = await adminClient
       .from("vehicle_analysis_reports")
@@ -421,37 +432,40 @@ Deno.serve(async (req: Request) => {
 
     reportId = String(report.id);
 
-    const { data: access, error: accessError } = await adminClient.rpc(
-      "reserve_vehicle_report_access",
-      {
-        p_user_id: userId,
-        p_report_id: reportId,
-        p_billing_mode: billingMode,
-      },
-    );
-
-    if (accessError) {
-      throw new Error(`ACCESS_RESERVATION_FAILED:${accessError.message}`);
+    if (commercialMode) {
+      // All commercial credit grants come from verified Store purchases or
+      // an explicit, unique free trial; never from a Flutter flag.
+      const { data: reservation, error: reserveError } = await adminClient.rpc(
+        "commercial_reserve_credit",
+        { p_user_id: userId, p_kind: "vehicle_360", p_request_key: reportId },
+      );
+      if (reserveError) {
+        throw new Error("COMMERCIAL_CREDIT_RESERVATION_FAILED");
+      }
+      if (!isRecord(reservation) || reservation.ok !== true ||
+          reservation.status !== "reserved") {
+        throw new Error("NO_REPORT_CREDIT");
+      }
+      commercialReserved = true;
+    } else {
+      const { data: access, error: accessError } = await adminClient.rpc(
+        "reserve_vehicle_report_access",
+        {
+          p_user_id: userId,
+          p_report_id: reportId,
+          p_billing_mode: billingMode,
+        },
+      );
+      if (accessError) {
+        throw new Error(`ACCESS_RESERVATION_FAILED:${accessError.message}`);
+      }
+      if (!isRecord(access) || access.granted !== true) {
+        throw new Error(isRecord(access)
+          ? asString(access.reason) ?? "PAYWALL_REQUIRED"
+          : "PAYWALL_REQUIRED");
+      }
+      creditWasReserved = access.credit_consumed === true;
     }
-
-    if (!isRecord(access) || access.granted !== true) {
-      const reason = isRecord(access)
-        ? asString(access.reason) ?? "PAYWALL_REQUIRED"
-        : "PAYWALL_REQUIRED";
-
-      await adminClient
-        .from("vehicle_analysis_reports")
-        .update({
-          status: "failed",
-          error_code: reason,
-          error_message: "Acces premium requis.",
-        })
-        .eq("id", reportId);
-
-      throw new Error(reason);
-    }
-
-    creditWasReserved = access.credit_consumed === true;
 
     const aiInput = {
       task: "Generer le bilan professionnel AutoClair 360.",
@@ -547,7 +561,7 @@ Deno.serve(async (req: Request) => {
         ai_provider: "openai",
         ai_model: openAi.model,
         valuation_provider: valuationProvider,
-        credit_consumed: creditWasReserved,
+        credit_consumed: creditWasReserved || commercialReserved,
         completed_at: new Date().toISOString(),
         error_code: null,
         error_message: null,
@@ -559,6 +573,21 @@ Deno.serve(async (req: Request) => {
       throw new Error(`REPORT_COMPLETE_FAILED:${completeError.message}`);
     }
 
+    // A completed report is durable. If reconciliation fails, preserve the
+    // result; periodic server reconciliation must settle its reserved credit.
+    if (commercialReserved) {
+      const { error: settleError } = await adminClient.rpc(
+        "commercial_finish_credit", {
+          p_user_id: userId, p_kind: "vehicle_360",
+          p_request_key: reportId, p_success: true,
+        },
+      );
+      if (settleError) {
+        console.error("Bilan 360 commercial credit reconciliation pending");
+      } else {
+        commercialReserved = false;
+      }
+    }
     const loaded = await loadReport(adminClient, reportId, userId);
     return jsonResponse({
       success: true,
@@ -569,21 +598,36 @@ Deno.serve(async (req: Request) => {
     const message = safeError(error);
 
     if (adminClient && reportId && userId) {
-      await adminClient
+      // Read the durable state BEFORE changing it. A response read failure
+      // after successful storage must never erase an already completed Bilan.
+      const { data: previous, error: stateError } = await adminClient
         .from("vehicle_analysis_reports")
-        .update({
-          status: "failed",
-          error_code: message.split(":")[0].slice(0, 120),
-          error_message: message.slice(0, 1000),
-        })
-        .eq("id", reportId)
-        .eq("user_id", userId);
-
-      if (creditWasReserved) {
+        .select("status")
+        .eq("id", reportId).eq("user_id", userId).maybeSingle();
+      const completed = previous?.status === "completed";
+      if (!completed && !stateError) {
+        await adminClient
+          .from("vehicle_analysis_reports")
+          .update({
+            status: "failed",
+            error_code: message.split(":")[0].slice(0, 120),
+            error_message: message.slice(0, 1000),
+          })
+          .eq("id", reportId).eq("user_id", userId)
+          .neq("status", "completed");
+      }
+      if (!completed && creditWasReserved && !stateError) {
         await adminClient.rpc("release_vehicle_report_access", {
-          p_user_id: userId,
-          p_report_id: reportId,
+          p_user_id: userId, p_report_id: reportId,
           p_reason: message.slice(0, 300),
+        });
+      }
+      if (commercialReserved && !stateError) {
+        await adminClient.rpc("commercial_finish_credit", {
+          p_user_id: userId,
+          p_kind: "vehicle_360",
+          p_request_key: reportId,
+          p_success: completed,
         });
       }
     }

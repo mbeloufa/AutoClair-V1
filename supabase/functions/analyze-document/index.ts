@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { PDFDocument } from "npm:pdf-lib@1.17.1";
 
 const BUCKET_ID = "vehicle-documents";
 const PROMPT_VERSION = "autoclair-document-v3";
@@ -716,7 +717,7 @@ function mapOpenAiError(status: number, body: JsonRecord): AppError {
 }
 
 async function markAnalysisFailed(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: ReturnType<typeof createClient<any>>,
   documentId: string,
   userId: string,
   errorCode: string,
@@ -750,7 +751,9 @@ Deno.serve(async (req: Request) => {
 
   let claimedDocumentId: string | null = null;
   let authenticatedUserId: string | null = null;
-  let adminClient: ReturnType<typeof createClient> | null = null;
+  let commercialReserved = false;
+  let commercialDocumentId: string | null = null;
+  let adminClient: ReturnType<typeof createClient<any>> | null = null;
 
   try {
     const supabaseUrl = requireEnvironment("SUPABASE_URL");
@@ -760,7 +763,7 @@ Deno.serve(async (req: Request) => {
     const openAiApiKey = requireEnvironment("OPENAI_API_KEY");
     const openAiModel = requireEnvironment("OPENAI_MODEL");
 
-    adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    adminClient = createClient<any>(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -956,6 +959,10 @@ Deno.serve(async (req: Request) => {
       },
     ];
 
+    // Separate document size, page count and format limits are enforced
+    // before any chargeable AI request or credit reservation.
+    const maxPdfPages = 30;
+    let totalPdfPages = 0;
     for (const file of files) {
       if (
         !["application/pdf", "image/jpeg", "image/png"].includes(
@@ -1006,6 +1013,34 @@ Deno.serve(async (req: Request) => {
       }
 
       const bytes = new Uint8Array(await blob.arrayBuffer());
+      // Do not rely on untrusted filename / content-type metadata.
+      const magicOk = file.mime_type === "application/pdf"
+        ? bytes.length > 5 &&
+          String.fromCharCode(...bytes.subarray(0,5)) === "%PDF-"
+        : file.mime_type === "image/jpeg"
+        ? bytes.length >= 3 && bytes[0] === 0xFF &&
+          bytes[1] === 0xD8 && bytes[2] === 0xFF
+        : bytes.length >= 8 && [137,80,78,71,13,10,26,10]
+          .every((byte, index) => bytes[index] === byte);
+      if (!magicOk) {
+        throw new AppError(422,"DOCUMENT_SIGNATURE_INVALID",
+          "Le fichier est invalide ou ne correspond pas au format déclaré.");
+      }
+      if (file.mime_type === "application/pdf") {
+        let pageCount: number;
+        try {
+          const pdf = await PDFDocument.load(bytes, { ignoreEncryption: false });
+          pageCount = pdf.getPageCount();
+        } catch (_) {
+          throw new AppError(422,"DOCUMENT_PDF_INVALID",
+            "Ce PDF est corrompu, chiffré ou impossible à lire.");
+        }
+        totalPdfPages += pageCount;
+        if (pageCount < 1 || totalPdfPages > maxPdfPages) {
+          throw new AppError(422,"DOCUMENT_PDF_TOO_LONG",
+            "Ce document dépasse la limite de 30 pages PDF cumulées.");
+        }
+      }
       const base64 = bytesToBase64(bytes);
 
       if (file.mime_type === "application/pdf") {
@@ -1022,6 +1057,37 @@ Deno.serve(async (req: Request) => {
           detail: "high",
         });
       }
+    }
+
+    // Reservation AFTER all input checks, BEFORE the billable provider call.
+    // Feature gate deliberately defaults to OFF until the ledger migration,
+    // per-endpoint contract and store test are validated on a signed build.
+    const { data: commercialPolicy, error: policyError } = await adminClient
+      .from("commercial_settings")
+      .select("document_credits_enabled")
+      .eq("singleton", true)
+      .single();
+    if (policyError || !commercialPolicy) {
+      throw new AppError(503, "COMMERCIAL_POLICY_UNAVAILABLE",
+        "L'accès au service ne peut pas être vérifié.", policyError);
+    }
+    if (commercialPolicy.document_credits_enabled === true) {
+      const {data:reservation,error:creditError} = await adminClient.rpc(
+        "commercial_reserve_credit",{
+          p_user_id:user.id,p_kind:"document",p_request_key:documentId,
+        },
+      );
+      if (creditError) {
+        throw new AppError(503,"COMMERCIAL_CREDITS_UNAVAILABLE",
+          "Vos crédits ne peuvent pas être vérifiés pour le moment.",creditError);
+      }
+      if (!reservation || reservation.ok !== true ||
+          reservation.status !== "reserved") {
+        throw new AppError(402,"DOCUMENT_CREDIT_REQUIRED",
+          "Votre analyse offerte a déjà été utilisée. Consultez les packs.");
+      }
+      commercialReserved = true;
+      commercialDocumentId = documentId;
     }
 
     const openAiRequest = {
@@ -1181,6 +1247,27 @@ Deno.serve(async (req: Request) => {
     }
 
     claimedDocumentId = null;
+    if (commercialReserved && commercialDocumentId) {
+      const {error:finishError}=await adminClient.rpc(
+        "commercial_finish_credit",{
+          p_user_id:user.id,p_kind:"document",
+          p_request_key:commercialDocumentId,p_success:true,
+        },
+      );
+      if (finishError) {
+        console.error("Commercial debit reconciliation required");
+        // The completed document is accessible from its account; do not
+        // silently pretend another credit was granted on this response.
+        return jsonResponse({
+          success:true,already_completed:false,
+          billing_sync_pending:true,
+          analysis:{id:analysisId,document_id:documentId,
+                    summary:result.summary,overall_confidence:result.overall_confidence,
+                    result_json:result},
+        });
+      }
+      commercialReserved = false;
+    }
 
     return jsonResponse({
       success: true,
@@ -1211,6 +1298,17 @@ Deno.serve(async (req: Request) => {
         internal_details: appError.internalDetails,
       }),
     );
+
+    if (commercialReserved && commercialDocumentId &&
+        authenticatedUserId && adminClient) {
+      const {error:releaseError}=await adminClient.rpc(
+        "commercial_finish_credit",{
+          p_user_id:authenticatedUserId,p_kind:"document",
+          p_request_key:commercialDocumentId,p_success:false,
+        },
+      );
+      if (releaseError) console.error("Commercial credit release pending");
+    }
 
     if (
       claimedDocumentId &&

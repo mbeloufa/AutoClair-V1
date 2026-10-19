@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -316,7 +317,8 @@ function buildMaintenanceHistory(events: any[]): any[] {
       rows.push({
         operation_key: operationKey,
         occurred_at: String(event?.occurred_at ?? "").slice(0, 10),
-        mileage: Number.isFinite(mileage) ? Math.round(mileage) : null,
+        mileage: mileage != null && Number.isFinite(mileage)
+          ? Math.round(mileage) : null,
       });
       if (rows.length >= 80) return rows;
     }
@@ -692,6 +694,7 @@ Deno.serve(async (req) => {
       plan = cache.plan_json;
       sources = Array.isArray(cache.sources) ? cache.sources : [];
     } else {
+      await requireCommercialBudget(admin, user.id, "maintenance");
       const researched = await researchPlan(
         vehicle,
         technicalIdentity,

@@ -187,6 +187,32 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
       }
     }
 
+    final disclosed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Analyse par intelligence artificielle'),
+        content: const Text(
+          'Pour analyser ce document, AutoClair transmet son contenu '
+          'au prestataire d’intelligence artificielle OpenAI. '
+          'Il peut contenir des informations personnelles '
+          '(nom, adresse, immatriculation, factures). '
+          'Le traitement est demandé uniquement pour produire votre analyse. '
+          'Vous pouvez annuler sans envoyer le document.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Continuer'),
+          ),
+        ],
+      ),
+    );
+    if (disclosed != true || !mounted) return;
+
     setState(() {
       _processing = true;
       _journeyError = null;
@@ -236,6 +262,32 @@ class _DocumentUploadPageState extends State<DocumentUploadPage> {
         _journeyError = error.message;
       });
       _showError(error.message);
+      if (error.code == 'DOCUMENT_CREDIT_REQUIRED') {
+        final selected = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Crédit d’analyse épuisé'),
+            content: const Text(
+              'Votre première analyse documentaire offerte a été utilisée. '
+              'Vous pouvez choisir un abonnement annuel ou acheter un pack '
+              'd’analyses ponctuel, sans abonnement.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Plus tard'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Voir les offres'),
+              ),
+            ],
+          ),
+        );
+        if (selected == true && mounted) {
+          context.push('/premium');
+        }
+      }
     } finally {
       if (mounted) {
         setState(() {

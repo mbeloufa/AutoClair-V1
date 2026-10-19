@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { authenticate } from "../_shared/auth.ts";
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
@@ -135,7 +136,7 @@ function normalizeForecast(value: unknown): NormalizedForecast {
 }
 
 async function loadCached(
-  adminClient: ReturnType<typeof import("npm:@supabase/supabase-js@2")["createClient"]>,
+  adminClient: import("npm:@supabase/supabase-js@2").SupabaseClient<any>,
   userId: string,
   vehicleId: string,
 ): Promise<JsonMap> {
@@ -270,6 +271,7 @@ Deno.serve(async (req: Request) => {
       delete safeVehicle[key];
     }
 
+    await requireCommercialBudget(auth.adminClient, auth.user.id, "valuation");
     const response = await fetch(providerUrl, {
       method: "POST",
       headers,

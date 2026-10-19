@@ -49,8 +49,8 @@ function getSecretKey(): string {
 export type AuthContext = {
   user: User;
   token: string;
-  userClient: SupabaseClient;
-  adminClient: SupabaseClient;
+  userClient: SupabaseClient<any>;
+  adminClient: SupabaseClient<any>;
 };
 
 export async function authenticate(req: Request): Promise<AuthContext> {

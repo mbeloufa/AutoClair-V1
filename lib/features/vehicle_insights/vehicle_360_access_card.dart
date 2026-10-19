@@ -48,7 +48,7 @@ class Vehicle360AccessCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   access.entitled
-                      ? 'Les nouveaux Bilans 360 sont inclus dans votre accès.'
+                      ? 'Votre abonnement est actif. Les règles des nouveaux bilans seront précisées avant ouverture des ventes V1.'
                       : access.creditBalance > 0
                       ? 'Un crédit est utilisé uniquement si un nouveau bilan doit être généré.'
                       : access.trialAvailable

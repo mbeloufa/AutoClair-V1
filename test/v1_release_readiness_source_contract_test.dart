@@ -32,7 +32,9 @@ void main() {
       'supabase/functions/claim-vehicle-360-trial/index.ts',
     ).readAsStringSync();
 
-    expect(report, contains('const billingMode = "credits";'));
+    expect(report, contains('const billingMode = commercialMode ? "commercial" : "credits";'));
+    expect(report, contains('commercial_reserve_credit'));
+    expect(report, contains('reserve_vehicle_report_access'));
     expect(report, isNot(contains('AUTOCLAIR_BILLING_MODE')));
     expect(trial, contains('vehicle_report_credit_events'));
     expect(trial, contains('trial:vehicle_360:'));

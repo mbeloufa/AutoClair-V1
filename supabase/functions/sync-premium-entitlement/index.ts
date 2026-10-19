@@ -173,6 +173,40 @@ Deno.serve(async (request) => {
     );
   }
 
+  // Store-verified annual allocations are granted per renewal cycle.
+  // Inactive products or unconfigured quotas allocate nothing.
+  if (active && effectiveExpiry && typeof entitlement?.product_identifier === "string") {
+    // Exact same period key as the signed RevenueCat webhook.
+    // Billing grace extensions must not create new credit allocations.
+    const purchaseAt = dateValue(entitlement.purchase_date);
+    if (!purchaseAt) {
+      return jsonResponse({configured:true,active:false,error:"CREDIT_CYCLE_INVALID"},503);
+    }
+    const cycle = [
+      entitlement.product_identifier,
+      purchaseAt.toISOString(),
+    ].join(":");
+    const { error: cycleError } = await adminClient.rpc(
+      "commercial_grant_subscription_cycle", {
+        p_user_id:user.id,
+        p_store_product_id:entitlement.product_identifier,
+        p_cycle:cycle,
+        p_expires_at:effectiveExpiry.toISOString(),
+      });
+    if (cycleError) {
+      console.error("Annual credit allocation pending:",cycleError.message);
+      return jsonResponse({configured:true,active:false,error:"CREDIT_ALLOCATION_PENDING"},503);
+    }
+  } else {
+    const { error: revokeError } = await adminClient.rpc(
+      "commercial_revoke_subscription", {p_user_id:user.id},
+    );
+    if (revokeError) {
+      console.error("Annual credit revocation pending:",revokeError.message);
+      return jsonResponse({configured:true,active:false,error:"CREDIT_REVOCATION_PENDING"},503);
+    }
+  }
+
   return jsonResponse({
     configured: true,
     active,

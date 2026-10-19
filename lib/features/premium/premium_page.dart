@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'premium_catalog.dart';
 import 'premium_service.dart';
@@ -70,6 +71,33 @@ class _PremiumPageState extends State<PremiumPage> {
     }
   }
 
+  Future<void> _purchasePack(PackOffer offer) async {
+    if (_busy) return;
+    setState(() { _busy = true; _error = null; });
+    try {
+      final result = await _service.purchasePack(offer);
+      if (!mounted) return;
+      setState(() => _state = result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Votre solde a été synchronisé.')),
+      );
+    } on PremiumPurchaseCancelled {
+      // Pas d'erreur à montrer en cas d'annulation.
+    } on PremiumException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openManagement() async {
+    final link = _state?.managementUrl;
+    if (link == null || link.isEmpty) return;
+    final uri = Uri.tryParse(link);
+    if (uri == null || !(uri.scheme == 'https')) return;
+    await launchUrl(uri,mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _restore() async {
     if (_busy) return;
     setState(() {
@@ -101,7 +129,7 @@ class _PremiumPageState extends State<PremiumPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('AutoClair Premium')),
+      appBar: AppBar(title: const Text('Mon abonnement et mes achats')),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
@@ -120,6 +148,21 @@ class _PremiumPageState extends State<PremiumPage> {
                 benefits: PremiumCatalog.premiumBenefits,
                 highlighted: true,
               ),
+              const SizedBox(height: 14),
+              _PacksSummary(
+                offers: _state?.packOffers ?? const <PackOffer>[],
+              ),
+              if (_state != null) ...[
+                const SizedBox(height: 12),
+                _CommercialBalancesView(balances: _state!.balances),
+                if (_state!.salesEnabled)
+                  for (final offer in _state!.packOffers)
+                    _PackPurchaseCard(
+                      offer: offer,
+                      busy: _busy,
+                      onPressed: () => _purchasePack(offer),
+                    ),
+              ],
               const SizedBox(height: 20),
               if (_loading)
                 const Center(
@@ -160,6 +203,34 @@ class _PremiumPageState extends State<PremiumPage> {
       );
     }
 
+    if (!state.salesEnabled) {
+      return Column(
+        children: [
+          _MessageCard(
+            icon: state.active ? Icons.verified_outlined : Icons.info_outline,
+            title: state.active ? 'Abonnement actuel reconnu' : 'Achats en préparation',
+            message: state.active
+                ? 'Votre abonnement existant reste pris en compte. '
+                  'Les prochains achats ouvriront une fois les quotas sécurisés.'
+                : 'Les tarifs et quantités des packs seront affichés '
+                  'avant toute mise en vente. Aucun paiement n’est demandé.',
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _restore,
+            icon: const Icon(Icons.restore),
+            label: const Text('Restaurer mes achats'),
+          ),
+          if (state.managementUrl?.startsWith('https://') == true)
+            TextButton.icon(
+              onPressed: _openManagement,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Gérer/résilier mon abonnement'),
+            ),
+        ],
+      );
+    }
+
     if (state.active) {
       return Column(
         children: [
@@ -167,7 +238,7 @@ class _PremiumPageState extends State<PremiumPage> {
             icon: Icons.verified_outlined,
             title: 'Premium actif',
             message:
-                'Vous pouvez lancer vos Bilans AutoClair 360 sans utiliser de crédit.',
+                'Votre abonnement est reconnu. Le compteur des nouveaux traitements doit être confirmé côté serveur.',
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -250,6 +321,100 @@ class _PremiumPageState extends State<PremiumPage> {
   }
 }
 
+class _CommercialBalancesView extends StatelessWidget {
+  const _CommercialBalancesView({required this.balances});
+  final Map<String,dynamic> balances;
+
+  @override
+  Widget build(BuildContext context) {
+    if (balances.isEmpty) {
+      return const Text('Soldes non disponibles : actualisez votre compte.');
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Mes crédits', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            for (final entry in balances.entries)
+              Text('${entry.key} — ${entry.value}'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PackPurchaseCard extends StatelessWidget {
+  const _PackPurchaseCard({
+    required this.offer, required this.busy, required this.onPressed,
+  });
+  final PackOffer offer;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(offer.catalog.name),
+      subtitle: Text('${offer.quantity} crédit(s) · ${offer.price}'),
+      trailing: FilledButton(
+        onPressed: busy ? null : onPressed,
+        child: const Text('Acheter'),
+      ),
+    );
+  }
+}
+
+class _PacksSummary extends StatelessWidget {
+  const _PacksSummary({required this.offers});
+  final List<PackOffer> offers;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Achats ponctuels, sans abonnement',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            for (final pack in PremiumCatalog.packs)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(
+                  children: [
+                    const Icon(Icons.inventory_2_outlined, size: 18),
+                    const SizedBox(width: 9),
+                    Expanded(child: Text(pack.name)),
+                    const SizedBox(width: 8),
+                    Text(() {
+                      for (final offer in offers) {
+                        if (offer.catalog.code == pack.code) {
+                          return '${offer.quantity} × ${offer.price}';
+                        }
+                      }
+                      return 'En préparation';
+                    }()),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 8),
+            Text('Les prix applicables sont ceux du Store. '
+                 'Aucun paiement ne peut démarrer tant que les produits '
+                 'ne sont pas activés côté serveur.',
+              style: Theme.of(context).textTheme.bodySmall),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PremiumHero extends StatelessWidget {
   const _PremiumHero();
 
@@ -280,7 +445,7 @@ class _PremiumHero extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Premium prolonge l’accès au Bilan AutoClair 360 après votre essai offert.',
+          'Découvrez le Bilan 360 offert et consultez les formules annuelles ou les futurs packs, sans abonnement obligatoire pour un pack.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyLarge,
         ),

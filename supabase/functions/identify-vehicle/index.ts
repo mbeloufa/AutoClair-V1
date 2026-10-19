@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { authenticate } from "../_shared/auth.ts";
 
 const corsHeaders = {
@@ -556,6 +557,7 @@ Deno.serve(async (req: Request) => {
 
   let providerResponse: Response;
   try {
+    await requireCommercialBudget(auth.adminClient, auth.user.id, "identification");
     providerResponse = await fetch(providerUrl, {
       method: "GET",
       headers: {

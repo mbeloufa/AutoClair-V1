@@ -28,6 +28,20 @@ class PremiumOffer {
   String get price => package.storeProduct.priceString;
 }
 
+class PackOffer {
+  const PackOffer({
+    required this.product,
+    required this.catalog,
+    required this.quantity,
+  });
+
+  final StoreProduct product;
+  final CommercialProduct catalog;
+  final int quantity;
+
+  String get price => product.priceString;
+}
+
 class PremiumState {
   const PremiumState({
     required this.configured,
@@ -35,6 +49,9 @@ class PremiumState {
     required this.offers,
     this.managementUrl,
     this.message,
+    this.packOffers = const <PackOffer>[],
+    this.balances = const <String, dynamic>{},
+    this.salesEnabled = false,
   });
 
   final bool configured;
@@ -42,6 +59,9 @@ class PremiumState {
   final List<PremiumOffer> offers;
   final String? managementUrl;
   final String? message;
+  final List<PackOffer> packOffers;
+  final Map<String, dynamic> balances;
+  final bool salesEnabled;
 }
 
 class PremiumService {
@@ -91,21 +111,90 @@ class PremiumService {
       final current = offerings.current;
       final offers = <PremiumOffer>[];
 
-      final monthly = current?.monthly;
-      if (monthly != null) {
-        offers.add(
-          PremiumOffer(package: monthly, label: PremiumCatalog.monthlyLabel),
-        );
+      // This flag is set on the server only AFTER configuration and QA.
+      var salesEnabled = false;
+      var annualReady = false;
+      try {
+        final flags = await _client.rpc('get_commercial_flags');
+        // Never sell a paid report when the backend would still use the
+        // legacy unmetered consumption path, nor before costly endpoints
+        // are protected by the production abuse budget.
+        salesEnabled = flags is Map &&
+            flags['sales_enabled'] == true &&
+            flags['document_credits_enabled'] == true &&
+            flags['vehicle360_credits_enabled'] == true &&
+            flags['other_credits_enabled'] == true;
+        if (salesEnabled && current?.annual != null) {
+          final configured = await _client
+              .from('commercial_products')
+              .select('store_product_id,active')
+              .eq('code', 'premium_annual')
+              .eq('active', true)
+              .maybeSingle();
+          final limits = await _client
+              .from('commercial_subscription_allocations')
+              .select('credit_kind,units')
+              .eq('product_code', 'premium_annual')
+              .eq('enabled', true);
+          annualReady =
+              configured?['store_product_id'] ==
+                  current!.annual!.storeProduct.identifier &&
+              limits.any((item) => item['credit_kind'] == 'document') &&
+              limits.any((item) => item['credit_kind'] == 'vehicle_360');
+        }
+      } catch (_) {
+        // Any missing configuration keeps the purchase wall CLOSED.
       }
-
       final annual = current?.annual;
-      if (annual != null) {
+      if (annual != null && salesEnabled && annualReady) {
         offers.add(
           PremiumOffer(package: annual, label: PremiumCatalog.annualLabel),
         );
       }
 
+      final packOffers = <PackOffer>[];
+      Map<String, dynamic> balances = const <String, dynamic>{};
+      try {
+        final rows = await _client
+            .from('commercial_products')
+            .select('code,store_product_id,quantity,active')
+            .eq('active', true)
+            .eq('kind', 'consumable');
+        final wanted = <String, (CommercialProduct, int)>{};
+        for (final row in rows) {
+          final code = row['code']?.toString() ?? '';
+          final id = row['store_product_id']?.toString() ?? '';
+          final count = row['quantity'];
+          if (id.isEmpty || count is! int || count <= 0) continue;
+          for (final pack in PremiumCatalog.packs) {
+            if (pack.code == code) wanted[id] = (pack, count);
+          }
+        }
+        if (salesEnabled && wanted.isNotEmpty) {
+          final products = await Purchases.getProducts(
+            wanted.keys.toList(),
+            productCategory: ProductCategory.nonSubscription,
+          );
+          for (final product in products) {
+            final config = wanted[product.identifier];
+            if (config == null) continue;
+            packOffers.add(PackOffer(
+              product: product,
+              catalog: config.$1,
+              quantity: config.$2,
+            ));
+          }
+        }
+        final result = await _client.rpc('get_commercial_balances');
+        if (result is Map) balances = Map<String, dynamic>.from(result);
+      } catch (_) {
+        // Versions serveur plus anciennes : achats bloqués, solde non inventé.
+      }
+
       return PremiumState(
+        packOffers: List<PackOffer>.unmodifiable(packOffers),
+        balances: balances,
+        salesEnabled: salesEnabled,
         configured: true,
         active: customerInfo.entitlements.active.containsKey(
           PremiumCatalog.entitlementId,
@@ -125,6 +214,14 @@ class PremiumService {
   }
 
   Future<PremiumState> purchase(PremiumOffer offer) async {
+    if (!await _salePermitted(
+      code: 'premium_annual',
+      storeProductId: offer.package.storeProduct.identifier,
+    )) {
+      throw const PremiumException(
+        'Cette formule n’est pas encore disponible à l’achat.',
+      );
+    }
     final user = _client.auth.currentUser;
     if (user == null) {
       throw const PremiumException('Reconnectez-vous avant votre achat.');
@@ -150,7 +247,7 @@ class PremiumService {
       }
 
       await _syncServerRequired();
-      return load();
+      return await load();
     } on PlatformException catch (error) {
       final code = PurchasesErrorHelper.getErrorCode(error);
       if (code == PurchasesErrorCode.purchaseCancelledError) {
@@ -165,6 +262,50 @@ class PremiumService {
     } catch (_) {
       throw const PremiumException(
         'L’achat n’a pas pu être finalisé. Réessayez plus tard.',
+      );
+    }
+  }
+
+  /// Les packs sont des consommables : ils ne donnent jamais Premium.
+  /// Le solde utilisable provient exclusivement de la réconciliation serveur.
+  Future<PremiumState> purchasePack(PackOffer offer) async {
+    if (!await _salePermitted(
+      code: offer.catalog.code,
+      storeProductId: offer.product.identifier,
+    )) {
+      throw const PremiumException(
+        'Ce pack n’est pas encore disponible à l’achat.',
+      );
+    }
+    final user = _client.auth.currentUser;
+    if (user == null) {
+      throw const PremiumException('Reconnectez-vous pour acheter un pack.');
+    }
+    try {
+      await _ensureConfigured(user.id);
+      await Purchases.purchase(PurchaseParams.storeProduct(offer.product));
+      final response = await _client.functions.invoke('sync-commercial-purchases');
+      if (response.status < 200 || response.status >= 300 ||
+          response.data is! Map ||
+          (response.data as Map)['success'] != true) {
+        throw const PremiumException(
+          'Achat reçu. Attribution des crédits en attente. '
+          'Vous pourrez les récupérer dans « Restaurer mes achats ».',
+        );
+      }
+      return await load();
+    } on PlatformException catch (error) {
+      if (PurchasesErrorHelper.getErrorCode(error) ==
+          PurchasesErrorCode.purchaseCancelledError) {
+        throw const PremiumPurchaseCancelled();
+      }
+      throw const PremiumException('Achat non finalisé. Vérifiez votre Store.');
+    } on PremiumException {
+      rethrow;
+    } catch (_) {
+      throw const PremiumException(
+        'Achat en attente de synchronisation. '
+        'Retrouvez-le depuis votre compte.',
       );
     }
   }
@@ -186,11 +327,45 @@ class PremiumService {
       await _ensureConfigured(user.id);
       await Purchases.restorePurchases();
       await _syncServerRequired();
-      return load();
+      try {
+        await _client.functions.invoke('sync-commercial-purchases');
+      } catch (_) {
+        // Ne jamais recréditer localement : réconciliation asynchrone.
+      }
+      return await load();
     } catch (_) {
       throw const PremiumException(
         'Impossible de restaurer vos achats pour le moment.',
       );
+    }
+  }
+
+  /// Both the global sales flag AND the exact Store identifier are checked
+  /// immediately before any checkout. The backend independently verifies
+  /// signed purchases; this client check is an extra safety barrier.
+  Future<bool> _salePermitted({
+    required String code,
+    required String storeProductId,
+  }) async {
+    try {
+      final flags = await _client.rpc('get_commercial_flags');
+      if (flags is! Map ||
+          flags['sales_enabled'] != true ||
+          flags['document_credits_enabled'] != true ||
+          flags['vehicle360_credits_enabled'] != true ||
+          flags['other_credits_enabled'] != true) {
+        return false;
+      }
+      final product = await _client
+          .from('commercial_products')
+          .select('store_product_id')
+          .eq('code', code)
+          .eq('active', true)
+          .maybeSingle();
+      return product != null &&
+          product['store_product_id'] == storeProductId;
+    } catch (_) {
+      return false;
     }
   }
 

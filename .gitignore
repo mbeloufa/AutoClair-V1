@@ -44,3 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/.kotlin/
+
+# Production signing secrets (never commit upload keys or passwords)
+/android/key.properties
+/android/*.jks
+/android/*.keystore
+/android/app/*.jks
+/android/app/*.keystore

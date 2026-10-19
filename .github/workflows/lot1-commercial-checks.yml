@@ -1,0 +1,43 @@
+name: AutoClair V1 commercial - Flutter checks
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'lib/features/premium/**'
+      - 'lib/features/support/**'
+      - 'lib/features/account/**'
+      - 'lib/features/auth/**'
+      - 'lib/app.dart'
+      - 'android/**'
+      - 'lib/features/vehicle_insights/vehicle_360*'
+      - 'test/premium_catalog_test.dart'
+      - 'test/v1_*premium*'
+      - 'test/v1_freemium_vehicle_360_source_contract_test.dart'
+      - '.github/workflows/lot1-commercial-checks.yml'
+concurrency:
+  group: v1-commercial-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-lot1:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze edited Flutter features
+        run: flutter analyze lib/app.dart lib/core/router/app_router.dart lib/features/premium lib/features/auth lib/features/account lib/features/home/account_page.dart lib/features/support lib/features/vehicle_care/vehicle_event_notification_service.dart lib/features/vehicle_insights/vehicle_360_access_card.dart lib/features/vehicle_insights/vehicle_360_page.dart
+      - name: Run catalog and commercial regression tests
+        run: flutter test test/premium_catalog_test.dart test/v1_commercial_premium_source_contract_test.dart test/v1_freemium_vehicle_360_source_contract_test.dart
+      - name: Analyze complete Flutter project
+        run: flutter analyze --no-fatal-infos
+      - name: Run complete Flutter regression suite
+        run: flutter test --no-pub
+      - name: Build Android debug smoke artifact
+        run: flutter build apk --debug --no-pub

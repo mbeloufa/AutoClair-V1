@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -445,6 +446,7 @@ Deno.serve(async (req) => {
       const bytes = new Uint8Array(await data.arrayBuffer());
       const contentType = String(photo.content_type ?? "image/jpeg");
       const dataUrl = `data:${contentType};base64,${toBase64(bytes)}`;
+      await requireCommercialBudget(admin, user.id, "tire_photo");
       const quality = await validateSinglePhoto(openaiKey, slot, dataUrl);
       return json(200, { success: true, quality });
     }
@@ -461,6 +463,7 @@ Deno.serve(async (req) => {
       const tireTypes = sidewalls
         .map((item: any) => String(item?.tire_type ?? "UNKNOWN"))
         .filter((value: string, index: number, all: string[]) => value !== "UNKNOWN" && all.indexOf(value) === index);
+      await requireCommercialBudget(admin, user.id, "tire_offers");
       const offers = await researchOffers(openaiKey, dimensions, tireTypes);
       await admin.from("tire_ai_inspections").update({
         offers_json: offers,
@@ -497,6 +500,7 @@ Deno.serve(async (req) => {
       images.push({ slot, dataUrl: `data:${contentType};base64,${toBase64(bytes)}` });
     }
 
+    await requireCommercialBudget(admin, user.id, "tire_ai");
     const analysis = await analyzeImages(openaiKey, images);
     const needsRetake = analysis.status === "NEEDS_RETAKE";
     const status = needsRetake ? "NEEDS_RETAKE" : "READY";

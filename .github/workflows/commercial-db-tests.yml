@@ -1,0 +1,47 @@
+name: V1 commercial — PostgreSQL credit ledger
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'test/sql/**'
+      - '.github/workflows/commercial-db-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap test-only Supabase schemas
+        run: psql -v ON_ERROR_STOP=1 -f test/sql/commercial_bootstrap.sql
+      - name: Apply the real V1 migrations
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019000100_commercial_ledger_v1.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019000200_feedback_v1.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019000300_commercial_ai_rate_limits_v1.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019000400_commercial_maintenance_jobs.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/security/legacy_rpc_permissions_preview.sql
+      - name: Commercial ledger contract and RLS
+        run: psql -v ON_ERROR_STOP=1 -f test/sql/commercial_ledger_test.sql
+      - name: Test 16 parallel reservations on single credit
+        run: bash test/sql/commercial_concurrency_test.sh
