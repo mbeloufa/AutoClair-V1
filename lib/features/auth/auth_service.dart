@@ -45,7 +45,7 @@ class AuthService {
       await _client.auth.resetPasswordForEmail(
         email.trim(),
         redirectTo: AppEnv.passwordResetRedirect.trim().isEmpty
-            ? null
+            ? 'autoclair://auth/reset'
             : AppEnv.passwordResetRedirect.trim(),
       );
     } catch (error) {
