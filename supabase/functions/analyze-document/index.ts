@@ -750,6 +750,8 @@ Deno.serve(async (req: Request) => {
 
   let claimedDocumentId: string | null = null;
   let authenticatedUserId: string | null = null;
+  let commercialReserved = false;
+  let commercialDocumentId: string | null = null;
   let adminClient: ReturnType<typeof createClient> | null = null;
 
   try {
@@ -1006,6 +1008,19 @@ Deno.serve(async (req: Request) => {
       }
 
       const bytes = new Uint8Array(await blob.arrayBuffer());
+      // Do not rely on untrusted filename / content-type metadata.
+      const magicOk = file.mime_type === "application/pdf"
+        ? bytes.length > 5 &&
+          String.fromCharCode(...bytes.subarray(0,5)) === "%PDF-"
+        : file.mime_type === "image/jpeg"
+        ? bytes.length >= 3 && bytes[0] === 0xFF &&
+          bytes[1] === 0xD8 && bytes[2] === 0xFF
+        : bytes.length >= 8 && [137,80,78,71,13,10,26,10]
+          .every((byte, index) => bytes[index] === byte);
+      if (!magicOk) {
+        throw new AppError(422,"DOCUMENT_SIGNATURE_INVALID",
+          "Le fichier est invalide ou ne correspond pas au format déclaré.");
+      }
       const base64 = bytesToBase64(bytes);
 
       if (file.mime_type === "application/pdf") {
@@ -1022,6 +1037,28 @@ Deno.serve(async (req: Request) => {
           detail: "high",
         });
       }
+    }
+
+    // Reservation AFTER all input checks, BEFORE the billable provider call.
+    // Feature gate deliberately defaults to OFF until the ledger migration,
+    // per-endpoint contract and store test are validated on a signed build.
+    if (Deno.env.get("COMMERCIAL_QUOTAS_ENFORCED") === "true") {
+      const {data:reservation,error:creditError} = await adminClient.rpc(
+        "commercial_reserve_credit",{
+          p_user_id:user.id,p_kind:"document",p_request_key:documentId,
+        },
+      );
+      if (creditError) {
+        throw new AppError(503,"COMMERCIAL_CREDITS_UNAVAILABLE",
+          "Vos crédits ne peuvent pas être vérifiés pour le moment.",creditError);
+      }
+      if (!reservation || reservation.ok !== true ||
+          reservation.status !== "reserved") {
+        throw new AppError(402,"DOCUMENT_CREDIT_REQUIRED",
+          "Votre analyse offerte a déjà été utilisée. Consultez les packs.");
+      }
+      commercialReserved = true;
+      commercialDocumentId = documentId;
     }
 
     const openAiRequest = {
@@ -1181,6 +1218,27 @@ Deno.serve(async (req: Request) => {
     }
 
     claimedDocumentId = null;
+    if (commercialReserved && commercialDocumentId) {
+      const {error:finishError}=await adminClient.rpc(
+        "commercial_finish_credit",{
+          p_user_id:user.id,p_kind:"document",
+          p_request_key:commercialDocumentId,p_success:true,
+        },
+      );
+      if (finishError) {
+        console.error("Commercial debit reconciliation required");
+        // The completed document is accessible from its account; do not
+        // silently pretend another credit was granted on this response.
+        return jsonResponse({
+          success:true,already_completed:false,
+          billing_sync_pending:true,
+          analysis:{id:analysisId,document_id:documentId,
+                    summary:result.summary,overall_confidence:result.overall_confidence,
+                    result_json:result},
+        });
+      }
+      commercialReserved = false;
+    }
 
     return jsonResponse({
       success: true,
@@ -1211,6 +1269,17 @@ Deno.serve(async (req: Request) => {
         internal_details: appError.internalDetails,
       }),
     );
+
+    if (commercialReserved && commercialDocumentId &&
+        authenticatedUserId && adminClient) {
+      const {error:releaseError}=await adminClient.rpc(
+        "commercial_finish_credit",{
+          p_user_id:authenticatedUserId,p_kind:"document",
+          p_request_key:commercialDocumentId,p_success:false,
+        },
+      );
+      if (releaseError) console.error("Commercial credit release pending");
+    }
 
     if (
       claimedDocumentId &&
