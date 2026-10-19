@@ -25,3 +25,11 @@ verify_jwt = true
 
 [functions.analyze-emergency]
 verify_jwt = true
+
+# Validated using the dedicated webhook authorization header.
+[functions.revenuecat-commercial-webhook]
+verify_jwt = false
+
+# Authenticated reconciliation of consumables.
+[functions.sync-commercial-purchases]
+verify_jwt = true
