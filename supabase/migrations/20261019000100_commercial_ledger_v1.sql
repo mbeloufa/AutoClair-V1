@@ -258,3 +258,42 @@ grant execute on function private.commercial_release_expired() to service_role;
 
 comment on table public.commercial_store_transactions is
  'Registre vérifié et dédupliqué des achats ; ne pas exposer les reçus aux clients.';
+
+-- Public RPC wrappers remain completely inaccessible to anon/authenticated.
+-- Private routines cannot be called from the Supabase Data API directly.
+grant usage on schema private to service_role;
+create or replace function public.commercial_grant_verified_purchase(
+ p_user_id uuid,p_store text,p_transaction_id text,p_product_code text,
+ p_environment text,p_purchased_at timestamptz default now()
+) returns jsonb language sql security invoker set search_path=''
+as $$ select private.commercial_grant_verified_purchase(
+ p_user_id,p_store,p_transaction_id,p_product_code,p_environment,p_purchased_at); $$;
+revoke all on function public.commercial_grant_verified_purchase(uuid,text,text,text,text,timestamptz) from public,anon,authenticated;
+grant execute on function public.commercial_grant_verified_purchase(uuid,text,text,text,text,timestamptz) to service_role;
+
+create or replace function public.commercial_revoke_purchase(
+ p_store text,p_transaction_id text
+) returns boolean language sql security invoker set search_path=''
+as $$ select private.commercial_revoke_purchase(p_store,p_transaction_id); $$;
+revoke all on function public.commercial_revoke_purchase(text,text) from public,anon,authenticated;
+grant execute on function public.commercial_revoke_purchase(text,text) to service_role;
+
+create or replace function public.commercial_reserve_credit(
+ p_user_id uuid,p_kind text,p_request_key text
+) returns jsonb language sql security invoker set search_path=''
+as $$ select private.commercial_reserve_credit(p_user_id,p_kind,p_request_key); $$;
+revoke all on function public.commercial_reserve_credit(uuid,text,text) from public,anon,authenticated;
+grant execute on function public.commercial_reserve_credit(uuid,text,text) to service_role;
+
+create or replace function public.commercial_finish_credit(
+ p_user_id uuid,p_kind text,p_request_key text,p_success boolean
+) returns jsonb language sql security invoker set search_path=''
+as $$ select private.commercial_finish_credit(p_user_id,p_kind,p_request_key,p_success); $$;
+revoke all on function public.commercial_finish_credit(uuid,text,text,boolean) from public,anon,authenticated;
+grant execute on function public.commercial_finish_credit(uuid,text,text,boolean) to service_role;
+
+create or replace function public.commercial_release_expired()
+returns integer language sql security invoker set search_path=''
+as $$ select private.commercial_release_expired(); $$;
+revoke all on function public.commercial_release_expired() from public,anon,authenticated;
+grant execute on function public.commercial_release_expired() to service_role;
