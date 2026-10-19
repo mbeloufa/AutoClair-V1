@@ -73,7 +73,11 @@ class AuthService {
 
   Future<void> logout() async {
     try {
-      await VehicleEventNotificationService.instance.clearForAccountSwitch();
+      try {
+        await VehicleEventNotificationService.instance.clearForAccountSwitch();
+      } catch (_) {
+        // Never trap the user in a session if local notification APIs fail.
+      }
       await _client.auth.signOut();
     } catch (error) {
       throw AuthServiceException(AuthErrorMapper.message(error));
