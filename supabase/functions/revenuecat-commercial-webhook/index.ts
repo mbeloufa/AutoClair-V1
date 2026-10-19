@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { commercialWebhookAction } from "../_shared/revenuecat_event_policy.ts";
 
 const json = (status: number, body: unknown) => new Response(
   JSON.stringify(body), { status, headers: { "Content-Type":"application/json","Cache-Control":"no-store" } },
@@ -119,7 +120,7 @@ Deno.serve(async (request) => {
       return json(200,{ accepted:true, sandbox_ignored:true });
     const admin = createClient<any>(url,serviceKey,{auth:{persistSession:false}});
     const subscriber = await subscriberFor(userId,apiKey);
-    if (type !== "NON_RENEWING_PURCHASE" && type !== "REFUND") {
+    if (type !== "NON_RENEWING_PURCHASE" && type !== "REFUND" && type !== "CANCELLATION") {
       await syncPremium(admin,userId,subscriber);
       return json(200,{ accepted:true, subscription_synced:true });
     }
@@ -142,7 +143,7 @@ Deno.serve(async (request) => {
       return json(200,{accepted:true,subscription_synced:true});
     }
 
-    if (type === "REFUND") {
+    if (commercialWebhookAction(type,true) === "refund") {
       const {error}=await admin.rpc("commercial_revoke_purchase",{
         p_user_id:userId,
         p_product_code:product.code,
