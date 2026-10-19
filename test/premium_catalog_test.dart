@@ -16,11 +16,15 @@ void main() {
     expect(PremiumCatalog.packs.map((p) => p.code).toSet().length, 3);
     for (final pack in PremiumCatalog.packs) {
       expect(pack.type, isNot(CommercialProductType.subscription));
-      expect(pack.priceCentsTtc, isNull);
+      expect(pack.priceCentsTtc, greaterThan(0));
+      expect(pack.quantity, greaterThan(0));
       expect(pack.storeProductId, isNull);
       expect(pack.fullySpecified, isFalse);
     }
-    expect(PremiumCatalog.packs.last.quantity, 1);
+    expect(PremiumCatalog.packs.map((p) => p.quantity), [5, 15, 1]);
+    expect(PremiumCatalog.packs.map((p) => p.priceCentsTtc), [399, 899, 499]);
+    expect(PremiumCatalog.annualDocumentCredits, 20);
+    expect(PremiumCatalog.annualVehicle360Credits, 5);
   });
 
   test('every costly exposed service is flagged for server metering', () {
