@@ -598,33 +598,36 @@ Deno.serve(async (req: Request) => {
     const message = safeError(error);
 
     if (adminClient && reportId && userId) {
-      await adminClient
+      // Read the durable state BEFORE changing it. A response read failure
+      // after successful storage must never erase an already completed Bilan.
+      const { data: previous, error: stateError } = await adminClient
         .from("vehicle_analysis_reports")
-        .update({
-          status: "failed",
-          error_code: message.split(":")[0].slice(0, 120),
-          error_message: message.slice(0, 1000),
-        })
-        .eq("id", reportId)
-        .eq("user_id", userId);
-
-      if (creditWasReserved) {
+        .select("status")
+        .eq("id", reportId).eq("user_id", userId).maybeSingle();
+      const completed = previous?.status === "completed";
+      if (!completed && !stateError) {
+        await adminClient
+          .from("vehicle_analysis_reports")
+          .update({
+            status: "failed",
+            error_code: message.split(":")[0].slice(0, 120),
+            error_message: message.slice(0, 1000),
+          })
+          .eq("id", reportId).eq("user_id", userId)
+          .neq("status", "completed");
+      }
+      if (!completed && creditWasReserved && !stateError) {
         await adminClient.rpc("release_vehicle_report_access", {
-          p_user_id: userId,
-          p_report_id: reportId,
+          p_user_id: userId, p_report_id: reportId,
           p_reason: message.slice(0, 300),
         });
       }
-      if (commercialReserved) {
-        // Do not release a credit if the report was actually completed.
-        const { data: completed } = await adminClient
-          .from("vehicle_analysis_reports").select("status")
-          .eq("id", reportId).eq("user_id", userId).maybeSingle();
+      if (commercialReserved && !stateError) {
         await adminClient.rpc("commercial_finish_credit", {
           p_user_id: userId,
           p_kind: "vehicle_360",
           p_request_key: reportId,
-          p_success: completed?.status === "completed",
+          p_success: completed,
         });
       }
     }
