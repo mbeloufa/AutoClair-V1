@@ -91,13 +91,6 @@ class PremiumService {
       final current = offerings.current;
       final offers = <PremiumOffer>[];
 
-      final monthly = current?.monthly;
-      if (monthly != null) {
-        offers.add(
-          PremiumOffer(package: monthly, label: PremiumCatalog.monthlyLabel),
-        );
-      }
-
       final annual = current?.annual;
       if (annual != null) {
         offers.add(
@@ -125,6 +118,11 @@ class PremiumService {
   }
 
   Future<PremiumState> purchase(PremiumOffer offer) async {
+    if (!PremiumCatalog.checkoutEnabled) {
+      throw const PremiumException(
+        'Les achats ouvriront après validation des quotas et des crédits serveur.',
+      );
+    }
     final user = _client.auth.currentUser;
     if (user == null) {
       throw const PremiumException('Reconnectez-vous avant votre achat.');
