@@ -96,3 +96,52 @@ end
 $rls$;
 reset role;
 select 'PASS: idempotency, credit lifecycle, trials, refund tombstones, RLS' as result;
+
+-- Annual cycle, duplicate webhook and unique complimentary Bilan 360.
+update public.commercial_products
+ set active=true,store_product_id='autoclair.qa.annual'
+ where code='premium_annual';
+update public.commercial_subscription_allocations
+ set enabled=true, units=2
+ where product_code='premium_annual';
+do $annual$
+declare
+ u1 uuid:='11111111-1111-4111-8111-111111111111';
+ u2 uuid:='22222222-2222-4222-8222-222222222222';
+ got jsonb;
+ n integer;
+begin
+ got:=public.commercial_grant_subscription_cycle(u1,
+   'autoclair.qa.annual','cycle-2026-2027',now()+interval '1 year');
+ if (got->>'configured_allocations')::int<>2 then
+   raise exception 'annual allocations misconfigured: %', got;
+ end if;
+ perform public.commercial_grant_subscription_cycle(u1,
+   'autoclair.qa.annual','cycle-2026-2027',now()+interval '1 year');
+ select count(*) into n from public.commercial_credit_lots
+   where user_id=u1 and source='subscription';
+ if n<>2 then raise exception 'annual allocated twice %',n;end if;
+
+ -- A user with a completed Bilan before launch must not requalify.
+ insert into public.vehicle_analysis_reports(user_id,status)
+  values(u1,'completed');
+ perform set_config('request.jwt.claim.sub',u1::text,true);
+ got:=public.claim_vehicle360_commercial_trial();
+ if got->>'success'<>'false' then
+   raise exception 'retroactive trial vulnerability: %',got;
+ end if;
+ perform set_config('request.jwt.claim.sub',u2::text,true);
+ got:=public.claim_vehicle360_commercial_trial();
+ if got->>'success'<>'true' then raise exception 'Bilan trial denied: %',got;end if;
+ got:=public.claim_vehicle360_commercial_trial();
+ select count(*) into n from public.commercial_credit_lots
+  where user_id=u2 and source='trial' and kind='vehicle_360';
+ if n<>1 then raise exception 'Bilan trial created twice: %',n;end if;
+
+ perform public.commercial_revoke_subscription(u1);
+ select count(*) into n from public.commercial_credit_lots
+ where user_id=u1 and source='subscription' and revoked_at is null;
+ if n<>0 then raise exception 'cancelled subscription retains credits';end if;
+end
+$annual$;
+select 'PASS: annual cycles, unique 360 discovery, revocation' as result;
