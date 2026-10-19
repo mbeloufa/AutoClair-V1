@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { authenticate } from "../_shared/auth.ts";
 import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import {
@@ -270,6 +271,7 @@ Deno.serve(async (req: Request) => {
       delete safeVehicle[key];
     }
 
+    await requireCommercialBudget(auth.adminClient, auth.user.id, "valuation");
     const response = await fetch(providerUrl, {
       method: "POST",
       headers,
