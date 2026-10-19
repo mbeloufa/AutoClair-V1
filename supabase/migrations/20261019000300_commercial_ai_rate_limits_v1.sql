@@ -5,23 +5,29 @@ create table if not exists public.commercial_ai_daily_limits (
  feature text primary key,
  free_per_day int not null check (free_per_day between 0 and 100),
  premium_per_day int not null check (premium_per_day between 0 and 1000),
+ free_per_365_days int not null check (free_per_365_days between 0 and 10000),
+ premium_per_365_days int not null check (premium_per_365_days between 0 and 100000),
  per_feature_global_per_day int not null check (per_feature_global_per_day between 1 and 100000),
  enabled boolean not null default false
 );
+-- Starting allocations are conservative and remain inactive unless the
+-- central rollout flag other_credits_enabled is deliberately enabled.
 insert into public.commercial_ai_daily_limits
- (feature,free_per_day,premium_per_day,per_feature_global_per_day,enabled)
+ (feature,free_per_day,premium_per_day,
+  free_per_365_days,premium_per_365_days,
+  per_feature_global_per_day,enabled)
 values
- ('tire_ai',2,10,200,true),
- ('tire_photo',8,40,300,true),
- ('tire_offers',2,8,200,true),
- ('legal',2,10,150,true),
- ('smart_trip',2,10,250,true),
- ('smart_trip_autocomplete',40,120,500,true),
- ('emergency',3,15,300,true),
- ('maintenance',2,8,200,true),
- ('identification',3,12,300,true),
- ('valuation',2,8,150,true),
- ('parking',30,100,1000,true)
+ ('tire_ai',2,10,2,24,200,true),
+ ('tire_photo',8,40,16,160,300,true),
+ ('tire_offers',2,8,4,24,200,true),
+ ('legal',2,10,1,8,150,true),
+ ('smart_trip',2,10,4,40,250,true),
+ ('smart_trip_autocomplete',40,120,100,1000,500,true),
+ ('emergency',3,15,6,36,300,true),
+ ('maintenance',2,8,2,12,200,true),
+ ('identification',3,12,4,24,300,true),
+ ('valuation',2,8,2,12,150,true),
+ ('parking',30,100,120,500,1000,true)
 on conflict (feature) do nothing;
 
 create table if not exists public.commercial_ai_rate_events (
@@ -56,9 +62,11 @@ declare v_policy public.commercial_ai_daily_limits%rowtype;
         v_premium boolean;
         v_day date := (now() at time zone 'UTC')::date;
         v_user_count integer;
+        v_year_count integer;
         v_global_count integer;
         v_daily_count integer;
         v_cap integer;
+        v_year_cap integer;
         v_enabled boolean;
 begin
  select other_credits_enabled into v_enabled
@@ -94,20 +102,27 @@ begin
  ) into v_premium;
  v_cap:=case when v_premium then v_policy.premium_per_day
              else v_policy.free_per_day end;
+ v_year_cap:=case when v_premium then v_policy.premium_per_365_days
+             else v_policy.free_per_365_days end;
  select count(*) into v_user_count
  from public.commercial_ai_rate_events
  where user_id=p_user_id and feature=p_feature and utc_day=v_day;
+ select count(*) into v_year_count
+ from public.commercial_ai_rate_events
+ where user_id=p_user_id and feature=p_feature
+   and utc_day>(v_day-365);
  select count(*) into v_global_count
  from public.commercial_ai_rate_events
  where feature=p_feature and utc_day=v_day;
  select count(*) into v_daily_count
  from public.commercial_ai_rate_events where utc_day=v_day;
  if v_user_count>=v_cap
+    or v_year_count>=v_year_cap
     or v_global_count>=v_policy.per_feature_global_per_day
     or v_daily_count>=500 then
    return jsonb_build_object(
      'allowed',false,'reason','COMMERCIAL_DAILY_LIMIT',
-     'feature',p_feature,'limit',v_cap
+     'feature',p_feature,'limit',v_cap,'rolling_year_limit',v_year_cap
    );
  end if;
  insert into public.commercial_ai_rate_events
@@ -142,7 +157,7 @@ as $fn$
 declare v_count integer;
 begin
  delete from public.commercial_ai_rate_events
- where utc_day < ((now() at time zone 'UTC')::date-120);
+ where utc_day < ((now() at time zone 'UTC')::date-400);
  get diagnostics v_count=row_count;
  return v_count;
 end;
