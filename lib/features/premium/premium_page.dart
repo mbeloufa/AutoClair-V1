@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'premium_catalog.dart';
 import 'premium_service.dart';
@@ -70,6 +71,33 @@ class _PremiumPageState extends State<PremiumPage> {
     }
   }
 
+  Future<void> _purchasePack(PackOffer offer) async {
+    if (_busy) return;
+    setState(() { _busy = true; _error = null; });
+    try {
+      final result = await _service.purchasePack(offer);
+      if (!mounted) return;
+      setState(() => _state = result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Votre solde a été synchronisé.')),
+      );
+    } on PremiumPurchaseCancelled {
+      // Pas d'erreur à montrer en cas d'annulation.
+    } on PremiumException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openManagement() async {
+    final link = _state?.managementUrl;
+    if (link == null || link.isEmpty) return;
+    final uri = Uri.tryParse(link);
+    if (uri == null || !(uri.scheme == 'https')) return;
+    await launchUrl(uri,mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _restore() async {
     if (_busy) return;
     setState(() {
@@ -101,7 +129,7 @@ class _PremiumPageState extends State<PremiumPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('AutoClair Premium')),
+      appBar: AppBar(title: const Text('Mon abonnement et mes achats')),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _load,
@@ -122,6 +150,17 @@ class _PremiumPageState extends State<PremiumPage> {
               ),
               const SizedBox(height: 14),
               const _PacksSummary(),
+              if (_state != null) ...[
+                const SizedBox(height: 12),
+                _CommercialBalancesView(balances: _state!.balances),
+                if (PremiumCatalog.checkoutEnabled)
+                  for (final offer in _state!.packOffers)
+                    _PackPurchaseCard(
+                      offer: offer,
+                      busy: _busy,
+                      onPressed: () => _purchasePack(offer),
+                    ),
+              ],
               const SizedBox(height: 20),
               if (_loading)
                 const Center(
@@ -180,6 +219,12 @@ class _PremiumPageState extends State<PremiumPage> {
             icon: const Icon(Icons.restore),
             label: const Text('Restaurer mes achats'),
           ),
+          if (state.managementUrl?.startsWith('https://') == true)
+            TextButton.icon(
+              onPressed: _openManagement,
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Gérer/résilier mon abonnement'),
+            ),
         ],
       );
     }
@@ -270,6 +315,53 @@ class _PremiumPageState extends State<PremiumPage> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
+    );
+  }
+}
+
+class _CommercialBalancesView extends StatelessWidget {
+  const _CommercialBalancesView({required this.balances});
+  final Map<String,dynamic> balances;
+
+  @override
+  Widget build(BuildContext context) {
+    if (balances.isEmpty) {
+      return const Text('Soldes non disponibles : actualisez votre compte.');
+    }
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Mes crédits', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            for (final entry in balances.entries)
+              Text('${entry.key} — ${entry.value}'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PackPurchaseCard extends StatelessWidget {
+  const _PackPurchaseCard({
+    required this.offer, required this.busy, required this.onPressed,
+  });
+  final PackOffer offer;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      title: Text(offer.catalog.name),
+      subtitle: Text('${offer.quantity} crédit(s) · ${offer.price}'),
+      trailing: FilledButton(
+        onPressed: busy ? null : onPressed,
+        child: const Text('Acheter'),
+      ),
     );
   }
 }
