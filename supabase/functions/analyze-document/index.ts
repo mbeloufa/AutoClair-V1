@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { PDFDocument } from "npm:pdf-lib@1.17.1";
 
 const BUCKET_ID = "vehicle-documents";
 const PROMPT_VERSION = "autoclair-document-v3";
@@ -958,6 +959,10 @@ Deno.serve(async (req: Request) => {
       },
     ];
 
+    // Separate document size, page count and format limits are enforced
+    // before any chargeable AI request or credit reservation.
+    const maxPdfPages = 30;
+    let totalPdfPages = 0;
     for (const file of files) {
       if (
         !["application/pdf", "image/jpeg", "image/png"].includes(
@@ -1020,6 +1025,21 @@ Deno.serve(async (req: Request) => {
       if (!magicOk) {
         throw new AppError(422,"DOCUMENT_SIGNATURE_INVALID",
           "Le fichier est invalide ou ne correspond pas au format déclaré.");
+      }
+      if (file.mime_type === "application/pdf") {
+        let pageCount: number;
+        try {
+          const pdf = await PDFDocument.load(bytes, { ignoreEncryption: false });
+          pageCount = pdf.getPageCount();
+        } catch (_) {
+          throw new AppError(422,"DOCUMENT_PDF_INVALID",
+            "Ce PDF est corrompu, chiffré ou impossible à lire.");
+        }
+        totalPdfPages += pageCount;
+        if (pageCount < 1 || totalPdfPages > maxPdfPages) {
+          throw new AppError(422,"DOCUMENT_PDF_TOO_LONG",
+            "Ce document dépasse la limite de 30 pages PDF cumulées.");
+        }
       }
       const base64 = bytesToBase64(bytes);
 
