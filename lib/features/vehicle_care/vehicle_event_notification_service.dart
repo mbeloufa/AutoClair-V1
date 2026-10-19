@@ -200,6 +200,13 @@ class VehicleEventNotificationService {
     }
   }
 
+  /// Efface tous les rappels du téléphone avant de changer de compte.
+  /// Les rappels seront reprogrammés à partir du compte reconnecté.
+  Future<void> clearForAccountSwitch() async {
+    await _initialize();
+    await _plugin.cancelAll();
+  }
+
   Future<void> cancelReminder(String eventKey) async {
     await _initialize();
     await _plugin.cancel(vehicleEventNotificationId(eventKey));
