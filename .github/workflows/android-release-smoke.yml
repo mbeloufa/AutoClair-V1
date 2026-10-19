@@ -1,0 +1,62 @@
+name: AutoClair V1 - Android release smoke (CI signing only)
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'lib/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - '.github/workflows/android-release-smoke.yml'
+  workflow_dispatch:
+concurrency:
+  group: autoclair-release-smoke-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  signed-test-aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Generate disposable signing key for CI only
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This signer is NOT the app's Google Play upload key.
+          # Destroy at end of job. Never publish bundles signed by this key.
+          chmod 700 "$RUNNER_TEMP"
+          CI_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$CI_PASSWORD"
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/autoclair-ci-only.p12" \
+            -storetype PKCS12 -storepass "$CI_PASSWORD" -keypass "$CI_PASSWORD" \
+            -alias autoclair-ci-only -keyalg RSA -keysize 3072 -validity 1 \
+            -dname "CN=AutoClair CI Smoke, O=Disposable, C=FR"
+          {
+            printf 'storeFile=%s\\n' "$RUNNER_TEMP/autoclair-ci-only.p12"
+            printf 'storePassword=%s\\n' "$CI_PASSWORD"
+            printf 'keyAlias=autoclair-ci-only\\n'
+            printf 'keyPassword=%s\\n' "$CI_PASSWORD"
+          } > android/key.properties
+          chmod 600 android/key.properties
+      - name: Build signed Android App Bundle (throwaway signing)
+        run: flutter build appbundle --release --no-pub
+      - name: Validate bundle signature and contents
+        run: |
+          set -euo pipefail
+          aab="build/app/outputs/bundle/release/app-release.aab"
+          test -s "$aab"
+          jarsigner -verify "$aab"
+          unzip -t "$aab" > /dev/null
+          echo "PASS: Android release AAB compiles, contains valid ZIP entries and has an authenticated CI-only signature."
+      - name: Destroy disposable signing material
+        if: always()
+        run: |
+          rm -f android/key.properties
+          rm -f "$RUNNER_TEMP/autoclair-ci-only.p12"
