@@ -132,7 +132,7 @@ async function callOpenAi(input: JsonMap): Promise<{
 }
 
 async function loadReport(
-  adminClient: ReturnType<typeof import("npm:@supabase/supabase-js@2")["createClient"]>,
+  adminClient: import("npm:@supabase/supabase-js@2").SupabaseClient<any>,
   reportId: string,
   userId: string,
 ): Promise<JsonMap | null> {
@@ -241,7 +241,7 @@ Deno.serve(async (req: Request) => {
   let creditWasReserved = false;
   let commercialReserved = false;
   let adminClient:
-    | ReturnType<typeof import("npm:@supabase/supabase-js@2")["createClient"]>
+    | import("npm:@supabase/supabase-js@2").SupabaseClient<any>
     | null = null;
 
   try {
