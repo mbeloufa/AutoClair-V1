@@ -20,7 +20,7 @@ class AppLogo extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(
-            Icons.menu_book_rounded,
+            Icons.directions_car_filled_rounded,
             color: AppColors.primary,
             size: compact ? 24 : 30,
           ),
