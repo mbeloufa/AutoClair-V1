@@ -1062,7 +1062,16 @@ Deno.serve(async (req: Request) => {
     // Reservation AFTER all input checks, BEFORE the billable provider call.
     // Feature gate deliberately defaults to OFF until the ledger migration,
     // per-endpoint contract and store test are validated on a signed build.
-    if (Deno.env.get("COMMERCIAL_QUOTAS_ENFORCED") === "true") {
+    const { data: commercialPolicy, error: policyError } = await adminClient
+      .from("commercial_settings")
+      .select("document_credits_enabled")
+      .eq("singleton", true)
+      .single();
+    if (policyError || !commercialPolicy) {
+      throw new AppError(503, "COMMERCIAL_POLICY_UNAVAILABLE",
+        "L'accès au service ne peut pas être vérifié.", policyError);
+    }
+    if (commercialPolicy.document_credits_enabled === true) {
       const {data:reservation,error:creditError} = await adminClient.rpc(
         "commercial_reserve_credit",{
           p_user_id:user.id,p_kind:"document",p_request_key:documentId,
