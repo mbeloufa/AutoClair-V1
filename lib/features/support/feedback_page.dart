@@ -51,13 +51,19 @@ class _FeedbackPageState extends State<FeedbackPage> {
         'category':_category,
         'description':_details.text.trim(),
       });
-      if (mounted) setState(() => _sent=true);
+      if (mounted) {
+        setState(() => _sent=true);
+      }
     } catch (_) {
-      if (mounted) setState(() =>
-        _error='Votre signalement ne peut pas être transmis pour le moment. '
-          'Conservez votre texte et réessayez.');
+      if (mounted) {
+        setState(() =>
+          _error='Votre signalement ne peut pas être transmis pour le moment. '
+            'Conservez votre texte et réessayez.');
+      }
     } finally {
-      if (mounted) setState(() => _sending=false);
+      if (mounted) {
+        setState(() => _sending=false);
+      }
     }
   }
 
