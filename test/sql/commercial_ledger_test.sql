@@ -117,7 +117,7 @@ begin
    raise exception 'annual allocations misconfigured: %', got;
  end if;
  perform public.commercial_grant_subscription_cycle(u1,
-   'autoclair.qa.annual','cycle-2026-2027',now()+interval '1 year');
+   'autoclair.qa.annual','cycle-2026-2027',now()+interval '13 months');
  select count(*) into n from public.commercial_credit_lots
    where user_id=u1 and source='subscription';
  if n<>2 then raise exception 'annual allocated twice %',n;end if;
