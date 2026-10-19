@@ -53,6 +53,24 @@ class AuthService {
     }
   }
 
+  Future<void> updatePassword(String password) async {
+    if (_client.auth.currentSession == null) {
+      throw const AuthServiceException(
+        'Le lien de récupération est expiré. Demandez un nouveau lien.',
+      );
+    }
+    if (password.length < 12) {
+      throw const AuthServiceException(
+        'Utilisez un mot de passe de 12 caractères minimum.',
+      );
+    }
+    try {
+      await _client.auth.updateUser(UserAttributes(password: password));
+    } catch (error) {
+      throw AuthServiceException(AuthErrorMapper.message(error));
+    }
+  }
+
   Future<void> logout() async {
     try {
       await VehicleEventNotificationService.instance.clearForAccountSwitch();
