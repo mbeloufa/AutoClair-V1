@@ -87,8 +87,7 @@ Deno.serve(async (request) => {
       return json(200,{ accepted:true, sandbox_ignored:true });
     const admin = createClient(url,serviceKey,{auth:{persistSession:false}});
     const subscriber = await subscriberFor(userId,apiKey);
-    if (type !== "NON_RENEWING_PURCHASE" && type !== "CANCELLATION" &&
-        type !== "REFUND") {
+    if (type !== "NON_RENEWING_PURCHASE" && type !== "REFUND") {
       await syncPremium(admin,userId,subscriber);
       return json(200,{ accepted:true, subscription_synced:true });
     }
@@ -104,12 +103,14 @@ Deno.serve(async (request) => {
       .select("code,kind,active")
       .eq("store_product_id",productId).maybeSingle();
     if (productError) throw new Error("PRODUCT_LOOKUP_FAILED");
-    if (!product || !product.active || product.kind !== "consumable") {
-      // No product grant if catalogue, pricing or store mapping is unfinished.
-      return json(200,{ accepted:true, product_unconfigured:true });
+    if (!product || product.kind !== "consumable") {
+      // Subscription refund or an unknown product: synchronize subscription
+      // rather than inventing or revoking a consumable.
+      await syncPremium(admin,userId,subscriber);
+      return json(200,{accepted:true,subscription_synced:true});
     }
 
-    if (type === "CANCELLATION" || type === "REFUND") {
+    if (type === "REFUND") {
       const {error}=await admin.rpc("commercial_revoke_purchase",{
         p_user_id:userId,
         p_product_code:product.code,
@@ -121,6 +122,9 @@ Deno.serve(async (request) => {
       return json(200,{ accepted:true, refunded:true });
     }
 
+    if (!product.active) {
+      return json(200,{accepted:true,product_unconfigured:true});
+    }
     // Do not trust merely the event payload. Cross-check the receipt
     // against the provider's verified subscriber purchase history.
     if (!transactionPresent(subscriber,productId,transactionId)) {
