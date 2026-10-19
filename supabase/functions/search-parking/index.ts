@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import {
   authenticate,
   type AuthContext,
@@ -655,6 +656,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    await requireCommercialBudget(auth.adminClient, auth.user.id, "parking");
     const [osmSettlement, officialSettlement] =
       await Promise.allSettled([
         fetchOsm(latitude, longitude, radiusKm),
