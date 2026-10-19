@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import { decode } from "npm:@here/flexpolyline@0.1.0";
 
@@ -885,6 +886,7 @@ Deno.serve(async (request) => {
         });
       }
       const context = pointOf(body?.at);
+      await requireCommercialBudget(admin, user.id, "smart_trip_autocomplete");
       const suggestions = await autocomplete(query, context, apiKey);
       return json(200, {
         success: true,
@@ -959,6 +961,7 @@ Deno.serve(async (request) => {
       ? "ESTIMATED_BY_FUEL"
       : "USER";
 
+    await requireCommercialBudget(admin, user.id, "smart_trip");
     const origin = await resolvePlace(body?.origin, apiKey, "Ma position");
     const destination = await resolvePlace(
       body?.destination,
