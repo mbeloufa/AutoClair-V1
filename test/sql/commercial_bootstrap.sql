@@ -23,3 +23,12 @@ insert into auth.users(id) values
 -- First user has an existing completed document and therefore NO new trial.
 insert into public.document_analyses(user_id)
  values('11111111-1111-4111-8111-111111111111');
+
+create table public.user_entitlements(
+ id uuid primary key default gen_random_uuid(),
+ user_id uuid not null references auth.users(id),
+ entitlement_code text not null,
+ status text not null,
+ starts_at timestamptz not null default now(),
+ expires_at timestamptz
+);
