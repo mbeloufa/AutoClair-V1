@@ -1,4 +1,20 @@
 \set ON_ERROR_STOP on
+do $security$
+begin
+ if has_function_privilege('anon','public.get_vehicle_report_access()','EXECUTE') then
+   raise exception 'Legacy user RPC remains anonymously executable';
+ end if;
+ if not has_function_privilege('authenticated','public.get_vehicle_report_access()','EXECUTE') then
+   raise exception 'Client access unexpectedly broken';
+ end if;
+ if has_function_privilege('anon','public.maintain_commercial_offers_v6()','EXECUTE')
+    or has_function_privilege('authenticated','public.maintain_commercial_offers_v6()','EXECUTE') then
+   raise exception 'Privileged commercial maintenance reachable by app users';
+ end if;
+ if not has_function_privilege('service_role','public.maintain_commercial_offers_v6()','EXECUTE') then
+   raise exception 'Backend maintenance permissions removed';
+ end if;
+end $security$;
 -- Test environment, not production. Exercise the actual same SQL functions.
 update public.commercial_products
 set active=true,quantity=3,price_ttc_cents=490,
