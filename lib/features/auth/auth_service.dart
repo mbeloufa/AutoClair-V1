@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/config/app_env.dart';
+import '../vehicle_care/vehicle_event_notification_service.dart';
 import '../../core/utils/auth_error_mapper.dart';
 
 class AuthServiceException implements Exception {
@@ -54,6 +55,7 @@ class AuthService {
 
   Future<void> logout() async {
     try {
+      await VehicleEventNotificationService.instance.clearForAccountSwitch();
       await _client.auth.signOut();
     } catch (error) {
       throw AuthServiceException(AuthErrorMapper.message(error));
