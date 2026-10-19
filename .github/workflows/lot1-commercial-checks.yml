@@ -35,5 +35,9 @@ jobs:
         run: flutter analyze lib/app.dart lib/core/router/app_router.dart lib/features/premium lib/features/auth lib/features/account lib/features/home/account_page.dart lib/features/support lib/features/vehicle_care/vehicle_event_notification_service.dart lib/features/vehicle_insights/vehicle_360_access_card.dart lib/features/vehicle_insights/vehicle_360_page.dart
       - name: Run catalog and commercial regression tests
         run: flutter test test/premium_catalog_test.dart test/v1_commercial_premium_source_contract_test.dart test/v1_freemium_vehicle_360_source_contract_test.dart
+      - name: Analyze complete Flutter project
+        run: flutter analyze --no-fatal-infos
+      - name: Run complete Flutter regression suite
+        run: flutter test --no-pub
       - name: Build Android debug smoke artifact
         run: flutter build apk --debug --no-pub
