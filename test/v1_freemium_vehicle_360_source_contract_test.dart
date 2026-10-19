@@ -19,7 +19,12 @@ void main() {
       );
       final page = _read('lib/features/vehicle_insights/vehicle_360_page.dart');
 
-      expect(reportFunction, contains('const billingMode = "credits";'));
+      expect(
+        reportFunction,
+        contains('const billingMode = commercialMode ? "commercial" : "credits";'),
+      );
+      expect(reportFunction, contains('"commercial_reserve_credit"'));
+      expect(reportFunction, contains('"commercial_finish_credit"'));
       expect(reportFunction, isNot(contains('?? "blocked"')));
 
       expect(trialFunction, contains('trial:vehicle_360:'));
