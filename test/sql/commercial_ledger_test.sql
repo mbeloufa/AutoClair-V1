@@ -121,6 +121,10 @@ begin
  select count(*) into n from public.commercial_credit_lots
    where user_id=u1 and source='subscription';
  if n<>2 then raise exception 'annual allocated twice %',n;end if;
+ select count(*) into n from public.commercial_credit_lots
+ where user_id=u1 and source='subscription'
+   and expires_at>now()+interval '12 months';
+ if n<>2 then raise exception 'annual grace extension minted or lost units: %',n;end if;
 
  -- A user with a completed Bilan before launch must not requalify.
  insert into public.vehicle_analysis_reports(user_id,status)
