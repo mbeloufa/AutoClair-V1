@@ -149,11 +149,13 @@ class _PremiumPageState extends State<PremiumPage> {
                 highlighted: true,
               ),
               const SizedBox(height: 14),
-              const _PacksSummary(),
+              _PacksSummary(
+                offers: _state?.packOffers ?? const <PackOffer>[],
+              ),
               if (_state != null) ...[
                 const SizedBox(height: 12),
                 _CommercialBalancesView(balances: _state!.balances),
-                if (PremiumCatalog.checkoutEnabled)
+                if (_state!.salesEnabled)
                   for (final offer in _state!.packOffers)
                     _PackPurchaseCard(
                       offer: offer,
@@ -201,7 +203,7 @@ class _PremiumPageState extends State<PremiumPage> {
       );
     }
 
-    if (!PremiumCatalog.checkoutEnabled) {
+    if (!state.salesEnabled) {
       return Column(
         children: [
           _MessageCard(
@@ -367,7 +369,8 @@ class _PackPurchaseCard extends StatelessWidget {
 }
 
 class _PacksSummary extends StatelessWidget {
-  const _PacksSummary();
+  const _PacksSummary({required this.offers});
+  final List<PackOffer> offers;
 
   @override
   Widget build(BuildContext context) {
@@ -389,13 +392,21 @@ class _PacksSummary extends StatelessWidget {
                     const SizedBox(width: 9),
                     Expanded(child: Text(pack.name)),
                     const SizedBox(width: 8),
-                    const Text('À préciser'),
+                    Text(() {
+                      for (final offer in offers) {
+                        if (offer.catalog.code == pack.code) {
+                          return '${offer.quantity} × ${offer.price}';
+                        }
+                      }
+                      return 'En préparation';
+                    }()),
                   ],
                 ),
               ),
             const SizedBox(height: 8),
-            Text('Les quantités et prix des packs seront publiés après '
-                 'validation des coûts et du suivi des crédits.',
+            Text('Les prix applicables sont ceux du Store. '
+                 'Aucun paiement ne peut démarrer tant que les produits '
+                 'ne sont pas activés côté serveur.',
               style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
