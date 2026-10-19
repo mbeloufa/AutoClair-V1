@@ -391,9 +391,18 @@ declare v_uid uuid := auth.uid();
 begin
  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
  perform pg_advisory_xact_lock(hashtextextended(v_uid::text||':vehicle360_trial',0));
- select exists (
-    select 1 from public.vehicle_analysis_reports
-    where user_id=v_uid and status='completed'
+ select (
+   exists (
+     select 1 from public.vehicle_analysis_reports
+     where user_id=v_uid and status='completed'
+   )
+   or exists (
+     -- The original trial was represented by an immutable credit event.
+     -- Migrating an account must NOT hand out a second free Bilan 360.
+     select 1 from public.vehicle_report_credit_events
+     where user_id=v_uid
+       and external_reference=('trial:vehicle_360:'||v_uid::text)
+   )
  ) into v_found;
  if v_found then
     return jsonb_build_object('success',false,'trial_claimed',true,
@@ -454,7 +463,12 @@ begin
    (user_id,kind,source,source_key,units_total,expires_at)
   values(p_user_id,v_row.credit_kind,'subscription',
          'premium_annual:'||p_cycle,v_row.units,p_expires_at)
-  on conflict (user_id,kind,source_key) do nothing;
+  on conflict (user_id,kind,source_key)
+  do update set
+    -- RevenueCat may extend grace / billing retry within the SAME cycle.
+    -- Update expiration, never mint another allocation.
+    expires_at=greatest(public.commercial_credit_lots.expires_at,
+                       excluded.expires_at);
   v_count := v_count + 1;
  end loop;
  return jsonb_build_object('configured_allocations',v_count);
