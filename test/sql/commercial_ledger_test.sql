@@ -142,6 +142,19 @@ begin
   where user_id=u2 and source='trial' and kind='vehicle_360';
  if n<>1 then raise exception 'Bilan trial created twice: %',n;end if;
 
+ -- A historical claim made through the OLD free credit ledger must NOT
+ -- become an additional complimentary balance in the new architecture.
+ perform set_config('request.jwt.claim.sub',
+   '33333333-3333-4333-8333-333333333333',true);
+ got:=public.claim_vehicle360_commercial_trial();
+ if got->>'success'<>'false' then
+   raise exception 'Legacy trial claim reissued under V1: %',got;
+ end if;
+ select count(*) into n from public.commercial_credit_lots
+  where user_id='33333333-3333-4333-8333-333333333333'
+    and source='trial' and kind='vehicle_360';
+ if n<>0 then raise exception 'Legacy claimant received free double credit';end if;
+
  perform public.commercial_revoke_subscription(u1);
  select count(*) into n from public.commercial_credit_lots
  where user_id=u1 and source='subscription' and revoked_at is null;
