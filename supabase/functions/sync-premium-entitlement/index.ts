@@ -176,11 +176,15 @@ Deno.serve(async (request) => {
   // Store-verified annual allocations are granted per renewal cycle.
   // Inactive products or unconfigured quotas allocate nothing.
   if (active && effectiveExpiry && typeof entitlement?.product_identifier === "string") {
-    // Stable renewal identifier: purchase_date changes at renewal,
-    // but expiration/grace dates can move inside the same paid period.
+    // Exact same period key as the signed RevenueCat webhook.
+    // Billing grace extensions must not create new credit allocations.
+    const purchaseAt = dateValue(entitlement.purchase_date);
+    if (!purchaseAt) {
+      return jsonResponse({configured:true,active:false,error:"CREDIT_CYCLE_INVALID"},503);
+    }
     const cycle = [
       entitlement.product_identifier,
-      entitlement.purchase_date ?? "",
+      purchaseAt.toISOString(),
     ].join(":");
     const { error: cycleError } = await adminClient.rpc(
       "commercial_grant_subscription_cycle", {
