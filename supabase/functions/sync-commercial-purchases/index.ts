@@ -45,10 +45,13 @@ Deno.serve(async(req:Request)=>{
       if(!store||!transactionId)continue;
       // Sandbox receipts often carry a genuine app_store/play_store name.
       // Never infer production from the store name alone.
-      const isSandbox = receipt.is_sandbox === true;
-      if(isSandbox && Deno.env.get("COMMERCIAL_ALLOW_SANDBOX_PURCHASES")!=="true")
+      // A missing environment cannot be interpreted as production.
+      // Wait for the signed webhook rather than leaking sandbox units.
+      if (typeof receipt.is_sandbox !== "boolean") continue;
+      const isSandbox = receipt.is_sandbox;
+      if (isSandbox && Deno.env.get("COMMERCIAL_ALLOW_SANDBOX_PURCHASES") !== "true")
         continue;
-      if(store==="test" && !isSandbox) continue;
+      if (store === "test" && !isSandbox) continue;
       const purchasedDate=typeof receipt.purchase_date==="string"?
         receipt.purchase_date:new Date().toISOString();
       const {error}=await admin.rpc("commercial_grant_verified_purchase",{
