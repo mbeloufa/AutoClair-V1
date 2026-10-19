@@ -89,7 +89,7 @@ function joinPath(parent: string, child: string): string {
 }
 
 async function listAllObjectsRecursively(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: ReturnType<typeof createClient<any>>,
   bucketId: string,
   rootPath: string,
 ): Promise<string[]> {
@@ -156,7 +156,7 @@ async function listAllObjectsRecursively(
 }
 
 async function deleteStorageObjects(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: ReturnType<typeof createClient<any>>,
   bucketId: string,
   objectPaths: string[],
 ): Promise<number> {
