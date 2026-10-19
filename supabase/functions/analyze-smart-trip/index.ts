@@ -523,7 +523,7 @@ function median(values: number[]): number | null {
     .sort((a, b) => a - b);
   if (!sorted.length) return null;
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length.isEven
+  return sorted.length % 2 === 0
     ? (sorted[middle - 1] + sorted[middle]) / 2
     : sorted[middle];
 }
@@ -1100,15 +1100,7 @@ Deno.serve(async (request) => {
             };
           };
         })
-        .filter(
-          (
-            task,
-          ): task is () => Promise<{
-            fraction: number;
-            point: Point;
-            candidate: Candidate | null;
-          }> => task != null,
-        );
+        .filter((task) => task != null);
 
       const singleResults = await runBatched(singleTasks, 3);
       for (const result of singleResults) {
@@ -1140,11 +1132,7 @@ Deno.serve(async (request) => {
             return candidates[0] ?? null;
           };
         })
-        .filter(
-          (
-            task,
-          ): task is () => Promise<Candidate | null> => task != null,
-        );
+        .filter((task) => task != null);
 
       const windowResults = await runBatched(windowTasks, 3);
       for (const candidate of windowResults) {
