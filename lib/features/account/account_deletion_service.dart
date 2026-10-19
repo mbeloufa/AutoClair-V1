@@ -49,7 +49,11 @@ class AccountDeletionService {
         );
       }
 
-      await VehicleEventNotificationService.instance.clearForAccountSwitch();
+      try {
+        await VehicleEventNotificationService.instance.clearForAccountSwitch();
+      } catch (_) {
+        // Remote account deletion must still close the local Auth session.
+      }
       await _client.auth.signOut(scope: SignOutScope.local);
     } on FunctionException catch (error) {
       throw AccountDeletionException(_functionMessage(error));
