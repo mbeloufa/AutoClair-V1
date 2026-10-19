@@ -60,6 +60,36 @@ async function syncPremium(admin: ReturnType<typeof createClient<any>>, userId: 
     p_metadata: { provider:"revenuecat",product_identifier:e.product_identifier ?? null },
   });
   if (error) throw new Error("PREMIUM_SYNC_FAILED");
+
+  // Every purchase / renewal must credit the account EVEN when the customer
+  // never reopens AutoClair. Both webhook and authenticated resync use the
+  // same canonical cycle key. Expiration/grace changes never mint units.
+  if (active) {
+    const productId = typeof e.product_identifier === "string"
+      ? e.product_identifier : "";
+    const purchaseDate = typeof e.purchase_date === "string"
+      ? new Date(e.purchase_date) : new Date(Number.NaN);
+    if (!productId || Number.isNaN(purchaseDate.valueOf())) {
+      throw new Error("PREMIUM_CYCLE_INCOMPLETE");
+    }
+    const cycle = [productId, purchaseDate.toISOString()].join(":");
+    const { error: allocationError } = await admin.rpc(
+      "commercial_grant_subscription_cycle", {
+        p_user_id: userId,
+        p_store_product_id: productId,
+        p_cycle: cycle,
+        p_expires_at: expiry.toISOString(),
+      },
+    );
+    if (allocationError) throw new Error("PREMIUM_ALLOCATION_PENDING");
+  } else {
+    // Inactive/expired subscriber: revoke only subscription-sourced units.
+    // Bought consumable packs remain available.
+    const { error: revokeError } = await admin.rpc(
+      "commercial_revoke_subscription", { p_user_id: userId },
+    );
+    if (revokeError) throw new Error("PREMIUM_REVOCATION_PENDING");
+  }
 }
 
 Deno.serve(async (request) => {
