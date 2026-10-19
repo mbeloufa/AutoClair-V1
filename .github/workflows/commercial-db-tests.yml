@@ -42,3 +42,5 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261019000400_commercial_maintenance_jobs.sql
       - name: Commercial ledger contract and RLS
         run: psql -v ON_ERROR_STOP=1 -f test/sql/commercial_ledger_test.sql
+      - name: Test 16 parallel reservations on single credit
+        run: bash test/sql/commercial_concurrency_test.sh
