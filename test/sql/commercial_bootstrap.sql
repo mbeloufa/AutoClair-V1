@@ -14,6 +14,7 @@ create table public.vehicle_analysis_reports(
 );
 create table public.document_analyses(
   id uuid primary key default gen_random_uuid(),
+  document_id uuid,
   user_id uuid not null references auth.users(id)
 );
 insert into auth.users(id) values
