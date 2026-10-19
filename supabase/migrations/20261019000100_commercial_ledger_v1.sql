@@ -330,3 +330,139 @@ returns integer language sql security invoker set search_path=''
 as $$ select private.commercial_release_expired(); $$;
 revoke all on function public.commercial_release_expired() from public,anon,authenticated;
 grant execute on function public.commercial_release_expired() to service_role;
+
+-- All features read the same rollout switches. Disabled until tested.
+create table if not exists public.commercial_settings (
+  singleton boolean primary key default true check (singleton),
+  document_credits_enabled boolean not null default false,
+  vehicle360_credits_enabled boolean not null default false,
+  other_credits_enabled boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+insert into public.commercial_settings(singleton) values (true)
+on conflict (singleton) do nothing;
+alter table public.commercial_settings enable row level security;
+revoke all on public.commercial_settings from public, anon, authenticated;
+grant select on public.commercial_settings to authenticated;
+grant all on public.commercial_settings to service_role;
+create policy commercial_settings_read on public.commercial_settings
+  for select to authenticated using (true);
+
+create or replace function public.get_commercial_flags()
+returns jsonb language sql stable security invoker set search_path=''
+as $fn$
+ select jsonb_build_object(
+   'document_credits_enabled', document_credits_enabled,
+   'vehicle360_credits_enabled',vehicle360_credits_enabled,
+   'other_credits_enabled',other_credits_enabled
+ ) from public.commercial_settings where singleton=true;
+$fn$;
+revoke all on function public.get_commercial_flags() from public,anon;
+grant execute on function public.get_commercial_flags() to authenticated;
+
+-- Complimentary first Bilan. Only the authenticated account may claim it;
+-- a completed older Bilan means the discovery has already been consumed.
+create or replace function public.claim_vehicle360_commercial_trial()
+returns jsonb language plpgsql security definer set search_path=''
+as $fn$
+declare v_uid uuid := auth.uid();
+        v_found boolean;
+begin
+ if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+ perform pg_advisory_xact_lock(hashtextextended(v_uid::text||':vehicle360_trial',0));
+ select exists (
+    select 1 from public.vehicle_analysis_reports
+    where user_id=v_uid and status='completed'
+ ) into v_found;
+ if v_found then
+    return jsonb_build_object('success',false,'trial_claimed',true,
+                              'error','TRIAL_ALREADY_CONSUMED');
+ end if;
+ insert into public.commercial_credit_lots
+    (user_id,kind,source,source_key,units_total)
+ values(v_uid,'vehicle_360','trial','trial:vehicle360:v1',1)
+ on conflict (user_id,kind,source_key) do nothing;
+ return jsonb_build_object('success',true,'trial_claimed',true);
+end;
+$fn$;
+revoke all on function public.claim_vehicle360_commercial_trial() from public,anon;
+grant execute on function public.claim_vehicle360_commercial_trial() to authenticated;
+
+-- Commercial annual allocations must be individually approved after unit
+-- cost measurement. Nothing is sold or granted while they are inactive.
+create table if not exists public.commercial_subscription_allocations (
+  product_code text not null references public.commercial_products(code),
+  credit_kind text not null check (credit_kind in ('document','vehicle_360','tire','legal','trip','emergency','maintenance','identification','valuation')),
+  units integer check(units>0),
+  enabled boolean not null default false,
+  primary key(product_code,credit_kind),
+  check (enabled=false or units is not null)
+);
+insert into public.commercial_subscription_allocations(product_code,credit_kind)
+values ('premium_annual','document'),('premium_annual','vehicle_360')
+on conflict do nothing;
+alter table public.commercial_subscription_allocations enable row level security;
+revoke all on public.commercial_subscription_allocations from public,anon,authenticated;
+grant select on public.commercial_subscription_allocations to authenticated;
+grant all on public.commercial_subscription_allocations to service_role;
+create policy commercial_allocations_read on public.commercial_subscription_allocations
+ for select to authenticated using(true);
+
+create or replace function private.commercial_grant_subscription_cycle(
+ p_user_id uuid,p_store_product_id text,p_cycle text,p_expires_at timestamptz
+) returns jsonb language plpgsql security definer set search_path=''
+as $fn$
+declare v_product public.commercial_products%rowtype;
+        v_count integer := 0;
+        v_row record;
+begin
+ if p_cycle is null or length(p_cycle)<10 or p_expires_at<=now() then
+   raise exception 'SUBSCRIPTION_CYCLE_INVALID';
+ end if;
+ select * into v_product from public.commercial_products
+  where code='premium_annual' and kind='subscription'
+    and active=true and store_product_id=p_store_product_id;
+ if not found then return jsonb_build_object('granted',0); end if;
+ for v_row in
+   select credit_kind,units from public.commercial_subscription_allocations
+    where product_code='premium_annual' and enabled and units>0
+ loop
+  insert into public.commercial_credit_lots
+   (user_id,kind,source,source_key,units_total,expires_at)
+  values(p_user_id,v_row.credit_kind,'subscription',
+         'premium_annual:'||p_cycle,v_row.units,p_expires_at)
+  on conflict (user_id,kind,source_key) do nothing;
+  v_count := v_count + 1;
+ end loop;
+ return jsonb_build_object('configured_allocations',v_count);
+end;
+$fn$;
+revoke all on function private.commercial_grant_subscription_cycle(uuid,text,text,timestamptz) from public,anon,authenticated;
+grant execute on function private.commercial_grant_subscription_cycle(uuid,text,text,timestamptz) to service_role;
+
+create or replace function public.commercial_grant_subscription_cycle(
+ p_user_id uuid,p_store_product_id text,p_cycle text,p_expires_at timestamptz
+) returns jsonb language sql security invoker set search_path=''
+as $fn$
+  select private.commercial_grant_subscription_cycle(
+     p_user_id,p_store_product_id,p_cycle,p_expires_at);
+$fn$;
+revoke all on function public.commercial_grant_subscription_cycle(uuid,text,text,timestamptz) from public,anon,authenticated;
+grant execute on function public.commercial_grant_subscription_cycle(uuid,text,text,timestamptz) to service_role;
+
+create or replace function public.commercial_revoke_subscription(
+ p_user_id uuid
+) returns integer language plpgsql security definer set search_path=''
+as $fn$
+declare v_count integer;
+begin
+ update public.commercial_credit_lots
+ set revoked_at=coalesce(revoked_at,now())
+ where user_id=p_user_id and source='subscription'
+ and source_key like 'premium_annual:%' and revoked_at is null;
+ get diagnostics v_count = row_count;
+ return v_count;
+end;
+$fn$;
+revoke all on function public.commercial_revoke_subscription(uuid) from public,anon,authenticated;
+grant execute on function public.commercial_revoke_subscription(uuid) to service_role;
