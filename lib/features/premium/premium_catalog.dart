@@ -1,8 +1,7 @@
 /// Catalogue de référence de la commercialisation AutoClair V1.
 ///
-/// IMPORTANT : la tarification des achats ponctuels et les plafonds d'usage
-/// doivent être déterminés après mesure des coûts fournisseurs (tickets 01/14).
-/// Aucune valeur manquante ne doit être interprétée comme « illimitée ».
+/// Tarifs et volumes provisoires en test fermé. Valider les autres coûts
+/// fournisseurs, les prix du Play Store et la marge avant activation.
 /// Les achats restent fermés jusqu'à l'activation des compteurs serveur
 /// et à la recette des paiements (tickets 04-14).
 enum CommercialProductType { subscription, documentPack, vehicle360 }
@@ -62,30 +61,39 @@ class PremiumCatalog {
   static const annualPriceCentsTtc = 2999;
   static const annualLabel = 'Annuel';
 
-  // SÉCURITÉ COMMERCIALE : false tant que les quotas et le registre de packs
-  // ne sont pas validés côté serveur. Ne pas le lever pour la seule UI.
+  // Aucun paiement n'est possible sans commercial_settings.sales_enabled
+  // ET produits actifs ET vérification serveur des identifiants du Store.
+  // Champ historique conservé pour la compatibilité des tests.
   static const checkoutEnabled = false;
+
+  static const annualDocumentCredits = 20;
+  static const annualVehicle360Credits = 5;
 
   static const annual = CommercialProduct(
     code: 'premium_annual',
     name: 'Premium annuel',
     type: CommercialProductType.subscription,
-    description: 'Abonnement renouvelable, durée de 12 mois.',
+    description: '20 analyses de documents et 5 Bilans 360 par période '
+        'annuelle, sous réserve de validation des prix.',
     priceCentsTtc: annualPriceCentsTtc,
   );
 
   static const packs = <CommercialProduct>[
     CommercialProduct(
       code: 'analysis_small',
-      name: "Petit pack d'analyses",
+      name: 'Pack 5 analyses documentaires',
       type: CommercialProductType.documentPack,
-      description: "Analyses documentaires à l'unité, sans abonnement.",
+      description: '5 nouveaux traitements documentaires sans abonnement.',
+      quantity: 5,
+      priceCentsTtc: 399,
     ),
     CommercialProduct(
       code: 'analysis_large',
-      name: "Grand pack d'analyses",
+      name: 'Pack 15 analyses documentaires',
       type: CommercialProductType.documentPack,
-      description: "Analyses documentaires à l'unité, sans abonnement.",
+      description: '15 nouveaux traitements documentaires sans abonnement.',
+      quantity: 15,
+      priceCentsTtc: 899,
     ),
     CommercialProduct(
       code: 'vehicle360_single',
@@ -93,6 +101,7 @@ class PremiumCatalog {
       type: CommercialProductType.vehicle360,
       description: 'Un nouveau Bilan AutoClair 360 sans abonnement.',
       quantity: 1,
+      priceCentsTtc: 499,
     ),
   ];
 
@@ -104,7 +113,7 @@ class PremiumCatalog {
 
   static const premiumBenefits = <String>[
     'Objectif tarifaire : 29,99 € TTC par an',
-    'Allocations de traitements à préciser avant ouverture des ventes',
+    '20 analyses de documents et 5 Bilans 360 par an',
     'Conserver les résultats acquis après la fin de l’abonnement',
   ];
 
@@ -121,13 +130,13 @@ class PremiumCatalog {
       singlePurchase: 'Consultation conservée',
       requiresServerMetering: false),
     CommercialFeatureRule(code: 'document_analysis', name: 'Scan et analyse documentaire',
-      free: 'Quota découverte à définir',
-      subscription: 'Quota annuel à définir',
+      free: '1 première analyse offerte par compte',
+      subscription: '20 nouvelles analyses par an',
       singlePurchase: 'Débit de 1 unité documentaire par nouvelle analyse',
       requiresServerMetering: true),
     CommercialFeatureRule(code: 'vehicle360', name: 'Bilan AutoClair 360',
       free: '1 Bilan offert par compte',
-      subscription: 'Quota de nouveaux Bilans à définir',
+      subscription: '5 nouveaux Bilans par an',
       singlePurchase: 'Débit de 1 unité Bilan 360 par nouveau résultat',
       requiresServerMetering: true),
     CommercialFeatureRule(code: 'tire_ai', name: 'Analyse IA des pneus',
