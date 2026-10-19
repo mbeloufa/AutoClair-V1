@@ -351,6 +351,7 @@ grant execute on function public.commercial_release_expired() to service_role;
 -- All features read the same rollout switches. Disabled until tested.
 create table if not exists public.commercial_settings (
   singleton boolean primary key default true check (singleton),
+  sales_enabled boolean not null default false,
   document_credits_enabled boolean not null default false,
   vehicle360_credits_enabled boolean not null default false,
   other_credits_enabled boolean not null default false,
@@ -369,6 +370,7 @@ create or replace function public.get_commercial_flags()
 returns jsonb language sql stable security invoker set search_path=''
 as $fn$
  select jsonb_build_object(
+   'sales_enabled',sales_enabled,
    'document_credits_enabled', document_credits_enabled,
    'vehicle360_credits_enabled',vehicle360_credits_enabled,
    'other_credits_enabled',other_credits_enabled
