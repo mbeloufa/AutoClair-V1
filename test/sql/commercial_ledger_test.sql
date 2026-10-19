@@ -172,3 +172,17 @@ begin
 end
 $rate$;
 select 'PASS: atomic daily AI rate budget and per-account isolation' as result;
+
+do $annual_limits$
+declare
+ u1 uuid:='11111111-1111-4111-8111-111111111111';
+ got jsonb;
+begin
+ -- Legal has a larger daily cap than free 365-day allowance.
+ got:=public.commercial_try_feature(u1,'legal','free-legal-annual-01');
+ if got->>'allowed'<>'true' then raise exception 'first annual credit declined';end if;
+ got:=public.commercial_try_feature(u1,'legal','free-legal-annual-02');
+ if got->>'allowed'<>'false' then raise exception 'annual budget bypass: %',got;end if;
+end
+$annual_limits$;
+select 'PASS: 365-day cap beyond per-day limit' as result;
