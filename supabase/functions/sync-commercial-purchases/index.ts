@@ -43,17 +43,26 @@ Deno.serve(async(req:Request)=>{
       const receipt=object(item),store=storeOf(receipt.store);
       const transactionId=String(receipt.id??receipt.transaction_id??"");
       if(!store||!transactionId)continue;
-      if(store==="test" && Deno.env.get("COMMERCIAL_ALLOW_SANDBOX_PURCHASES")!=="true")
+      // Sandbox receipts often carry a genuine app_store/play_store name.
+      // Never infer production from the store name alone.
+      const isSandbox = receipt.is_sandbox === true;
+      if(isSandbox && Deno.env.get("COMMERCIAL_ALLOW_SANDBOX_PURCHASES")!=="true")
         continue;
+      if(store==="test" && !isSandbox) continue;
       const purchasedDate=typeof receipt.purchase_date==="string"?
         receipt.purchase_date:new Date().toISOString();
       const {error}=await admin.rpc("commercial_grant_verified_purchase",{
         p_user_id:user.id,p_store:store,p_transaction_id:transactionId,
         p_product_code:product.code,
-        p_environment:store==="test"?"SANDBOX":"PRODUCTION",
+        p_environment:isSandbox?"SANDBOX":"PRODUCTION",
         p_purchased_at:purchasedDate,
       });
-      if(error)throw new Error("RECOVERY_WRITE_FAILED");
+      if(error){
+        // Refunded receipts may remain in the provider's history.
+        // Existing refund tombstones must not be re-granted.
+        if (error.message?.includes("PURCHASE_CONFLICT_OR_REFUNDED")) continue;
+        throw new Error("RECOVERY_WRITE_FAILED");
+      }
       linked++;
     }
   }
