@@ -7,6 +7,11 @@ create function auth.uid() returns uuid language sql stable
 as $$select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid$$;
 grant usage on schema auth to authenticated;
 grant execute on function auth.uid() to authenticated;
+create table public.vehicle_analysis_reports(
+ id uuid primary key default gen_random_uuid(),
+ user_id uuid not null references auth.users(id),
+ status text not null default 'completed'
+);
 create table public.document_analyses(
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id)
