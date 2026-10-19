@@ -269,16 +269,33 @@ returns integer language plpgsql security definer set search_path=''
 as $$
 declare v_count integer;
 begin
+ -- Reconcile stored results before releasing expired reservations.
+ -- A completed service result must never give the credit back for free.
  with expired as (
-   update public.commercial_credit_operations
-   set status='released',updated_at=now()
-   where status='reserved' and reservation_expires_at<now()
-   returning lot_id
+   update public.commercial_credit_operations o
+   set status=case
+     when o.kind='document' and exists (
+       select 1 from public.document_analyses a
+       where a.document_id::text=o.operation_key
+         and a.user_id=o.user_id
+     ) then 'consumed'
+     when o.kind='vehicle_360' and exists (
+       select 1 from public.vehicle_analysis_reports r
+       where r.id::text=o.operation_key and r.user_id=o.user_id
+         and r.status='completed'
+     ) then 'consumed'
+     else 'released' end,
+     updated_at=now()
+   where o.status='reserved' and o.reservation_expires_at<now()
+   returning o.lot_id,o.status
  ), totals as (
-   select lot_id,count(*)::integer as qty from expired group by lot_id
+   select lot_id,count(*)::integer as qty,
+       count(*) filter(where status='consumed')::integer as spent
+   from expired group by lot_id
  ), updated as (
    update public.commercial_credit_lots l
-   set units_reserved=greatest(0,l.units_reserved-t.qty)
+   set units_reserved=l.units_reserved-t.qty,
+       units_used=l.units_used+t.spent
    from totals t where l.id=t.lot_id returning l.id
  )
  select count(*) into v_count from updated;
