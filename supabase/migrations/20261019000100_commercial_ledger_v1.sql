@@ -306,8 +306,8 @@ create or replace function public.commercial_revoke_purchase(
  p_user_id uuid,p_product_code text,p_store text,
  p_transaction_id text,p_environment text
 ) returns boolean language sql security invoker set search_path=''
-as $ select private.commercial_revoke_purchase(
- p_user_id,p_product_code,p_store,p_transaction_id,p_environment); $;
+as $$ select private.commercial_revoke_purchase(
+ p_user_id,p_product_code,p_store,p_transaction_id,p_environment); $$;
 revoke all on function public.commercial_revoke_purchase(uuid,text,text,text,text) from public,anon,authenticated;
 grant execute on function public.commercial_revoke_purchase(uuid,text,text,text,text) to service_role;
 
