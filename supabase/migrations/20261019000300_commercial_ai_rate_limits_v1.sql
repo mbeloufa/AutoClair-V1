@@ -20,7 +20,8 @@ values
  ('emergency',3,15,300,true),
  ('maintenance',2,8,200,true),
  ('identification',3,12,300,true),
- ('valuation',2,8,150,true)
+ ('valuation',2,8,150,true),
+ ('parking',30,100,1000,true)
 on conflict (feature) do nothing;
 
 create table if not exists public.commercial_ai_rate_events (
