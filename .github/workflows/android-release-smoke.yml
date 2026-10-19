@@ -39,10 +39,10 @@ jobs:
             -alias autoclair-ci-only -keyalg RSA -keysize 3072 -validity 1 \
             -dname "CN=AutoClair CI Smoke, O=Disposable, C=FR"
           {
-            printf 'storeFile=%s\\n' "$RUNNER_TEMP/autoclair-ci-only.p12"
-            printf 'storePassword=%s\\n' "$CI_PASSWORD"
-            printf 'keyAlias=autoclair-ci-only\\n'
-            printf 'keyPassword=%s\\n' "$CI_PASSWORD"
+            printf 'storeFile=%s\n' "$RUNNER_TEMP/autoclair-ci-only.p12"
+            printf 'storePassword=%s\n' "$CI_PASSWORD"
+            printf 'keyAlias=autoclair-ci-only\n'
+            printf 'keyPassword=%s\n' "$CI_PASSWORD"
           } > android/key.properties
           chmod 600 android/key.properties
       - name: Build signed Android App Bundle (throwaway signing)
