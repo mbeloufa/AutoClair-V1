@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -692,6 +693,7 @@ Deno.serve(async (req) => {
       plan = cache.plan_json;
       sources = Array.isArray(cache.sources) ? cache.sources : [];
     } else {
+      await requireCommercialBudget(admin, user.id, "maintenance");
       const researched = await researchPlan(
         vehicle,
         technicalIdentity,
