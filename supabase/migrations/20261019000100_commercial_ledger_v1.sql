@@ -17,11 +17,13 @@ create table if not exists public.commercial_products (
 insert into public.commercial_products(code,kind,credit_kind,quantity,price_ttc_cents,active)
 values
  ('premium_annual','subscription',null,null,2999,false),
- ('analysis_small','consumable','document',1,null,false),
- ('analysis_large','consumable','document',1,null,false),
- ('vehicle360_single','consumable','vehicle_360',1,null,false)
+ ('analysis_small','consumable','document',5,399,false),
+ ('analysis_large','consumable','document',15,899,false),
+ ('vehicle360_single','consumable','vehicle_360',1,499,false)
 on conflict (code) do nothing;
--- All placeholders (notably small/large quantities) are inactive.
+-- Commercial launch proposal, to verify against vendor and Store prices.
+-- All products remain inactive, and store_product_id stays NULL until the
+-- genuine Google Play / RevenueCat product identifiers are approved.
 
 create table if not exists public.commercial_store_transactions (
  id uuid primary key default gen_random_uuid(),
@@ -417,8 +419,10 @@ create table if not exists public.commercial_subscription_allocations (
   primary key(product_code,credit_kind),
   check (enabled=false or units is not null)
 );
-insert into public.commercial_subscription_allocations(product_code,credit_kind)
-values ('premium_annual','document'),('premium_annual','vehicle_360')
+insert into public.commercial_subscription_allocations(
+ product_code,credit_kind,units,enabled)
+values ('premium_annual','document',20,true),
+       ('premium_annual','vehicle_360',5,true)
 on conflict do nothing;
 alter table public.commercial_subscription_allocations enable row level security;
 revoke all on public.commercial_subscription_allocations from public,anon,authenticated;
