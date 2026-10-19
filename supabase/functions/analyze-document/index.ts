@@ -717,7 +717,7 @@ function mapOpenAiError(status: number, body: JsonRecord): AppError {
 }
 
 async function markAnalysisFailed(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: ReturnType<typeof createClient<any>>,
   documentId: string,
   userId: string,
   errorCode: string,
@@ -753,7 +753,7 @@ Deno.serve(async (req: Request) => {
   let authenticatedUserId: string | null = null;
   let commercialReserved = false;
   let commercialDocumentId: string | null = null;
-  let adminClient: ReturnType<typeof createClient> | null = null;
+  let adminClient: ReturnType<typeof createClient<any>> | null = null;
 
   try {
     const supabaseUrl = requireEnvironment("SUPABASE_URL");
@@ -763,7 +763,7 @@ Deno.serve(async (req: Request) => {
     const openAiApiKey = requireEnvironment("OPENAI_API_KEY");
     const openAiModel = requireEnvironment("OPENAI_MODEL");
 
-    adminClient = createClient(supabaseUrl, serviceRoleKey, {
+    adminClient = createClient<any>(supabaseUrl, serviceRoleKey, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
