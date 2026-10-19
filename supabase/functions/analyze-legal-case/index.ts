@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const PROMPT_VERSION = "autoclair-legal-v1";
@@ -497,6 +498,7 @@ Deno.serve(async (req: Request) => {
       purchase_context: profile,
     };
 
+    await requireCommercialBudget(admin, user.id, "legal");
     const research = await openAi(openAiApiKey, {
       model,
       store: false,
