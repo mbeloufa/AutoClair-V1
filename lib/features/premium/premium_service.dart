@@ -51,6 +51,7 @@ class PremiumState {
     this.message,
     this.packOffers = const <PackOffer>[],
     this.balances = const <String, dynamic>{},
+    this.salesEnabled = false,
   });
 
   final bool configured;
@@ -60,6 +61,7 @@ class PremiumState {
   final String? message;
   final List<PackOffer> packOffers;
   final Map<String, dynamic> balances;
+  final bool salesEnabled;
 }
 
 class PremiumService {
@@ -109,8 +111,35 @@ class PremiumService {
       final current = offerings.current;
       final offers = <PremiumOffer>[];
 
+      // This flag is set on the server only AFTER configuration and QA.
+      var salesEnabled = false;
+      var annualReady = false;
+      try {
+        final flags = await _client.rpc('get_commercial_flags');
+        salesEnabled = flags is Map && flags['sales_enabled'] == true;
+        if (salesEnabled && current?.annual != null) {
+          final configured = await _client
+              .from('commercial_products')
+              .select('store_product_id,active')
+              .eq('code', 'premium_annual')
+              .eq('active', true)
+              .maybeSingle();
+          final limits = await _client
+              .from('commercial_subscription_allocations')
+              .select('credit_kind,units')
+              .eq('product_code', 'premium_annual')
+              .eq('enabled', true);
+          annualReady =
+              configured?['store_product_id'] ==
+                  current!.annual!.storeProduct.identifier &&
+              limits.any((item) => item['credit_kind'] == 'document') &&
+              limits.any((item) => item['credit_kind'] == 'vehicle_360');
+        }
+      } catch (_) {
+        // Any missing configuration keeps the purchase wall CLOSED.
+      }
       final annual = current?.annual;
-      if (annual != null) {
+      if (annual != null && salesEnabled && annualReady) {
         offers.add(
           PremiumOffer(package: annual, label: PremiumCatalog.annualLabel),
         );
@@ -134,7 +163,7 @@ class PremiumService {
             if (pack.code == code) wanted[id] = (pack, count);
           }
         }
-        if (wanted.isNotEmpty) {
+        if (salesEnabled && wanted.isNotEmpty) {
           final products = await Purchases.getProducts(
             wanted.keys.toList(),
             productCategory: ProductCategory.nonSubscription,
@@ -158,6 +187,7 @@ class PremiumService {
       return PremiumState(
         packOffers: List<PackOffer>.unmodifiable(packOffers),
         balances: balances,
+        salesEnabled: salesEnabled,
         configured: true,
         active: customerInfo.entitlements.active.containsKey(
           PremiumCatalog.entitlementId,
@@ -177,9 +207,12 @@ class PremiumService {
   }
 
   Future<PremiumState> purchase(PremiumOffer offer) async {
-    if (!PremiumCatalog.checkoutEnabled) {
+    if (!await _salePermitted(
+      code: 'premium_annual',
+      storeProductId: offer.package.storeProduct.identifier,
+    )) {
       throw const PremiumException(
-        'Les achats ouvriront après validation des quotas et des crédits serveur.',
+        'Cette formule n’est pas encore disponible à l’achat.',
       );
     }
     final user = _client.auth.currentUser;
@@ -229,8 +262,13 @@ class PremiumService {
   /// Les packs sont des consommables : ils ne donnent jamais Premium.
   /// Le solde utilisable provient exclusivement de la réconciliation serveur.
   Future<PremiumState> purchasePack(PackOffer offer) async {
-    if (!PremiumCatalog.checkoutEnabled) {
-      throw const PremiumException('Les achats ponctuels ne sont pas encore ouverts.');
+    if (!await _salePermitted(
+      code: offer.catalog.code,
+      storeProductId: offer.product.identifier,
+    )) {
+      throw const PremiumException(
+        'Ce pack n’est pas encore disponible à l’achat.',
+      );
     }
     final user = _client.auth.currentUser;
     if (user == null) {
@@ -292,6 +330,29 @@ class PremiumService {
       throw const PremiumException(
         'Impossible de restaurer vos achats pour le moment.',
       );
+    }
+  }
+
+  /// Both the global sales flag AND the exact Store identifier are checked
+  /// immediately before any checkout. The backend independently verifies
+  /// signed purchases; this client check is an extra safety barrier.
+  Future<bool> _salePermitted({
+    required String code,
+    required String storeProductId,
+  }) async {
+    try {
+      final flags = await _client.rpc('get_commercial_flags');
+      if (flags is! Map || flags['sales_enabled'] != true) return false;
+      final product = await _client
+          .from('commercial_products')
+          .select('store_product_id')
+          .eq('code', code)
+          .eq('active', true)
+          .maybeSingle();
+      return product != null &&
+          product['store_product_id'] == storeProductId;
+    } catch (_) {
+      return false;
     }
   }
 
