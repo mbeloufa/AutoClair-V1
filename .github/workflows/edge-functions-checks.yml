@@ -39,4 +39,5 @@ jobs:
             supabase/functions/refresh-vehicle-valuation/index.ts \
             supabase/functions/search-parking/index.ts \
             supabase/functions/promo-v7/index.ts \
+            supabase/functions/sync-commercial-offers/index.ts \
             supabase/functions/delete-account/index.ts
