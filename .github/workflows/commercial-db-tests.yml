@@ -49,3 +49,6 @@ jobs:
 
       - name: Promo V7 shadow queue contract
         run: psql -v ON_ERROR_STOP=1 -f test/sql/promo_v7_shadow_test.sql
+
+      - name: Promo V7 release and account isolation
+        run: psql -v ON_ERROR_STOP=1 -f test/sql/promo_v7_release_test.sql
