@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { parseHTML } from "npm:linkedom@0.18.12";
-import { normalize } from "../promo-v7/semantic.ts";
+const normalize=(s:string)=>s.normalize("NFKD").replace(/\p{M}/gu,"").toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g," ").trim();
 
 // Read HTML already obtained by the existing allowlisted, robots-aware crawler.
 // DOM parsing does not execute scripts, fetch resources, or follow arbitrary links.
