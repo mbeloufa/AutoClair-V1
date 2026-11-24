@@ -1271,8 +1271,10 @@ async function processTask(
 
     // V7 mirror only: preserve production extraction and publication. The new
     // feed is independent of V6 classification and does not execute site JS.
-    if (Deno.env.get("PROMO_V7_CAPTURE_ENABLED")==="true" && shouldExtract &&
-        ["OFFER_HUB","OFFER_DETAIL"].includes(source.source_role)) {
+    if (Deno.env.get("PROMO_V7_CAPTURE_ENABLED")!=="false" && shouldExtract &&
+        ["OFFER_HUB","OFFER_DETAIL"].includes(source.source_role) &&
+        pathAllowedForSource(fetched.finalUrl.toString(),source) &&
+        fetched.robotsStatus==="ALLOWED") {
       try {
         const cards=isolateRawCards(fetched.html);
         if(cards.length){
