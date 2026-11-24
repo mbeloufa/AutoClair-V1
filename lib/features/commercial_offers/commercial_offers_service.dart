@@ -9,18 +9,35 @@ class CommercialOffersException implements Exception {
 
 class CommercialOffersService {
   SupabaseClient get _client => Supabase.instance.client;
+  final Set<String> _v7Vehicles = {};
+
+  Future<dynamic> _tryV7(String rpc, Map<String, dynamic> params) async {
+    try {
+      return await _client.rpc(rpc, params: params);
+    } on PostgrestException catch (error) {
+      // An older server may not have the V7 RPC yet. Never mask other failures.
+      if (error.code == 'PGRST202') return null;
+      rethrow;
+    }
+  }
 
   Future<CommercialOfferBundle> fetchVehicleOffers(
     String vehicleId, {
     int limit = 120,
   }) async {
     try {
-      final raw = await _client.rpc(
-        'get_vehicle_after_sales_offers_v4',
-        params: {
-          'p_vehicle_id': vehicleId,
-          'p_limit': limit.clamp(1, 150).toInt(),
-        },
+      final params = <String, dynamic>{
+        'p_vehicle_id': vehicleId,
+        'p_limit': limit.clamp(1, 150).toInt(),
+      };
+      final v7 = await _tryV7('promo_v7_vehicle', params);
+      if (v7 != null) {
+        _v7Vehicles.add(vehicleId);
+      } else {
+        _v7Vehicles.remove(vehicleId);
+      }
+      final raw = v7 ?? await _client.rpc(
+        'get_vehicle_after_sales_offers_v4', params: params,
       );
 
       if (raw is! Map) {
@@ -76,6 +93,13 @@ class CommercialOffersService {
 
   Future<void> resetDismissedOffers(String vehicleId) async {
     try {
+      if (_v7Vehicles.contains(vehicleId)) {
+        final ok = await _client.rpc('promo_v7_preference', params: {
+          'p_vehicle_id': vehicleId, 'p_offer_id': null, 'p_status': 'RESET',
+        });
+        if (ok != true) throw const CommercialOffersException('Actualisez les offres avant de réessayer.');
+        return;
+      }
       await _client.rpc(
         'reset_vehicle_offer_dismissals_v4',
         params: {'p_vehicle_id': vehicleId},
@@ -95,6 +119,13 @@ class CommercialOffersService {
     required String status,
   }) async {
     try {
+      if (_v7Vehicles.contains(vehicleId)) {
+        final ok = await _client.rpc('promo_v7_preference', params: {
+          'p_vehicle_id': vehicleId, 'p_offer_id': offerId, 'p_status': status,
+        });
+        if (ok != true) throw const CommercialOffersException('Actualisez les offres avant de réessayer.');
+        return;
+      }
       await _client.rpc(
         'set_vehicle_commercial_offer_preference_v4',
         params: {
