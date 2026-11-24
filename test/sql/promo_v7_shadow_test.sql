@@ -23,6 +23,9 @@ set role service_role;
 do $test$
 declare j record; n integer; i integer;
 begin
+ perform public.promo_v7_ingest_cards('11111111-1111-4111-8111-111111111111','https://www.ad.fr/promotion','[{"text":"Forfait vidange à partir de 92€90, centres participants."}]'::jsonb);
+ perform public.promo_v7_ingest_cards('11111111-1111-4111-8111-111111111111','https://www.ad.fr/promotion','[{"text":"Forfait vidange à partir de 92€90, centres participants."}]'::jsonb);
+ if (select count(*) from public.promo_v7_raw_cards)<>1 then raise exception 'Raw capture duplicated';end if;
  select * into j from public.promo_v7_claim_shadow('v7','test-model');
  if j.job_id is null or j.source->>'evidence_level'<>'RAW_CARD' or j.source->>'operator'<>'ad.fr' then raise exception 'Active raw proof not prioritized: %',j;end if;
  if j.input_text not like '%92€90%' then raise exception 'Raw original lost';end if;
@@ -31,9 +34,15 @@ begin
  select * into j from public.promo_v7_claim_shadow('v7','test-model');
  if j.job_id is null or j.source->>'evidence_level'<>'LEGACY_EXCERPT' then raise exception 'Legacy candidate not flagged: %',j;end if;
  perform public.promo_v7_finish_shadow(j.job_id,'[]'::jsonb,null,'TEST_FAILURE');
+ select * into j from public.promo_v7_claim_shadow('v7','test-model');
+ if j.job_id is null or j.source->>'evidence_level'<>'LEGACY_EXCERPT' then raise exception 'Historical candidate missing';end if;
+ perform public.promo_v7_finish_shadow(j.job_id,'[]'::jsonb,null,null);
  if exists(select 1 from public.promo_v7_claim_shadow('v7','test-model')) then raise exception 'Same input consumed twice';end if;
  -- Different model versions must still share the global daily budget.
- for i in 1..11 loop
+ for i in 1..7 loop
+  select * into j from public.promo_v7_claim_shadow('v7','model-'||i);
+  if j.job_id is null then raise exception 'Unexpected budget exhaustion';end if;
+  perform public.promo_v7_finish_shadow(j.job_id,'[]'::jsonb,null,null);
   select * into j from public.promo_v7_claim_shadow('v7','model-'||i);
   if j.job_id is null then raise exception 'Unexpected budget exhaustion';end if;
   perform public.promo_v7_finish_shadow(j.job_id,'[]'::jsonb,null,null);
