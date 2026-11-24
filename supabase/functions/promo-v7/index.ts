@@ -25,7 +25,18 @@ async function analyze(job:Job,key:string,model:string):Promise<{offers:Offer[];
    input:[{role:"system",content:SYSTEM},{role:"user",content:JSON.stringify(input)}],
    text:{format:{type:"json_schema",name:"promo_v7",strict:true,schema:RESPONSE_SCHEMA}}})
  });
- if(!response.ok)throw Error("AI_HTTP_"+response.status);
+ if(!response.ok){
+  // Capture only allowlisted machine codes, never the provider error message.
+  let code="";
+  try {const body=await response.json();code=String(body?.error?.code??body?.error?.type??"");}catch(_){/* no body */}
+  if(response.status===429){
+    if(["insufficient_quota","billing_hard_limit_reached","billing_not_active"].includes(code))throw Error("AI_QUOTA_EXHAUSTED");
+    if(code==="rate_limit_exceeded")throw Error("AI_RATE_LIMIT");
+    throw Error("AI_HTTP_429");
+  }
+  if(response.status===401||response.status===403)throw Error("AI_AUTH_OR_ACCESS");
+  throw Error("AI_HTTP_"+response.status);
+ }
  const result=await response.json();
  if(result.status!=="completed")throw Error("AI_INCOMPLETE");
  const texts:string[]=[];
@@ -50,6 +61,13 @@ Deno.serve(async req=>{
   if(!pilot&&Deno.env.get("PROMO_V7_SHADOW_ENABLED")!=="true")return json({status:"DISABLED"});
   const model=Deno.env.get("PROMO_V7_MODEL")?.trim()||requireEnv("OPENAI_MODEL");
   const key=requireEnv("OPENAI_API_KEY");
+  if(!pilot){
+    const {data:failures,error:healthError}=await db.from("promo_v7_shadow_jobs").select("error_code")
+      .in("error_code",["AI_QUOTA_EXHAUSTED","AI_HTTP_429","AI_RATE_LIMIT","AI_AUTH_OR_ACCESS"])
+      .gte("created_at",new Date(Date.now()-6*3600000).toISOString()).limit(1);
+    if(healthError)throw Error("AI_HEALTH_CHECK_FAILED");
+    if(failures?.length)return json({status:"PROVIDER_COOLDOWN"});
+  }
   const {data,error}=await db.rpc("promo_v7_claim_shadow",{p_engine:VERSION,p_model:model});
   if(error)throw Error("QUEUE_CLAIM_FAILED");
   if(!data||!Array.isArray(data)||data.length===0)return json({status:"NO_JOB_OR_BUDGET"});
