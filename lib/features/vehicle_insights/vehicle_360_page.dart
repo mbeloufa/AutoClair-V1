@@ -117,10 +117,12 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Passez à Premium'),
+        title: const Text('Découvrir les offres AutoClair'),
         content: const Text(
-          'Votre essai gratuit est utilisé. Premium vous permet de '
-          'continuer à lancer vos Bilans AutoClair 360.',
+          'Votre essai gratuit est utilisé. Vous pourrez choisir '
+          'un abonnement annuel ou un Bilan 360 à l’unité, '
+          'sans abonnement obligatoire. Les achats ne seront ouverts '
+          'qu’après validation des quotas et des prix.',
         ),
         actions: [
           TextButton(
@@ -132,7 +134,7 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
               Navigator.of(dialogContext).pop();
               context.push<void>('/premium');
             },
-            child: const Text('Voir Premium'),
+            child: const Text('Voir les offres'),
           ),
         ],
       ),
@@ -233,6 +235,13 @@ class _Vehicle360PageState extends State<Vehicle360Page> {
       appBar: AppBar(
         title: const Text('Bilan AutoClair 360'),
         actions: [
+          IconButton(
+            onPressed: _generating ? null : () => context.push(
+              '/feedback?source=vehicle360&reference=${widget.vehicleId}',
+            ),
+            tooltip: 'Signaler une erreur du bilan',
+            icon: const Icon(Icons.flag_outlined),
+          ),
           IconButton(
             onPressed: _loading || _generating ? null : _load,
             tooltip: 'Actualiser les informations',

@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const BUCKET_ID = "vehicle-documents";
+const ACCOUNT_BUCKETS = ["vehicle-documents", "emergency-media", "tire-inspections"] as const;
 const REQUIRED_CONFIRMATION = "SUPPRIMER MON COMPTE";
 const LIST_PAGE_SIZE = 100;
 const REMOVE_BATCH_SIZE = 100;
@@ -89,7 +89,8 @@ function joinPath(parent: string, child: string): string {
 }
 
 async function listAllObjectsRecursively(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: ReturnType<typeof createClient<any>>,
+  bucketId: string,
   rootPath: string,
 ): Promise<string[]> {
   const discoveredFiles: string[] = [];
@@ -101,7 +102,7 @@ async function listAllObjectsRecursively(
 
     while (true) {
       const { data, error } = await adminClient.storage
-        .from(BUCKET_ID)
+        .from(bucketId)
         .list(folderPath, {
           limit: LIST_PAGE_SIZE,
           offset,
@@ -155,7 +156,8 @@ async function listAllObjectsRecursively(
 }
 
 async function deleteStorageObjects(
-  adminClient: ReturnType<typeof createClient>,
+  adminClient: ReturnType<typeof createClient<any>>,
+  bucketId: string,
   objectPaths: string[],
 ): Promise<number> {
   let deletedCount = 0;
@@ -171,7 +173,7 @@ async function deleteStorageObjects(
     );
 
     const { data, error } = await adminClient.storage
-      .from(BUCKET_ID)
+      .from(bucketId)
       .remove(batch);
 
     if (error) {
@@ -324,21 +326,25 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const discoveredPaths = await listAllObjectsRecursively(
-      adminClient,
-      user.id,
-    );
-
-    for (const objectPath of discoveredPaths) {
-      knownPaths.add(objectPath);
+    // Inventory and purge *all* user-owned prefixes before deleting the Auth
+    // identity. The first bucket also includes DB-registered objects for
+    // interrupted uploads. A failed bucket aborts the account deletion.
+    let deletedFilesCount = 0;
+    for (const bucketId of ACCOUNT_BUCKETS) {
+      const perBucket = new Set<string>();
+      if (bucketId === "vehicle-documents") {
+        for (const path of knownPaths) {
+          if (path.startsWith(`${user.id}/`)) perBucket.add(path);
+        }
+      }
+      const discoveredPaths = await listAllObjectsRecursively(
+        adminClient, bucketId, user.id,
+      );
+      for (const path of discoveredPaths) perBucket.add(path);
+      deletedFilesCount += await deleteStorageObjects(
+        adminClient, bucketId, [...perBucket].sort(),
+      );
     }
-
-    const objectPaths = [...knownPaths].sort();
-
-    const deletedFilesCount = await deleteStorageObjects(
-      adminClient,
-      objectPaths,
-    );
 
     const { error: deleteUserError } =
       await adminClient.auth.admin.deleteUser(

@@ -60,7 +60,7 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
           title: const Text('Dernière confirmation'),
           content: const Text(
             'Le compte, les véhicules, les documents, les analyses '
-            'et les fichiers privés seront définitivement supprimés.\n\n'
+            'et les fichiers privés seront supprimés des espaces actifs.\n\n'
             'Aucune restauration ne sera possible.',
             textAlign: TextAlign.center,
           ),
@@ -161,7 +161,9 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
                   SizedBox(height: 10),
                   Text(
                     'La suppression ne pourra pas être annulée '
-                    'et aucune sauvegarde utilisateur ne sera conservée.',
+                    'Les sauvegardes techniques et les pièces comptables '
+                    'peuvent être conservées temporairement lorsque '
+                    'la loi ou les délais de restauration le nécessitent.',
                     textAlign: TextAlign.center,
                   ),
                 ],
@@ -188,6 +190,12 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
             const _DeletedDataRow(
               icon: Icons.auto_awesome_outlined,
               label: "Résultats d'analyse",
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Attention : supprimer votre compte ne résilie pas '
+              'automatiquement un abonnement Google Play ou App Store. '
+              'Résiliez-le séparément dans votre store.',
             ),
             const SizedBox(height: 26),
             Text(

@@ -4,12 +4,14 @@ class Vehicle360Access {
     required this.entitled,
     required this.creditBalance,
     required this.trialClaimed,
+    this.commercialMode = false,
   });
 
   final bool authenticated;
   final bool entitled;
   final int creditBalance;
   final bool trialClaimed;
+  final bool commercialMode;
 
   bool get canGenerate => entitled || creditBalance > 0;
   bool get trialAvailable => authenticated && !trialClaimed && !entitled;
@@ -25,14 +27,19 @@ class Vehicle360Access {
   factory Vehicle360Access.fromMaps({
     required Map<String, dynamic> access,
     required Map<String, dynamic> trial,
+    bool commercialMode = false,
+    int? commercialBalance,
+    bool? commercialTrialClaimed,
   }) {
     return Vehicle360Access(
       authenticated: access['authenticated'] == true,
-      entitled: access['entitled'] == true || trial['entitled'] == true,
-      creditBalance: _intValue(
+      entitled: !commercialMode &&
+          (access['entitled'] == true || trial['entitled'] == true),
+      creditBalance: commercialMode ? (commercialBalance ?? 0) : _intValue(
         trial['credit_balance'] ?? access['credit_balance'],
       ),
-      trialClaimed: trial['trial_claimed'] == true,
+      trialClaimed: commercialTrialClaimed ?? trial['trial_claimed'] == true,
+      commercialMode: commercialMode,
     );
   }
 
@@ -41,12 +48,14 @@ class Vehicle360Access {
     bool? entitled,
     int? creditBalance,
     bool? trialClaimed,
+    bool? commercialMode,
   }) {
     return Vehicle360Access(
       authenticated: authenticated ?? this.authenticated,
       entitled: entitled ?? this.entitled,
       creditBalance: creditBalance ?? this.creditBalance,
       trialClaimed: trialClaimed ?? this.trialClaimed,
+      commercialMode: commercialMode ?? this.commercialMode,
     );
   }
 

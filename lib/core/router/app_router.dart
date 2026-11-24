@@ -6,11 +6,13 @@ import '../../features/accident_assistant/accident_assistant_page.dart';
 import '../../features/auth/forgot_password_page.dart';
 import '../../features/auth/login_page.dart';
 import '../../features/auth/register_page.dart';
+import '../../features/auth/reset_password_page.dart';
 import '../../features/breakdown_assistant/breakdown_assistant_page.dart';
 import '../../features/documents/analysis_result_page.dart';
 import '../../features/documents/document_upload_page.dart';
 import '../../features/eco_driving/eco_driving_page.dart';
 import '../../features/home/account_page.dart';
+import '../../features/support/feedback_page.dart';
 import '../../features/home/action_center_page.dart';
 import '../../features/home/history_page.dart';
 import '../../features/home/home_page.dart';
@@ -67,6 +69,7 @@ GoRouter createAppRouter(AppController controller) {
     '/login',
     '/register',
     '/forgot-password',
+    '/reset-password',
   };
 
   return GoRouter(
@@ -83,6 +86,7 @@ GoRouter createAppRouter(AppController controller) {
       }
 
       if (controller.isAuthenticated) {
+        if (path == '/reset-password') return null;
         if (publicPaths.contains(path)) {
           return '/home';
         }
@@ -113,6 +117,8 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => OnboardingPage(controller: controller),
       ),
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(path: '/reset-password',
+        builder: (context, state) => const ResetPasswordPage()),
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterPage(),
@@ -122,6 +128,13 @@ GoRouter createAppRouter(AppController controller) {
         builder: (context, state) => const ForgotPasswordPage(),
       ),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+      GoRoute(
+        path: '/feedback',
+        builder: (context, state) => FeedbackPage(
+          source: state.uri.queryParameters['source'] ?? 'app',
+          reference: state.uri.queryParameters['reference'] ?? '',
+        ),
+      ),
       GoRoute(
         path: '/actions',
         builder: (context, state) => const ActionCenterPage(),

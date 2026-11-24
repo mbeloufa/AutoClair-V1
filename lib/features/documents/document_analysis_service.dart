@@ -5,9 +5,10 @@ import 'document_carnet_sync_result.dart';
 import 'document_history_item.dart';
 
 class DocumentAnalysisException implements Exception {
-  const DocumentAnalysisException(this.message);
+  const DocumentAnalysisException(this.message, {this.code});
 
   final String message;
+  final String? code;
 }
 
 class DocumentAnalysisService {
@@ -91,8 +92,14 @@ class DocumentAnalysisService {
 
       return result;
     } on FunctionException catch (error) {
+      final details = error.details;
+      final code = details is Map
+          ? details['error_code']?.toString()
+          : null;
       throw DocumentAnalysisException(
         _functionMessage(error, operation: 'analysis'),
+        code: code ?? (error.status == 402
+            ? 'DOCUMENT_CREDIT_REQUIRED' : null),
       );
     } on DocumentAnalysisException {
       rethrow;
@@ -460,6 +467,7 @@ class DocumentAnalysisService {
       401 => 'Votre session a expiré. Reconnectez-vous.',
       404 => "Ce document n'existe plus.",
       409 => 'Une analyse de ce document est déjà en cours.',
+      402 => 'Votre crédit d’analyse est épuisé. Découvrez les offres.',
       429 => 'Le service est momentanément très sollicité.',
       504 => "L'analyse a dépassé le délai autorisé.",
       _ => "L'analyse du document a échoué.",
@@ -499,6 +507,8 @@ class DocumentAnalysisService {
     return switch (errorCode) {
       'ANALYSIS_ALREADY_PROCESSING' =>
         'Une analyse de ce document est déjà en cours.',
+      'DOCUMENT_CREDIT_REQUIRED' =>
+        'Votre analyse gratuite est épuisée. Découvrez les offres.',
       'DOCUMENT_FILE_MISSING' => "Aucun fichier n'est associé à ce document.",
       'DOCUMENT_NOT_FOUND' =>
         "Ce document n'existe pas ou ne vous appartient pas.",

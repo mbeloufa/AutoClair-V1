@@ -7,6 +7,7 @@ import {
   type ExtractedOffer,
   type KnownVehicle,
 } from "./extractor.ts";
+import { isolateRawCards } from "./raw_cards.ts";
 
 type JsonMap = Record<string, unknown>;
 
@@ -16,6 +17,8 @@ type SourceRow = {
   source_name: string;
   source_url: string;
   allowed_hostnames: string[];
+  allowed_path_prefixes: string[];
+  denied_path_prefixes: string[];
   status: string;
   content_hash: string | null;
   failure_count: number;
@@ -26,6 +29,7 @@ type SourceRow = {
   monitoring_mode: ExtractionSource["monitoringMode"];
   publication_policy: ExtractionSource["publicationPolicy"];
   source_purpose: ExtractionSource["sourcePurpose"];
+  source_role: ExtractionSource["sourceRole"];
   endpoint_type: ExtractionSource["endpointType"];
   trust_tier: ExtractionSource["trustTier"];
   canonical_brand_code: string;
@@ -105,7 +109,7 @@ const MAX_HTML_BYTES = 2_000_000;
 const FETCH_TIMEOUT_MS = 12_000;
 const MAX_BATCH_SIZE = 6;
 const USER_AGENT =
-  "AutoClairOffersBot/3.0 (+deterministic-offer-extraction; France)";
+  "AutoClairOffersBot/6.0 (+deterministic-offer-extraction; France)";
 const BOT_NAME = "AutoClairOffersBot";
 
 const responseHeaders: Record<string, string> = {
@@ -137,7 +141,7 @@ function adminClient(): any {
     },
     global: {
       headers: {
-        "X-Client-Info": "autoclair-commercial-offers-sync/3.0",
+        "X-Client-Info": "autoclair-commercial-offers-sync/6.0",
       },
     },
   });
@@ -217,6 +221,26 @@ function hostnameAllowed(
   );
 }
 
+function pathAllowedForSource(raw: string, source: SourceRow): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+
+  const path = url.pathname.toLowerCase();
+  const denied = source.denied_path_prefixes
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if (denied.some((prefix) => path.startsWith(prefix))) return false;
+
+  const allowed = source.allowed_path_prefixes
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if (allowed.length === 0) return true;
+  return allowed.some((prefix) => path.startsWith(prefix));
+}
 function validatedHttpsUrl(
   raw: string,
   allowedHostnames: string[],
@@ -477,6 +501,12 @@ function sourceFromRow(row: JsonMap): SourceRow {
     allowed_hostnames: Array.isArray(row.allowed_hostnames)
       ? row.allowed_hostnames.map(String)
       : [],
+    allowed_path_prefixes: Array.isArray(row.allowed_path_prefixes)
+      ? row.allowed_path_prefixes.map(String)
+      : [],
+    denied_path_prefixes: Array.isArray(row.denied_path_prefixes)
+      ? row.denied_path_prefixes.map(String)
+      : [],
     status: String(row.status ?? "PAUSED"),
     content_hash: typeof row.content_hash === "string"
       ? row.content_hash
@@ -500,6 +530,9 @@ function sourceFromRow(row: JsonMap): SourceRow {
     source_purpose: String(
       row.source_purpose ?? "OTHER",
     ) as SourceRow["source_purpose"],
+    source_role: String(
+      row.source_role ?? "DISCOVERY_ONLY",
+    ) as SourceRow["source_role"],
     endpoint_type: String(
       row.endpoint_type ?? "HOME_OR_CATALOG",
     ) as SourceRow["endpoint_type"],
@@ -593,10 +626,10 @@ async function loadDueTasks(
   const { data: rawSources, error: sourceError } = await client
     .from("commercial_offer_sources")
     .select(
-      "id,source_key,source_name,source_url,allowed_hostnames,status," +
+      "id,source_key,source_name,source_url,allowed_hostnames,allowed_path_prefixes,denied_path_prefixes,status," +
         "content_hash,failure_count,metadata,search_enabled," +
         "search_priority,check_frequency_hours,monitoring_mode," +
-        "publication_policy,source_purpose,endpoint_type,trust_tier," +
+        "publication_policy,source_purpose,source_role,endpoint_type,trust_tier," +
         "canonical_brand_code,auto_publish_threshold,crawl_depth," +
         "max_pages_per_cycle",
     )
@@ -648,37 +681,40 @@ async function loadDueTasks(
 
 async function loadKnownVehicles(client: any): Promise<KnownVehicle[]> {
   const { data, error } = await client
-    .from("vehicles")
-    .select("make,model")
-    .not("make", "is", null)
-    .not("model", "is", null)
-    .limit(2_000);
+    .from("vehicle_model_catalog")
+    .select("brand_code,canonical_name,aliases")
+    .eq("active", true)
+    .limit(5000);
 
   if (error) {
-    throw new Error(`VEHICLE_MODELS_READ_FAILED:${error.message}`);
+    throw new Error(`VEHICLE_MODEL_CATALOG_READ_FAILED:${error.message}`);
   }
 
   const seen = new Set<string>();
-  const vehicles: KnownVehicle[] = [];
+  const models: KnownVehicle[] = [];
 
   for (const row of data ?? []) {
     if (!isRecord(row)) continue;
+    const brand = normalizeText(String(row.brand_code ?? ""));
+    const canonical = String(row.canonical_name ?? "").trim();
+    if (!brand || !canonical) continue;
 
-    const make = String(row.make ?? "").trim();
-    const model = String(row.model ?? "").trim();
-    if (!make || !model) continue;
+    const values = [
+      canonical,
+      ...(Array.isArray(row.aliases) ? row.aliases.map(String) : []),
+    ];
 
-    const key = `${normalizeText(make)}::${normalizeText(model)}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
-    vehicles.push({
-      brand: normalizeText(make),
-      model,
-    });
+    for (const model of values) {
+      const clean = model.trim();
+      if (!clean) continue;
+      const key = `${brand}::${normalizeText(clean)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      models.push({ brand, model: clean });
+    }
   }
 
-  return vehicles;
+  return models;
 }
 
 function extractionSource(source: SourceRow): ExtractionSource {
@@ -688,6 +724,7 @@ function extractionSource(source: SourceRow): ExtractionSource {
     sourceUrl: source.source_url,
     canonicalBrandCode: source.canonical_brand_code,
     sourcePurpose: source.source_purpose,
+    sourceRole: source.source_role,
     endpointType: source.endpoint_type,
     trustTier: source.trust_tier,
     monitoringMode: source.monitoring_mode,
@@ -738,6 +775,38 @@ async function publishOffer(
     throw new Error(
       `AUTO_OFFER_LOOKUP_FAILED:${existingError.message}`,
     );
+  }
+
+  // V6_1_STABLE_IDENTITY_FALLBACK
+  // A correction de prix/libelle peut legitimement changer le fingerprint.
+  // Pour ne pas creer de doublon, on ne reutilise un ancien enregistrement
+  // que si source + page + titre normalise identifient UNE ligne unique.
+  let resolvedExisting: JsonMap | null =
+    isRecord(existing) && existing.id ? existing : null;
+
+  if (!resolvedExisting) {
+    const { data: identityRows, error: identityError } = await client
+      .from("commercial_offers")
+      .select("id,title,source_fingerprint,last_seen_at")
+      .eq("source_id", source.id)
+      .eq("source_page_url", pageUrl)
+      .eq("auto_extracted", true)
+      .limit(40);
+
+    if (identityError) {
+      throw new Error(
+        `AUTO_OFFER_IDENTITY_LOOKUP_FAILED:${identityError.message}`,
+      );
+    }
+
+    const sameTitleRows = (identityRows ?? []).filter((row: unknown) =>
+      isRecord(row) &&
+      normalizeText(String(row.title ?? "")) === normalizeText(offer.title)
+    );
+
+    if (sameTitleRows.length === 1) {
+      resolvedExisting = sameTitleRows[0] as JsonMap;
+    }
   }
 
   const payload = {
@@ -795,11 +864,11 @@ async function publishOffer(
     updated_at: now,
   };
 
-  if (isRecord(existing) && existing.id) {
+  if (resolvedExisting?.id) {
     const { error } = await client
       .from("commercial_offers")
       .update(payload)
-      .eq("id", String(existing.id));
+      .eq("id", String(resolvedExisting.id));
 
     if (error) {
       throw new Error(`AUTO_OFFER_UPDATE_FAILED:${error.message}`);
@@ -874,7 +943,7 @@ async function quarantineOffer(
     source_page_url: pageUrl,
     metadata: {
       automatic_publication: false,
-      generic_engine_version: 3,
+      generic_engine_version: 6,
     },
   };
 
@@ -963,97 +1032,109 @@ async function verifyManualOffers(
   pageUrl: string,
   normalizedText: string,
 ): Promise<{ verified: number; reviewed: number }> {
+  const pageHost = new URL(pageUrl).hostname.toLowerCase();
+  const { data: relatedRaw, error: relatedError } = await client
+    .from("commercial_offer_sources")
+    .select("id,canonical_brand_code,allowed_hostnames,source_purpose,source_role")
+    .eq("source_purpose", source.source_purpose)
+    .in("source_role", ["OFFER_HUB", "OFFER_DETAIL"]);
+
+  if (relatedError) {
+    throw new Error(`RELATED_SOURCES_READ_FAILED:${relatedError.message}`);
+  }
+
+  const relatedIds = new Set<string>([source.id]);
+  for (const row of relatedRaw ?? []) {
+    if (!isRecord(row)) continue;
+    const brand = String(row.canonical_brand_code ?? "").toLowerCase();
+    const brandCompatible = brand === source.canonical_brand_code.toLowerCase();
+    const hosts = Array.isArray(row.allowed_hostnames)
+      ? row.allowed_hostnames.map((value: unknown) => String(value).toLowerCase())
+      : [];
+    if (brandCompatible && hosts.includes(pageHost)) relatedIds.add(String(row.id));
+  }
+
   const { data, error } = await client
     .from("commercial_offers")
     .select(
-      "id,status,ends_at,official_url,source_page_url," +
+      "id,source_id,status,ends_at,official_url,source_page_url," +
         "validation_markers,verification_failure_count",
     )
-    .eq("source_id", source.id)
-    .eq("auto_extracted", false);
+    .in("source_id", Array.from(relatedIds))
+    .eq("auto_extracted", false)
+    .in("status", ["ACTIVE", "REVIEW_REQUIRED"]);
 
-  if (error) {
-    throw new Error(`MANUAL_OFFERS_READ_FAILED:${error.message}`);
-  }
+  if (error) throw new Error(`MANUAL_OFFERS_READ_FAILED:${error.message}`);
 
   let verified = 0;
   let reviewed = 0;
-
   for (const row of data ?? []) {
     if (!isRecord(row)) continue;
-
-    const rowUrl = String(
-      row.source_page_url ?? row.official_url ?? "",
-    );
-
-    if (rowUrl && rowUrl !== pageUrl) continue;
+    const rowUrl = String(row.source_page_url ?? row.official_url ?? "");
+    if (rowUrl) {
+      try {
+        if (new URL(rowUrl).hostname.toLowerCase() !== pageHost) continue;
+      } catch {
+        continue;
+      }
+    }
 
     const markers = Array.isArray(row.validation_markers)
-      ? row.validation_markers.map(String)
+      ? row.validation_markers.map(String).filter(Boolean)
       : [];
-
-    if (markers.length === 0) continue;
+    if (markers.length < 2) continue;
 
     const missing = markers.filter((marker) => {
-      const normalized = normalizeText(marker);
-      return normalized && !normalizedText.includes(normalized);
+      const value = normalizeText(marker);
+      return value && !normalizedText.includes(value);
     });
 
     if (missing.length === 0) {
+      const now = new Date().toISOString();
+      const evidence = {
+        engine_version: 6,
+        origin: "LIVE_MARKER_REVALIDATION",
+        source_key: source.source_key,
+        source_page_url: pageUrl,
+        validation_markers: markers,
+        verified_at: now,
+      };
       const { error: updateError } = await client
         .from("commercial_offers")
         .update({
+          source_id: source.id,
           status: "ACTIVE",
-          last_verified_at: new Date().toISOString(),
+          source_page_url: pageUrl,
+          evidence,
+          extraction_method: "LIVE_MARKER_REVALIDATION",
+          last_verified_at: now,
+          last_seen_at: now,
           verification_failure_count: 0,
           last_verification_error: null,
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         })
         .eq("id", String(row.id));
-
-      if (updateError) {
-        throw new Error(
-          `MANUAL_OFFER_UPDATE_FAILED:${updateError.message}`,
-        );
-      }
-
+      if (updateError) throw new Error(`MANUAL_OFFER_UPDATE_FAILED:${updateError.message}`);
       verified += 1;
       continue;
     }
 
-    const failureCount = integerInRange(
-      row.verification_failure_count,
-      0,
-      0,
-      1_000,
-    ) + 1;
-    const status = failureCount >= 2
-      ? "REVIEW_REQUIRED"
-      : String(row.status ?? "ACTIVE");
-
+    // A different related page must never invalidate a previously validated offer.
+    if (String(row.source_id) !== source.id || !rowUrl || rowUrl !== pageUrl) continue;
+    const failureCount = integerInRange(row.verification_failure_count, 0, 0, 1000) + 1;
+    const nextStatus = failureCount >= 2 ? "REVIEW_REQUIRED" : String(row.status ?? "ACTIVE");
     const { error: updateError } = await client
       .from("commercial_offers")
       .update({
-        status,
+        status: nextStatus,
         verification_failure_count: failureCount,
-        last_verification_error:
-          `MISSING_MARKERS:${missing.slice(0, 4).join("|")}`.slice(
-            0,
-            500,
-          ),
+        last_verification_error: `MISSING_MARKERS:${missing.slice(0, 4).join("|")}`.slice(0, 500),
         updated_at: new Date().toISOString(),
       })
       .eq("id", String(row.id));
-
-    if (updateError) {
-      throw new Error(
-        `MANUAL_OFFER_REVIEW_FAILED:${updateError.message}`,
-      );
-    }
-
-    if (status === "REVIEW_REQUIRED") reviewed += 1;
+    if (updateError) throw new Error(`MANUAL_OFFER_REVIEW_FAILED:${updateError.message}`);
+    if (nextStatus === "REVIEW_REQUIRED") reviewed += 1;
   }
-
   return { verified, reviewed };
 }
 
@@ -1067,6 +1148,7 @@ async function storeDiscoveredLinks(
   const now = new Date().toISOString();
 
   for (const link of links) {
+    if (!pathAllowedForSource(link.url, source)) continue;
     const hash = await sha256Hex(link.url);
 
     const { data: existing, error: lookupError } = await client
@@ -1086,7 +1168,7 @@ async function storeDiscoveredLinks(
       metadata: {
         parent_url: task.target_url,
         source_depth: task.depth,
-        generic_engine_version: 3,
+        generic_engine_version: 6,
         automatic_publication: false,
       },
     };
@@ -1172,6 +1254,10 @@ async function processTask(
   knownVehicles: KnownVehicle[],
 ): Promise<TaskOutcome> {
   try {
+    if (!pathAllowedForSource(task.target_url, source)) {
+      throw new Error("SOURCE_PATH_NOT_ALLOWED");
+    }
+
     const fetched = await fetchPage(
       task.target_url,
       source.allowed_hostnames,
@@ -1182,6 +1268,25 @@ async function processTask(
       task.target_kind === "ROOT" &&
       source.monitoring_mode === "LINK_DISCOVERY_ONLY"
     );
+
+    // V7 mirror only: preserve production extraction and publication. The new
+    // feed is independent of V6 classification and does not execute site JS.
+    if (Deno.env.get("PROMO_V7_CAPTURE_ENABLED")!=="false" && shouldExtract &&
+        ["OFFER_HUB","OFFER_DETAIL"].includes(source.source_role) &&
+        pathAllowedForSource(fetched.finalUrl.toString(),source) &&
+        fetched.robotsStatus==="ALLOWED") {
+      try {
+        const cards=isolateRawCards(fetched.html);
+        if(cards.length){
+          const {error}=await client.rpc("promo_v7_ingest_cards",{
+            p_source:source.id,p_page:fetched.finalUrl.toString(),p_cards:cards,
+          });
+          if(error)console.error("PROMO_V7_CAPTURE_FAILED",source.source_key);
+        }
+      } catch (_) {
+        console.error("PROMO_V7_CAPTURE_FAILED",source.source_key);
+      }
+    }
 
     const extracted = shouldExtract
       ? await extractOffers(
@@ -1225,7 +1330,10 @@ async function processTask(
       }
     }
 
-    if (shouldExtract) {
+    const extractionHealthy = extracted.some(
+      (offer) => offer.publishable || (offer.confidence >= 70 && offer.category !== "OTHER"),
+    );
+    if (shouldExtract && extractionHealthy) {
       await markMissingAutomaticOffers(
         client,
         source,
@@ -1305,7 +1413,7 @@ async function processTask(
           published + updated + candidates,
         metadata: {
           ...source.metadata,
-          generic_engine_version: 3,
+          generic_engine_version: 6,
           last_target_url: fetched.finalUrl.toString(),
           last_published_count: published,
           last_updated_count: updated,

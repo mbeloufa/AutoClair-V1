@@ -97,7 +97,7 @@ class VehicleService {
         params: {'p_vehicle_id': savedVehicle.id},
       );
 
-      return fetchVehicle(savedVehicle.id);
+      return await fetchVehicle(savedVehicle.id);
     } on VehicleServiceException {
       rethrow;
     } catch (error) {

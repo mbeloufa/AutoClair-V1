@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const MEDIA_BUCKET = "emergency-media";
@@ -737,6 +738,7 @@ Deno.serve(async (req: Request) => {
     let usedModel: string | null = null;
 
     try {
+      await requireCommercialBudget(admin, user.id, "emergency");
       const openAiResponse = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {

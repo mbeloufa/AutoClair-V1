@@ -42,18 +42,80 @@ class Vehicle360Service {
     await _syncPremiumEntitlementBestEffort();
     final accessPayload = await _rpcMap('get_vehicle_report_access');
     final trialPayload = await _invokeTrial('status');
-    return Vehicle360Access.fromMaps(
-      access: accessPayload,
-      trial: trialPayload,
-    );
+    // Old installations keep the historical credit ledger. After a controlled
+    // commercial switch, credits from paid products are authoritative.
+    final flags = await _rpcMap('get_commercial_flags');
+    final commercialMode = flags['vehicle360_credits_enabled'] == true;
+    if (!commercialMode) {
+      return Vehicle360Access.fromMaps(
+        access: accessPayload, trial: trialPayload,
+      );
+    }
+
+    final balances = await _rpcMap('get_commercial_balances');
+    final raw = balances['vehicle_360'];
+    final row = raw is Map ? Map<String, dynamic>.from(raw) : <String, dynamic>{};
+    int amount(Object? value) =>
+        value is int ? value : int.tryParse(value?.toString() ?? '') ?? 0;
+    final commercialBalance = amount(row['offered']) +
+        amount(row['subscription']) + amount(row['purchased']);
+    final userId = _client.auth.currentUser?.id;
+    if (userId == null) {
+      throw const Vehicle360Exception('Reconnectez-vous pour voir vos crédits.');
+    }
+    try {
+      final trialRows = await _client.from('commercial_credit_lots')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('kind', 'vehicle_360')
+          .eq('source', 'trial')
+          .limit(1);
+      final olderReports = await _client.from('vehicle_analysis_reports')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('status', 'completed')
+          .limit(1);
+      return Vehicle360Access.fromMaps(
+        access: accessPayload,
+        trial: trialPayload,
+        commercialMode: true,
+        commercialBalance: commercialBalance,
+        commercialTrialClaimed: trialRows.isNotEmpty || olderReports.isNotEmpty,
+      );
+    } catch (_) {
+      throw const Vehicle360Exception(
+        'Le statut de votre essai ne peut pas être vérifié.',
+        code: 'COMMERCIAL_ACCESS_UNAVAILABLE',
+      );
+    }
   }
 
   Future<Vehicle360Access> claimTrial() async {
+    final status = await access();
+    if (status.commercialMode) {
+      try {
+        final response = await _client.rpc('claim_vehicle360_commercial_trial');
+        final result = _payload(response);
+        if (result['success'] != true) {
+          throw const Vehicle360Exception(
+            'Votre Bilan 360 offert a déjà été utilisé.',
+            code: 'TRIAL_ALREADY_CONSUMED',
+          );
+        }
+      } on Vehicle360Exception {
+        rethrow;
+      } catch (_) {
+        throw const Vehicle360Exception(
+          'L’activation du Bilan offert a échoué. Réessayez.',
+          code: 'TRIAL_UNAVAILABLE',
+        );
+      }
+      return access();
+    }
     final trialPayload = await _invokeTrial('claim');
     final accessPayload = await _rpcMap('get_vehicle_report_access');
     return Vehicle360Access.fromMaps(
-      access: accessPayload,
-      trial: trialPayload,
+      access: accessPayload, trial: trialPayload,
     );
   }
 

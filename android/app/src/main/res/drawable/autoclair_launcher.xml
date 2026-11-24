@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- AutoClair: vehicle silhouette and open history line. -->
+    <path
+        android:fillColor="#153F4B"
+        android:pathData="M18,0 L90,0 C100,0 108,8 108,18 L108,90 C108,100 100,108 90,108 L18,108 C8,108 0,100 0,90 L0,18 C0,8 8,0 18,0 Z"/>
+    <path
+        android:fillColor="#0B9AA0"
+        android:pathData="M20,74 L88,74 L88,83 L20,83 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M32,45 C34,38 40,35 47,35 L61,35 C68,35 74,38 76,45 L80,56 L28,56 Z"/>
+    <path
+        android:fillColor="#153F4B"
+        android:pathData="M40,44 L68,44 C70,44 71,45 72,47 L74,51 L34,51 L36,47 C37,45 38,44 40,44 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M25,57 L83,57 C87,57 90,60 90,64 L90,72 L18,72 L18,64 C18,60 21,57 25,57 Z"/>
+    <path
+        android:fillColor="#0B9AA0"
+        android:pathData="M30,62 C34,62 37,65 37,68 L25,68 C25,65 27,62 30,62 Z"/>
+    <path
+        android:fillColor="#0B9AA0"
+        android:pathData="M78,62 C81,62 83,65 83,68 L71,68 C71,65 74,62 78,62 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M28,74 L39,74 L39,80 C39,83 37,84 33,84 C30,84 28,83 28,80 Z"/>
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M69,74 L80,74 L80,80 C80,83 78,84 75,84 C71,84 69,83 69,80 Z"/>
+</vector>

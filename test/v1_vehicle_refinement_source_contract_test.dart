@@ -63,6 +63,10 @@ void main() {
     expect(care, contains('Cela ne confirme pas que ce véhicule est concerné'));
     expect(care, contains('Véhicule non concerné'));
     expect(assistant, contains("recall.status.toUpperCase() == 'SCHEDULED'"));
-    expect(care, contains('Scrollable.ensureVisible('));
+    final navigation = _read(
+      'lib/features/vehicle_care/vehicle_care_section_navigation.dart',
+    );
+    expect(care, contains('ensureVehicleCareSectionVisible('));
+    expect(navigation, contains('Scrollable.ensureVisible('));
   });
 }

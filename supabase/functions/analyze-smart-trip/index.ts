@@ -1,3 +1,4 @@
+import { requireCommercialBudget } from "../_shared/commercial_budget.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.111.0";
 import { decode } from "npm:@here/flexpolyline@0.1.0";
 
@@ -522,7 +523,7 @@ function median(values: number[]): number | null {
     .sort((a, b) => a - b);
   if (!sorted.length) return null;
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length.isEven
+  return sorted.length % 2 === 0
     ? (sorted[middle - 1] + sorted[middle]) / 2
     : sorted[middle];
 }
@@ -885,6 +886,7 @@ Deno.serve(async (request) => {
         });
       }
       const context = pointOf(body?.at);
+      await requireCommercialBudget(admin, user.id, "smart_trip_autocomplete");
       const suggestions = await autocomplete(query, context, apiKey);
       return json(200, {
         success: true,
@@ -959,6 +961,7 @@ Deno.serve(async (request) => {
       ? "ESTIMATED_BY_FUEL"
       : "USER";
 
+    await requireCommercialBudget(admin, user.id, "smart_trip");
     const origin = await resolvePlace(body?.origin, apiKey, "Ma position");
     const destination = await resolvePlace(
       body?.destination,
@@ -1097,15 +1100,7 @@ Deno.serve(async (request) => {
             };
           };
         })
-        .filter(
-          (
-            task,
-          ): task is () => Promise<{
-            fraction: number;
-            point: Point;
-            candidate: Candidate | null;
-          }> => task != null,
-        );
+        .filter((task) => task != null);
 
       const singleResults = await runBatched(singleTasks, 3);
       for (const result of singleResults) {
@@ -1137,11 +1132,7 @@ Deno.serve(async (request) => {
             return candidates[0] ?? null;
           };
         })
-        .filter(
-          (
-            task,
-          ): task is () => Promise<Candidate | null> => task != null,
-        );
+        .filter((task) => task != null);
 
       const windowResults = await runBatched(windowTasks, 3);
       for (const candidate of windowResults) {

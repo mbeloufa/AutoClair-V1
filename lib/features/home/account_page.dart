@@ -72,6 +72,18 @@ class _AccountPageState extends State<AccountPage> {
                 onTap: () => context.go('/vehicles'),
               ),
               _SettingsTile(
+                icon: Icons.support_agent_outlined,
+                title: 'Aide et signalement',
+                subtitle: 'Contacter le support AutoClair depuis l’application',
+                onTap: () => context.push('/feedback?source=app'),
+              ),
+              _SettingsTile(
+                icon: Icons.workspace_premium_outlined,
+                title: 'Mon abonnement et mes achats',
+                subtitle: 'Statut, crédits, restauration et gestion du Store',
+                onTap: () => context.push('/premium'),
+              ),
+              _SettingsTile(
                 icon: Icons.description_outlined,
                 title: 'Mes documents et analyses',
                 subtitle: 'Retrouver mes fichiers et leurs analyses',
