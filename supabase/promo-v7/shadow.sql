@@ -38,17 +38,19 @@ begin
  -- Evidence is a limited excerpt, not proof of full current page; READY remains shadow only.
  with inputs as (
  select 'ACTIVE_OFFER'::text as origin_type,o.id origin_id,0 priority,o.last_verified_at as observed,
- left(concat_ws(E'\n',o.title,o.summary,o.evidence->>'normalized_excerpt',o.conditions_summary),5000) txt,
- jsonb_build_object('operator',coalesce(nullif(s.operator_name,''),s.canonical_brand_code,s.source_name),
+ left(coalesce(nullif(o.evidence->>'raw_offer_excerpt',''),concat_ws(E'\n',o.title,o.summary,o.evidence->>'normalized_excerpt',o.conditions_summary)),5000) txt,
+ jsonb_build_object('operator',coalesce(nullif(regexp_replace(split_part(split_part(s.source_url,'://',2),'/',1),'^www[.]',''),''),nullif(s.operator_name,''),s.source_name),
  'canonical_brand',coalesce(s.canonical_brand_code,'*'),'role',s.source_role,'policy',s.publication_policy,'trust',s.trust_tier,
- 'url',coalesce(o.source_page_url,o.official_url,s.source_url),'source_status',s.status) src
+ 'url',coalesce(o.source_page_url,o.official_url,s.source_url),'source_status',s.status,
+ 'evidence_level',case when nullif(o.evidence->>'raw_offer_excerpt','') is not null then 'RAW_CARD' else 'LEGACY_EXCERPT' end) src
  from public.commercial_offers o join public.commercial_offer_sources s on s.id=o.source_id where o.status='ACTIVE'
  union all
  select 'CANDIDATE',c.id,1,c.last_seen_at,
- left(concat_ws(E'\n',c.structured_payload->>'title',c.structured_payload->>'summary',c.structured_payload->'evidence'->>'normalized_excerpt',c.excerpt),5000),
- jsonb_build_object('operator',coalesce(nullif(s.operator_name,''),s.canonical_brand_code,s.source_name),
+ left(coalesce(nullif(c.structured_payload->'evidence'->>'raw_offer_excerpt',''),concat_ws(E'\n',c.structured_payload->>'title',c.structured_payload->>'summary',c.structured_payload->'evidence'->>'normalized_excerpt',c.excerpt)),5000),
+ jsonb_build_object('operator',coalesce(nullif(regexp_replace(split_part(split_part(s.source_url,'://',2),'/',1),'^www[.]',''),''),nullif(s.operator_name,''),s.source_name),
  'canonical_brand',coalesce(s.canonical_brand_code,'*'),'role',s.source_role,'policy',s.publication_policy,'trust',s.trust_tier,
- 'url',coalesce(c.source_page_url,s.source_url),'source_status',s.status)
+ 'url',coalesce(c.source_page_url,s.source_url),'source_status',s.status,
+ 'evidence_level',case when nullif(c.structured_payload->'evidence'->>'raw_offer_excerpt','') is not null then 'RAW_CARD' else 'LEGACY_EXCERPT' end)
  from public.commercial_offer_candidates c join public.commercial_offer_sources s on s.id=c.source_id
  where c.status='PENDING_REVIEW' and s.source_role in ('OFFER_HUB','OFFER_DETAIL') and s.status='ACTIVE'
  ), hashed as (
