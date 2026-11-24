@@ -102,11 +102,14 @@ begin
  if j.job_id is null or j.source->>'evidence_level'<>'RAW_CARD' then raise exception 'No raw queue';end if;
  first_id:=j.job_id;
  perform public.promo_v7_finish_shadow(first_id,'[]'::jsonb,null,'AI_HTTP_429');
- -- Other cards may be processed, but never the same failed card before cooldown.
- if exists(select 1 from public.promo_v7_shadow_jobs where origin_id=(select origin_id from public.promo_v7_shadow_jobs where id=first_id) and model='retry-test' and attempt_no>1) then raise exception 'Unexpected immediate retry';end if;
+ -- Restrict the test to the original card so another candidate cannot mask a retry.
+ update public.promo_v7_raw_cards set available=false where id<>(select origin_id from public.promo_v7_shadow_jobs where id=first_id);
+ if exists(select 1 from public.promo_v7_claim_shadow('promo-v7.2','retry-test')) then raise exception 'Unexpected immediate retry';end if;
  update public.promo_v7_shadow_jobs set finished_at=now()-interval '7 hours' where id=first_id;
- -- Worker prioritizes fresh cards before retries; check retry using a separate input after exhausting fresh items.
- perform public.promo_v7_claim_shadow('promo-v7.2','retry-test');
+ select * into j from public.promo_v7_claim_shadow('promo-v7.2','retry-test');
+ if j.job_id is null or j.job_id=first_id or (select attempt_no from public.promo_v7_shadow_jobs where id=j.job_id)<>2 then raise exception 'Retry not created';end if;
+ perform public.promo_v7_finish_shadow(j.job_id,'[]'::jsonb,null,null);
+ if exists(select 1 from public.promo_v7_claim_shadow('promo-v7.2','retry-test')) then raise exception 'Completed card reprocessed';end if;
  if (select analysis_enabled from public.promo_v7_release_settings where singleton) then raise exception 'Paid automation enabled by default';end if;
 end $test$;
 reset role;
