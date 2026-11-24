@@ -148,6 +148,7 @@ class CommercialOffer {
   String get categoryLabel => switch (category) {
     'MAINTENANCE' => 'Entretien',
     'TYRES' => 'Pneumatiques',
+    'BRAKES' => 'Freinage',
     'BATTERY' => 'Batterie',
     'CLIMATE' => 'Climatisation',
     'ACCESSORIES' => 'Accessoires',
@@ -213,6 +214,10 @@ class CommercialOffer {
   }
 
   String get clearBenefitLabel {
+    // V7 labels are proof-backed and preserve unit, scope, and maximum.
+    if (offerKey.startsWith('promo-v7:') && benefitLabel.trim().isNotEmpty) {
+      return benefitLabel.trim();
+    }
     final saving = calculatedSavings;
     if (saving != null && saving > 0) {
       return '${_money(saving)} € de remise';
@@ -259,6 +264,9 @@ class CommercialOffer {
   }
 
   String get priceLabel {
+    if (offerKey.startsWith('promo-v7:') && benefitLabel.trim().isNotEmpty) {
+      return benefitLabel.trim();
+    }
     final price = priceAmount;
     if (price != null) {
       return '${_money(price)} $currency';
