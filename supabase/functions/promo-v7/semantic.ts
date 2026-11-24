@@ -1,6 +1,6 @@
 // Promo V7: source text is untrusted data, never instructions.
 // No network or database dependency: validation and identity are independently testable.
-export const VERSION = "promo-v7.1";
+export const VERSION = "promo-v7.2";
 export const CATEGORIES = ["MAINTENANCE","TYRES","BRAKES","BATTERY","CLIMATE","BODYWORK","WINDSCREEN","INSPECTION","PARTS","ACCESSORIES","CONTRACT","ASSISTANCE","NEW_VEHICLE","USED_VEHICLE","FINANCE","INSURANCE"] as const;
 const BENEFITS = ["PRICE","FROM_PRICE","PERCENT","FIXED_DISCOUNT","REIMBURSEMENT","FREE_SERVICE","MONTHLY"] as const;
 const SCOPES = ["TOTAL","PART","MOUNTING","PER_TYRE","MONTHLY","SERVICE","UNKNOWN"] as const;
@@ -100,10 +100,12 @@ export function validate(input:Input, o:Offer, today=new Date().toISOString().sl
  if(!["OFFER_HUB","OFFER_DETAIL"].includes(input.source.role)||input.source.policy!=="AUTO_HIGH_CONFIDENCE"||!["PRIMARY","PROFESSIONAL"].includes(input.source.trust)||input.source.source_status!=="ACTIVE")review("SOURCE_NOT_PUBLICATION_ELIGIBLE");
  if(input.source.evidence_level!=="RAW_CARD")review("LEGACY_EXCERPT_ONLY");
  if(!o.title.trim()||generic.test(normalize(o.title)))review("GENERIC_TITLE");
- if(!o.subject.trim()||!literal(input.text,o.subject_quote))review("SUBJECT_UNPROVEN");
+ if(!o.subject.trim()||!literal(input.text,o.subject_quote)||!normalize(o.subject_quote).includes(normalize(o.subject)))review("SUBJECT_UNPROVEN");
  if(!literal(input.text,o.category_quote)||!categories[o.category]?.test(normalize(o.category_quote)))review("CATEGORY_UNPROVEN");
  if(!literal(input.text,o.benefit_quote))review("BENEFIT_UNPROVEN");
  const proof=normalize(o.benefit_quote), cat=normalize(o.category_quote);
+ if(o.vehicle_brand&&input.source.canonical_brand!=="*"&&normalize(o.vehicle_brand)!==normalize(input.source.canonical_brand))review("SOURCE_BRAND_CONFLICT");
+ if(o.context==="VEHICLE_PURCHASE"&&!o.vehicle_brand&&input.source.canonical_brand==="*")review("VEHICLE_BRAND_UNKNOWN");
  if(noise.test(proof)||noise.test(normalize(o.title)))review("NON_PROMOTIONAL_CONTENT");
  const vehicleSale=["NEW_VEHICLE","USED_VEHICLE"].includes(o.category);
  if(vehicleSale!==(o.context==="VEHICLE_PURCHASE"))review("CONTEXT_CATEGORY_CONFLICT");
@@ -114,7 +116,8 @@ export function validate(input:Input, o:Offer, today=new Date().toISOString().sl
  if(o.kind==="FREE_SERVICE"){
   if(o.amount!==null||!/\b(gratuit|gratuite|offert|offerte|offerts|offertes)\b/.test(proof))review("FREE_SERVICE_UNPROVEN");
  }else if(!finite(o.amount)||o.amount<=0||!amounts(o.benefit_quote).some(n=>Math.abs(n-o.amount!)<0.00001))review("AMOUNT_UNPROVEN");
- if(o.kind==="PERCENT"&&(!finite(o.amount)||o.amount>100||!proof.includes("%")))review("PERCENT_INVALID");
+ if(o.kind==="PERCENT"&&(!finite(o.amount)||o.amount>100||!proof.includes("%")||!amounts(o.benefit_quote.replace(/\d[\d\s.,]*\s*(?:€|eur\b)/gi,"")).some(n=>Math.abs(n-o.amount!)<0.00001)))review("PERCENT_INVALID");
+ if(o.kind!=="PERCENT"&&o.kind!=="FREE_SERVICE"&&!amounts(o.benefit_quote.replace(/\d[\d\s.,]*\s*%/g,"")).some(n=>Math.abs(n-o.amount!)<0.00001))review("CURRENCY_AMOUNT_UNPROVEN");
  if(/jusqu[\s\x27]*a\b/.test(proof)!==o.up_to)review("MAXIMUM_QUALIFIER_MISMATCH");
  if(/\b(montage|pose)\b/.test(proof)&&o.kind==="PERCENT"&&o.amount_scope!=="MOUNTING")review("MOUNTING_SCOPE_REQUIRED");
  if(o.kind==="REIMBURSEMENT"&&!/rembours|prise en charge|cagnotte/.test(proof))review("REIMBURSEMENT_UNPROVEN");
@@ -149,10 +152,11 @@ export function validate(input:Input, o:Offer, today=new Date().toISOString().sl
  // Unknown end date / missing conditions may be valid, but never a verified consumer-facing offer in shadow rollout.
  if(!o.ends_at)review("END_DATE_UNKNOWN");
  if(!o.conditions_quote)review("CONDITIONS_MISSING");
- if(o.eligibility_uncertain)review("ELIGIBILITY_UNCERTAIN");
+ // Eligibility uncertainty is not a false price or campaign; it is shown explicitly
+ // to the driver. Never label a restricted offer as confirmed on this basis.
  // No automatic promotion for any uncertain proof. Identity ignores page URL/title,
  // but keeps business scope, product, benefit, quantity, dates and eligibility.
- const identity=[input.source.operator||input.source.canonical_brand,o.context,o.category,o.subject,o.kind,o.amount_scope,String(o.up_to),String(o.amount??""),String(o.quantity??""),o.product_brand,o.vehicle_brand,[...o.models].sort().join("|"),[...o.excluded_models].sort().join("|"),[...o.fuel_types].sort().join("|"),String(o.age_min??""),String(o.age_max??""),o.starts_at??"",o.ends_at??"",o.geographic_scope,o.location_label,o.conditions_quote].map(keyPart).join("::");
+ const identity=[input.source.operator||input.source.canonical_brand,o.context,o.category,o.subject,o.kind,o.amount_scope,String(o.up_to),String(o.amount??""),String(o.quantity??""),o.product_brand,o.vehicle_brand||input.source.canonical_brand,[...o.models].sort().join("|"),[...o.excluded_models].sort().join("|"),[...o.fuel_types].sort().join("|"),String(o.age_min??""),String(o.age_max??""),o.starts_at??"",o.ends_at??"",o.geographic_scope,o.location_label,o.conditions_quote].map(keyPart).join("::");
  return finish(reasons.length?"REVIEW":"READY",identity);
 }
 export function compatibility(o:Offer,vehicle:{brand:string;model:string;fuel:string|null;age:number|null}):"NO"|"CHECK"|"MATCH"{
@@ -160,9 +164,9 @@ export function compatibility(o:Offer,vehicle:{brand:string;model:string;fuel:st
  if(o.context!=="CURRENT_VEHICLE")return "NO";
  if(o.vehicle_brand&&!eq(o.vehicle_brand,vehicle.brand))return "NO";
  if(o.excluded_models.some(x=>eq(x,vehicle.model)))return "NO";
- if(o.models.length&&!o.models.some(x=>eq(x,vehicle.model)))return "NO";
+ if(o.models.length&&vehicle.model&&!o.models.some(x=>eq(x,vehicle.model)))return "NO";
  if(o.fuel_types.length&&vehicle.fuel&&!o.fuel_types.includes(vehicle.fuel))return "NO";
  if(vehicle.age!==null&&((o.age_min!==null&&vehicle.age<o.age_min)||(o.age_max!==null&&vehicle.age>o.age_max)))return "NO";
- if(o.eligibility_uncertain||o.geographic_scope!=="NATIONAL"||(o.fuel_types.length&&!vehicle.fuel)||((o.age_min!==null||o.age_max!==null)&&vehicle.age===null))return "CHECK";
+ if((o.models.length&&!vehicle.model)||o.eligibility_uncertain||o.geographic_scope!=="NATIONAL"||(o.fuel_types.length&&!vehicle.fuel)||((o.age_min!==null||o.age_max!==null)&&vehicle.age===null))return "CHECK";
  return "MATCH";
 }
