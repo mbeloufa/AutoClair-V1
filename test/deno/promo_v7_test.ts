@@ -1,9 +1,9 @@
 import {assertEquals,assert} from "jsr:@std/assert@1.0.16";
 import {amounts,validate,compatibility,type Offer,type Source} from "../../supabase/functions/promo-v7/semantic.ts";
-const source:Source={operator:"AD",canonical_brand:"*",role:"OFFER_HUB",policy:"AUTO_HIGH_CONFIDENCE",trust:"PROFESSIONAL",url:"https://example.com/promos",source_status:"ACTIVE"};
+const source:Source={operator:"AD",canonical_brand:"*",role:"OFFER_HUB",policy:"AUTO_HIGH_CONFIDENCE",trust:"PROFESSIONAL",url:"https://example.com/promos",source_status:"ACTIVE",evidence_level:"RAW_CARD"};
 const offer=(patch:Partial<Offer>={}):Offer=>({
  decision:"OFFER",title:"Forfait vidange",category:"MAINTENANCE",category_quote:"Forfait vidange",
- context:"CURRENT_VEHICLE",kind:"FROM_PRICE",benefit_quote:"à partir de 92€90",amount:92.9,amount_scope:"TOTAL",
+ context:"CURRENT_VEHICLE",kind:"FROM_PRICE",benefit_quote:"à partir de 92€90",amount:92.9,amount_scope:"TOTAL",up_to:false,subject:"vidange",subject_quote:"Forfait vidange",
  quantity:null,quantity_quote:"",product_brand:"",product_brand_quote:"",conditions:"Centres participants",conditions_quote:"Centres participants",
  starts_at:null,ends_at:"2026-12-31",date_quote:"jusqu'au 31 décembre 2026",vehicle_brand:"",models:[],excluded_models:[],model_quote:"",
  fuel_types:[],fuel_quote:"",age_min:null,age_max:null,age_quote:"",geographic_scope:"NATIONAL",geography_quote:"France",location_label:"France",eligibility_uncertain:false,reason:"",
@@ -27,7 +27,7 @@ Deno.test("Audit Renault tyre rebate cannot be a vehicle purchase",()=>{
 });
 Deno.test("Audit 50% fitting is not 50% on the whole tyre price",()=>{
  const t="Pneus Continental : 50% du montage offert. jusqu'au 31 décembre 2026. Centres participants. France.";
- const o=offer({title:"Pneus Continental",category:"TYRES",category_quote:"Pneus Continental",kind:"PERCENT",amount:50,benefit_quote:"50% du montage offert",amount_scope:"TOTAL"});
+ const o=offer({title:"Pneus Continental",subject:"pneus Continental",subject_quote:"Pneus Continental",category:"TYRES",category_quote:"Pneus Continental",kind:"PERCENT",amount:50,benefit_quote:"50% du montage offert",amount_scope:"TOTAL"});
  assert(check(o,t).reasons.includes("MOUNTING_SCOPE_REQUIRED"));
  assertEquals(check({...o,amount_scope:"MOUNTING"},t).state,"READY");
 });
