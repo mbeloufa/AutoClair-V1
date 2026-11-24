@@ -4,6 +4,7 @@ create table public.vehicles(id uuid primary key,user_id uuid not null reference
 create function public.normalize_offer_fuel_v6(p_value text) returns text language sql immutable as $fn$
  select case lower(coalesce(p_value,'')) when 'essence' then 'petrol' when 'électrique' then 'electric' else lower(coalesce(p_value,'')) end
 $fn$;
+\ir ../../supabase/promo-v7/freshness.sql
 \ir ../../supabase/promo-v7/release.sql
 insert into public.vehicles values
  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111','Renault','Zoe','Test Zoe',2022,'electric',35000),
@@ -79,3 +80,13 @@ begin
 end $test$;
 reset role;
 select public.promo_v7_set_enabled(false);
+
+-- Revalidation must be based on the current card, even if AI analyzed it weeks ago.
+update public.promo_v7_shadow_jobs set finished_at=now()-interval '20 days'
+where input_hash='release';
+do $test$
+begin
+ if not exists(select 1 from public.promo_v7_release_catalog where identity='fixture-ev') then raise exception 'Fresh proof lost due to old analysis';end if;
+ perform public.promo_v7_ingest_cards('11111111-1111-4111-8111-111111111111','https://www.ad.fr/promo-ev','[{"text":"Autre offre entretien 120 euros du 1 au 31 décembre."}]'::jsonb);
+ if exists(select 1 from public.promo_v7_release_catalog where identity='fixture-ev') then raise exception 'Disappeared campaign still public';end if;
+end $test$;
