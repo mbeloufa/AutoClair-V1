@@ -5,6 +5,8 @@ create table if not exists public.promo_v7_release_settings(
  enabled boolean not null default false,
  approved_engine text not null default 'promo-v7.2',
  approved_model text not null default '',
+ qa_approved boolean not null default false,
+ qa_reference text not null default '',
  minimum_offers integer not null default 20 check(minimum_offers>=1),
  minimum_operators integer not null default 5 check(minimum_operators>=1),
  minimum_purchase_offers integer not null default 5 check(minimum_purchase_offers>=1),
@@ -43,7 +45,7 @@ create or replace function public.promo_v7_release_health()
 returns jsonb language sql stable security invoker set search_path='' as $fn$
  select jsonb_build_object('enabled',s.enabled,'approved_engine',s.approved_engine,'approved_model',s.approved_model,
  'offers',q.n,'operators',q.operators,'apv',q.apv,'purchase',q.purchase,
- 'ready',q.n>=s.minimum_offers and q.operators>=s.minimum_operators and q.apv>=s.minimum_apv_offers and q.purchase>=s.minimum_purchase_offers and s.approved_model<>'')
+ 'qa_approved',s.qa_approved,'ready',s.qa_approved and length(trim(s.qa_reference))>0 and q.n>=s.minimum_offers and q.operators>=s.minimum_operators and q.apv>=s.minimum_apv_offers and q.purchase>=s.minimum_purchase_offers and s.approved_model<>'')
  from public.promo_v7_release_settings s
  cross join lateral(select count(*) n,count(distinct source->>'operator') operators,
  count(*) filter(where offer->>'context'='CURRENT_VEHICLE') apv,
@@ -52,6 +54,19 @@ returns jsonb language sql stable security invoker set search_path='' as $fn$
 $fn$;
 revoke all on function public.promo_v7_release_health() from public,anon,authenticated;
 grant execute on function public.promo_v7_release_health() to service_role;
+create or replace function public.promo_v7_set_enabled(p_enabled boolean)
+returns jsonb language plpgsql security invoker set search_path='' as $fn$
+declare h jsonb;
+begin
+ if p_enabled is null then raise exception 'INVALID_RELEASE_FLAG';end if;
+ perform pg_advisory_xact_lock(hashtext('promo_v7_release'));
+ h:=public.promo_v7_release_health();
+ if p_enabled and not coalesce((h->>'ready')::boolean,false) then raise exception 'PROMO_V7_RELEASE_NOT_READY';end if;
+ update public.promo_v7_release_settings set enabled=p_enabled,updated_at=now() where singleton;
+ return public.promo_v7_release_health();
+end $fn$;
+revoke all on function public.promo_v7_set_enabled(boolean) from public,anon,authenticated;
+grant execute on function public.promo_v7_set_enabled(boolean) to service_role;
 
 create or replace function public.promo_v7_norm(p_value text)
 returns text language sql immutable security invoker set search_path='' as $fn$
@@ -88,9 +103,11 @@ begin
  end if;
  -- Geographic / network / tyre dimension / contract information cannot be confirmed
  -- from the vehicle fields. Do not claim fully compatible merely from brand.
- if coalesce((o->>'eligibility_uncertain')::boolean,true) or o->>'geographic_scope'<>'NATIONAL' or uncertain
- or o->>'category'='TYRES' or coalesce(o->>'conditions','')<>'' then return 'CHECK';end if;
- if target<>'' and jsonb_array_length(coalesce(o->'models','[]'))>0 then return 'MATCH';end if;
+ if uncertain or o->>'geographic_scope'='LOCAL' then return 'CHECK';end if;
+ if target<>'' and brand=target then return 'LIKELY';end if;
+ -- General network offers with verified applicability are relevant, but never
+ -- automatically confirm tyre dimensions, local availability or contracts.
+ if target='' and o->>'geographic_scope'='NATIONAL' then return 'LIKELY';end if;
  return 'CHECK';
 end $fn$;
 
@@ -106,9 +123,9 @@ returns jsonb language sql stable security invoker set search_path='' as $fn$
  'original_price_amount',null,'currency','EUR','starts_at',r.offer->>'starts_at','ends_at',r.offer->>'ends_at',
  'source_name',r.source->>'operator','official_url',r.source->>'url','conditions_summary',r.offer->>'conditions_quote',
  'eligibility_notes',case when p_match='MATCH' then 'Conditions à consulter sur le site officiel.' else 'Compatibilité et participation du réseau à vérifier.' end,
- 'compatibility',case when p_match='MATCH' then 'COMPATIBLE' else 'CHECK' end,
- 'relevance_label',case when p_match='MATCH' then 'Modèle et critères identifiés' else 'Conditions à vérifier' end,
- 'relevance_score',case when p_match='MATCH' then 100 else 30 end,'relevant_now',p_match='MATCH',
+ 'compatibility',case when p_match='MATCH' then 'COMPATIBLE' when p_match='LIKELY' then 'LIKELY' else 'CHECK' end,
+ 'relevance_label',case when p_match='MATCH' then 'Modèle et critères identifiés' when p_match='LIKELY' then 'Probablement compatible — conditions à vérifier' else 'Conditions à vérifier' end,
+ 'relevance_score',case when p_match='MATCH' then 100 when p_match='LIKELY' then 65 else 30 end,'relevant_now',p_match in ('MATCH','LIKELY'),
  'expires_soon',(r.offer->>'ends_at')::date<=current_date+30,'is_saved',p_saved,
  'why',jsonb_build_array(case when p_match='MATCH' then 'Critères véhicule vérifiés' else 'Éligibilité non confirmée' end),
  'requires_manual_eligibility',p_match<>'MATCH','requires_network_participation',true,'requires_existing_contract',false,
@@ -127,11 +144,11 @@ begin
  if uid is null then raise exception 'COMMERCIAL_OFFERS_AUTH_REQUIRED';end if;
  select * into v from public.vehicles where id=p_vehicle_id and user_id=uid;
  if not found then raise exception 'COMMERCIAL_OFFERS_VEHICLE_NOT_FOUND';end if;
- if not (select enabled from public.promo_v7_release_settings where singleton) then return null;end if;
+ if not coalesce((select enabled from public.promo_v7_release_settings where singleton),false) then return null;end if;
  select coalesce(jsonb_agg(x.payload order by x.score desc,x.saved desc,x.last_seen_at desc,x.id),'[]'::jsonb) into data
  from (
  select public.promo_v7_payload(c,m.level,coalesce(p.status='SAVED',false)) payload,
- case when m.level='MATCH' then 100 else 30 end score,coalesce(p.status='SAVED',false) saved,c.last_seen_at,c.id
+ case when m.level='MATCH' then 100 when m.level='LIKELY' then 65 else 30 end score,coalesce(p.status='SAVED',false) saved,c.last_seen_at,c.id
  from public.promo_v7_release_catalog c
  cross join lateral(select public.promo_v7_match(c.offer,c.source,v.make,v.model,v.vehicle_year::int,v.fuel_type) level)m
  left join public.promo_v7_preferences p on p.user_id=uid and p.vehicle_id=v.id and p.offer_id=c.id
@@ -149,7 +166,7 @@ returns jsonb language plpgsql stable security definer set search_path='' as $fn
 declare data jsonb;
 begin
  if auth.uid() is null then raise exception 'COMMERCIAL_OFFERS_AUTH_REQUIRED';end if;
- if not (select enabled from public.promo_v7_release_settings where singleton) then return null;end if;
+ if not coalesce((select enabled from public.promo_v7_release_settings where singleton),false) then return null;end if;
  select coalesce(jsonb_agg(x.payload order by x.last_seen_at desc,x.id),'[]'::jsonb) into data from(
  select public.promo_v7_payload(c,'CHECK',false) payload,c.last_seen_at,c.id
  from public.promo_v7_release_catalog c where c.offer->>'context'='VEHICLE_PURCHASE'
