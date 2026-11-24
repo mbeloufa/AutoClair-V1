@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'supabase/migrations/**'
+      - 'supabase/promo-v7/**'
       - 'test/sql/**'
       - '.github/workflows/commercial-db-tests.yml'
   workflow_dispatch:
@@ -45,3 +46,6 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f test/sql/commercial_ledger_test.sql
       - name: Test 16 parallel reservations on single credit
         run: bash test/sql/commercial_concurrency_test.sh
+
+      - name: Promo V7 shadow queue contract
+        run: psql -v ON_ERROR_STOP=1 -f test/sql/promo_v7_shadow_test.sql
