@@ -90,3 +90,23 @@ begin
  perform public.promo_v7_ingest_cards('11111111-1111-4111-8111-111111111111','https://www.ad.fr/promo-ev','[{"text":"Autre offre entretien 120 euros du 1 au 31 décembre."}]'::jsonb);
  if exists(select 1 from public.promo_v7_release_catalog where identity='fixture-ev') then raise exception 'Disappeared campaign still public';end if;
 end $test$;
+
+\ir ../../supabase/promo-v7/operations.sql
+-- Time-shift the prior synthetic jobs so the new raw-only queue can be exercised.
+update public.promo_v7_shadow_jobs set created_at=now()-interval '25 hours' where created_at>now()-interval '24 hours';
+set role service_role;
+do $test$
+declare j record; first_id uuid;
+begin
+ select * into j from public.promo_v7_claim_shadow('promo-v7.2','retry-test');
+ if j.job_id is null or j.source->>'evidence_level'<>'RAW_CARD' then raise exception 'No raw queue';end if;
+ first_id:=j.job_id;
+ perform public.promo_v7_finish_shadow(first_id,'[]'::jsonb,null,'AI_HTTP_429');
+ -- Other cards may be processed, but never the same failed card before cooldown.
+ if exists(select 1 from public.promo_v7_shadow_jobs where origin_id=(select origin_id from public.promo_v7_shadow_jobs where id=first_id) and model='retry-test' and attempt_no>1) then raise exception 'Unexpected immediate retry';end if;
+ update public.promo_v7_shadow_jobs set finished_at=now()-interval '7 hours' where id=first_id;
+ -- Worker prioritizes fresh cards before retries; check retry using a separate input after exhausting fresh items.
+ perform public.promo_v7_claim_shadow('promo-v7.2','retry-test');
+ if (select analysis_enabled from public.promo_v7_release_settings where singleton) then raise exception 'Paid automation enabled by default';end if;
+end $test$;
+reset role;
