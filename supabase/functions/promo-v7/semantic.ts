@@ -15,7 +15,8 @@ const props = {
   title:str, category:field([...CATEGORIES,"OTHER"]), category_quote:str,
   context:field(["CURRENT_VEHICLE","VEHICLE_PURCHASE","FINANCE_INSURANCE","UNKNOWN"]),
   kind:field([...BENEFITS,"UNKNOWN"]), benefit_quote:str,
-  amount:num, amount_scope:field(SCOPES), quantity:integer,
+  amount:num, amount_scope:field(SCOPES), up_to:{type:"boolean"}, quantity:integer,
+  subject:str, subject_quote:str,
   quantity_quote:str, product_brand:str, product_brand_quote:str,
   conditions:str, conditions_quote:str,
   starts_at:nullable, ends_at:nullable, date_quote:str,
@@ -29,13 +30,13 @@ export const OFFER_SCHEMA = {type:"object",additionalProperties:false,properties
 export const RESPONSE_SCHEMA = {type:"object",additionalProperties:false,properties:{offers:{type:"array",items:OFFER_SCHEMA}},required:["offers"]};
 export type Offer = {
  decision:"OFFER"|"NOT_OFFER"|"AMBIGUOUS"; title:string;category:string;category_quote:string;
- context:string;kind:string;benefit_quote:string;amount:number|null;amount_scope:string;quantity:number|null;
+ context:string;kind:string;benefit_quote:string;amount:number|null;amount_scope:string;up_to:boolean;quantity:number|null;subject:string;subject_quote:string;
  quantity_quote:string;product_brand:string;product_brand_quote:string;conditions:string;conditions_quote:string;
  starts_at:string|null;ends_at:string|null;date_quote:string;vehicle_brand:string;models:string[];excluded_models:string[];model_quote:string;
  fuel_types:string[];fuel_quote:string;age_min:number|null;age_max:number|null;age_quote:string;
  geographic_scope:string;geography_quote:string;location_label:string;eligibility_uncertain:boolean;reason:string;
 };
-export type Source = {operator:string;canonical_brand:string;role:string;policy:string;trust:string;url:string;source_status:string};
+export type Source = {operator:string;canonical_brand:string;role:string;policy:string;trust:string;url:string;source_status:string;evidence_level:"RAW_CARD"|"LEGACY_EXCERPT"};
 export type Input = {text:string;source:Source};
 export type Verdict = {state:"READY"|"REVIEW"|"REJECTED";reasons:string[];identity:string|null;offer:Offer};
 export const SYSTEM = [
@@ -44,7 +45,7 @@ export const SYSTEM = [
  "Classify the operation itself, not ancillary parts, page category, or incidental words. Vidange with filtre = MAINTENANCE; EV service with cabin filter = MAINTENANCE; brake pads replacement = BRAKES; tyre reimbursement = TYRES, not vehicle purchase. Only actual vehicle sale/lease is VEHICLE_PURCHASE. The source's advertised purpose is not evidence.",
  "Every category, amount, conditions, quantity, product brand, model inclusion/exclusion, fuel, age, geography and dates must be backed by exact verbatim quotes from text. Put empty string or null for unknown. Distinguish vehicle brand vs tyre brand. 'mon espace' is NOT Renault Espace. Never infer eligibility from missing data; mark eligibility_uncertain=true if not explicit. Never infer national geography from a website domain.",
  "Keep discount scope: 50% of fitting is MOUNTING, not 50% off tyres. Keep cents in French 92€90. distinguish immediate discount, deferred reimbursement, total price, monthly price, per tyre, and up to. Never invent dates or convert a regular price into a saving. Prefer original exact conditions. Dates ISO YYYY-MM-DD only with explicit date including year. Multiple alternatives require distinct rows. If contradictory or missing proof, AMBIGUOUS.",
- "Maximum 6 offers per fragment. Use short French titles and conditions. Do not add information from outside the supplied text."
+ "Use a stable subject (e.g. vidange, pneus Continental) with exact subject_quote, and up_to=true for maximum conditional amounts. Maximum 6 offers per fragment. Use short French titles and conditions. Do not add information from outside the supplied text."
 ].join("\n");
 export function normalize(s:string):string {return s.normalize("NFKD").replace(/\p{M}/gu,"").toLowerCase().replace(/[’‘]/g,"'").replace(/\s+/g," ").trim();}
 function literal(text:string, quote:string):boolean {return typeof quote==="string" && normalize(quote).length>=3 && normalize(text).includes(normalize(quote));}
@@ -97,7 +98,9 @@ export function validate(input:Input, o:Offer, today=new Date().toISOString().sl
  if(o.decision==="NOT_OFFER"){review("NOT_A_PROMOTION");return finish("REJECTED");}
  if(o.decision!=="OFFER"){review("AMBIGUOUS_FRAGMENT");return finish("REVIEW");}
  if(!["OFFER_HUB","OFFER_DETAIL"].includes(input.source.role)||input.source.policy!=="AUTO_HIGH_CONFIDENCE"||!["PRIMARY","PROFESSIONAL"].includes(input.source.trust)||input.source.source_status!=="ACTIVE")review("SOURCE_NOT_PUBLICATION_ELIGIBLE");
+ if(input.source.evidence_level!=="RAW_CARD")review("LEGACY_EXCERPT_ONLY");
  if(!o.title.trim()||generic.test(normalize(o.title)))review("GENERIC_TITLE");
+ if(!o.subject.trim()||!literal(input.text,o.subject_quote))review("SUBJECT_UNPROVEN");
  if(!literal(input.text,o.category_quote)||!categories[o.category]?.test(normalize(o.category_quote)))review("CATEGORY_UNPROVEN");
  if(!literal(input.text,o.benefit_quote))review("BENEFIT_UNPROVEN");
  const proof=normalize(o.benefit_quote), cat=normalize(o.category_quote);
@@ -112,6 +115,7 @@ export function validate(input:Input, o:Offer, today=new Date().toISOString().sl
   if(o.amount!==null||!/\b(gratuit|gratuite|offert|offerte|offerts|offertes)\b/.test(proof))review("FREE_SERVICE_UNPROVEN");
  }else if(!finite(o.amount)||o.amount<=0||!amounts(o.benefit_quote).some(n=>Math.abs(n-o.amount!)<0.00001))review("AMOUNT_UNPROVEN");
  if(o.kind==="PERCENT"&&(!finite(o.amount)||o.amount>100||!proof.includes("%")))review("PERCENT_INVALID");
+ if(/jusqu[\s\x27]*a\b/.test(proof)!==o.up_to)review("MAXIMUM_QUALIFIER_MISMATCH");
  if(/\b(montage|pose)\b/.test(proof)&&o.kind==="PERCENT"&&o.amount_scope!=="MOUNTING")review("MOUNTING_SCOPE_REQUIRED");
  if(o.kind==="REIMBURSEMENT"&&!/rembours|prise en charge|cagnotte/.test(proof))review("REIMBURSEMENT_UNPROVEN");
  if(o.kind==="FIXED_DISCOUNT"&&!/remise|reduction|economis|offert/.test(proof))review("DISCOUNT_UNPROVEN");
@@ -148,7 +152,7 @@ export function validate(input:Input, o:Offer, today=new Date().toISOString().sl
  if(o.eligibility_uncertain)review("ELIGIBILITY_UNCERTAIN");
  // No automatic promotion for any uncertain proof. Identity ignores page URL/title,
  // but keeps business scope, product, benefit, quantity, dates and eligibility.
- const identity=[input.source.operator||input.source.canonical_brand,o.context,o.category,o.kind,o.amount_scope,String(o.amount??""),String(o.quantity??""),o.product_brand,o.vehicle_brand,[...o.models].sort().join("|"),[...o.excluded_models].sort().join("|"),[...o.fuel_types].sort().join("|"),String(o.age_min??""),String(o.age_max??""),o.starts_at??"",o.ends_at??"",o.geographic_scope,o.location_label,o.category_quote,o.conditions_quote].map(keyPart).join("::");
+ const identity=[input.source.operator||input.source.canonical_brand,o.context,o.category,o.subject,o.kind,o.amount_scope,String(o.up_to),String(o.amount??""),String(o.quantity??""),o.product_brand,o.vehicle_brand,[...o.models].sort().join("|"),[...o.excluded_models].sort().join("|"),[...o.fuel_types].sort().join("|"),String(o.age_min??""),String(o.age_max??""),o.starts_at??"",o.ends_at??"",o.geographic_scope,o.location_label,o.conditions_quote].map(keyPart).join("::");
  return finish(reasons.length?"REVIEW":"READY",identity);
 }
 export function compatibility(o:Offer,vehicle:{brand:string;model:string;fuel:string|null;age:number|null}):"NO"|"CHECK"|"MATCH"{
