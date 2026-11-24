@@ -21,6 +21,8 @@ create table if not exists public.promo_v7_shadow_jobs(
 alter table public.promo_v7_shadow_jobs enable row level security;
 revoke all on public.promo_v7_shadow_jobs from public,anon,authenticated;
 grant select,insert,update on public.promo_v7_shadow_jobs to service_role;
+drop policy if exists promo_v7_server_only on public.promo_v7_shadow_jobs;
+create policy promo_v7_server_only on public.promo_v7_shadow_jobs for all to service_role using (true) with check (true);
 create index if not exists promo_v7_shadow_created on public.promo_v7_shadow_jobs(created_at);
 create or replace function public.promo_v7_claim_shadow(p_engine text,p_model text)
 returns table(job_id uuid,input_text text,source jsonb)
