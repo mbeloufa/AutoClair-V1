@@ -44,9 +44,12 @@ Deno.serve(async req=>{
   const db=createClient(requireEnv("SUPABASE_URL"),requireEnv("SUPABASE_SERVICE_ROLE_KEY"),{auth:{persistSession:false,autoRefreshToken:false}});
   const {data:valid,error:authError}=await db.rpc("validate_commercial_offer_sync_secret",{p_candidate:secret});
   if(authError||valid!==true)return json({error:"UNAUTHORIZED"},401);
-  // Disabled unless explicitly configured. No client-supplied URL/text/model/budget.
-  if(Deno.env.get("PROMO_V7_SHADOW_ENABLED")!=="true")return json({status:"DISABLED"});
-  const model=requireEnv("PROMO_V7_MODEL"),key=requireEnv("OPENAI_API_KEY");
+  // No schedule and no publication. A trusted operator may run a single job
+  // explicitly while shadow automation is disabled. The SQL global cap still applies.
+  const pilot=req.headers.get("x-promo-v7-pilot")==="1";
+  if(!pilot&&Deno.env.get("PROMO_V7_SHADOW_ENABLED")!=="true")return json({status:"DISABLED"});
+  const model=Deno.env.get("PROMO_V7_MODEL")?.trim()||requireEnv("OPENAI_MODEL");
+  const key=requireEnv("OPENAI_API_KEY");
   const {data,error}=await db.rpc("promo_v7_claim_shadow",{p_engine:VERSION,p_model:model});
   if(error)throw Error("QUEUE_CLAIM_FAILED");
   if(!data||!Array.isArray(data)||data.length===0)return json({status:"NO_JOB_OR_BUDGET"});
