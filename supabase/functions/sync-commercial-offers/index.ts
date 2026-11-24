@@ -7,6 +7,7 @@ import {
   type ExtractedOffer,
   type KnownVehicle,
 } from "./extractor.ts";
+import { isolateRawCards } from "./raw_cards.ts";
 
 type JsonMap = Record<string, unknown>;
 
@@ -1267,6 +1268,23 @@ async function processTask(
       task.target_kind === "ROOT" &&
       source.monitoring_mode === "LINK_DISCOVERY_ONLY"
     );
+
+    // V7 mirror only: preserve production extraction and publication. The new
+    // feed is independent of V6 classification and does not execute site JS.
+    if (Deno.env.get("PROMO_V7_CAPTURE_ENABLED")==="true" && shouldExtract &&
+        ["OFFER_HUB","OFFER_DETAIL"].includes(source.source_role)) {
+      try {
+        const cards=isolateRawCards(fetched.html);
+        if(cards.length){
+          const {error}=await client.rpc("promo_v7_ingest_cards",{
+            p_source:source.id,p_page:fetched.finalUrl.toString(),p_cards:cards,
+          });
+          if(error)console.error("PROMO_V7_CAPTURE_FAILED",source.source_key);
+        }
+      } catch (_) {
+        console.error("PROMO_V7_CAPTURE_FAILED",source.source_key);
+      }
+    }
 
     const extracted = shouldExtract
       ? await extractOffers(
