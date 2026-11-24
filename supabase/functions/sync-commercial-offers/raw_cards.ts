@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { parseHTML } from "npm:linkedom@0.18.12";
 import { normalize } from "../promo-v7/semantic.ts";
 
@@ -8,14 +9,14 @@ const promo=/(?:\d[\d\s.,]*\s*(?:€|%)|\b(?:offert|offerte|gratuit|gratuite|rem
 const subject=/\b(?:entretien|vidange|revision|pneu|pneus|pneumatique|frein|batterie|climatisation|pare.brise|carrosserie|controle technique|essuie.glace|distribution|accessoire|vehicule|voiture|loyer|loa|lld|financement|assurance|garantie|reprise|prix|forfait)\b/i;
 const clean=(s:string)=>s.replace(/\s+/g," ").trim();
 // Preserve boundaries between DOM headings, paragraphs and adjacent blocks.
-function visibleText(node:{nodeType:number;textContent:string|null;childNodes:ArrayLike<any>}):string {
+function visibleText(node:{nodeType:number;textContent:string|null;childNodes:ArrayLike<Node>}):string {
  if(node.nodeType===3)return node.textContent??"";
  return Array.from(node.childNodes).map(visibleText).join(" ");
 }
 const bad=/^(?:menu|accueil|en savoir plus|prendre rendez.vous|se connecter|inscription|newsletter|offres d'emploi|mon espace|votre espace|garage virtuel)$/i;
 export function isolateRawCards(html:string):RawCard[]{
  if(!html||html.length>3_000_000)return [];
- const {document}=parseHTML(html);
+ const {document}=parseHTML(html) as unknown as {document:Document};
  for(const e of document.querySelectorAll("script,style,noscript,nav,header,footer,aside,form,template,[role=navigation],[role=banner],[role=contentinfo],[aria-hidden=true], [class*=cookie], [class*=newsletter], [id*=cookie], [id*=newsletter]"))e.remove();
  const found:Array<{node:Element;card:RawCard}>=[];
  const all=document.querySelectorAll("article,section,li,div[class],div[id],[itemtype*='Offer']");
