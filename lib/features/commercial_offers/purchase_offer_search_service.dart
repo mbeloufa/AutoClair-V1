@@ -73,15 +73,21 @@ class PurchaseOfferSearchService {
     int limit = 100,
   }) async {
     try {
-      final raw = await _client.rpc(
-        'search_vehicle_purchase_offers_v4',
-        params: {
-          'p_brand': _nullable(criteria.brand),
-          'p_model': _nullable(criteria.model),
-          'p_fuel': _nullable(criteria.fuel),
-          'p_vehicle_kind': criteria.vehicleKind,
-          'p_limit': limit.clamp(1, 150).toInt(),
-        },
+      final params = <String, dynamic>{
+        'p_brand': _nullable(criteria.brand),
+        'p_model': _nullable(criteria.model),
+        'p_fuel': _nullable(criteria.fuel),
+        'p_vehicle_kind': criteria.vehicleKind,
+        'p_limit': limit.clamp(1, 150).toInt(),
+      };
+      dynamic v7;
+      try {
+        v7 = await _client.rpc('promo_v7_purchase', params: params);
+      } on PostgrestException catch (error) {
+        if (error.code != 'PGRST202') rethrow;
+      }
+      final raw = v7 ?? await _client.rpc(
+        'search_vehicle_purchase_offers_v4', params: params,
       );
 
       if (raw is! Map) {
