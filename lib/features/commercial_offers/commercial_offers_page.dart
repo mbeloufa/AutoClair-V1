@@ -1155,6 +1155,7 @@ String _categoryLabel(String category) {
   return switch (category) {
     'MAINTENANCE' => 'Entretien',
     'TYRES' => 'Pneumatiques',
+    'BRAKES' => 'Freinage',
     'BATTERY' => 'Batterie',
     'CLIMATE' => 'Climatisation',
     'ACCESSORIES' => 'Accessoires',
@@ -1176,6 +1177,7 @@ IconData _categoryIcon(String category) {
   return switch (category) {
     'MAINTENANCE' => Icons.build_circle_outlined,
     'TYRES' => Icons.tire_repair_outlined,
+    'BRAKES' => Icons.build_outlined,
     'BATTERY' => Icons.battery_charging_full_outlined,
     'CLIMATE' => Icons.ac_unit_rounded,
     'ACCESSORIES' => Icons.shopping_bag_outlined,
