@@ -58,7 +58,11 @@ Deno.serve(async req=>{
   // No schedule and no publication. A trusted operator may run a single job
   // explicitly while shadow automation is disabled. The SQL global cap still applies.
   const pilot=req.headers.get("x-promo-v7-pilot")==="1";
-  if(!pilot&&Deno.env.get("PROMO_V7_SHADOW_ENABLED")!=="true")return json({status:"DISABLED"});
+  if(!pilot){
+    const {data:settings,error:settingsError}=await db.from("promo_v7_release_settings").select("analysis_enabled").eq("singleton",true).single();
+    if(settingsError)throw Error("ANALYSIS_CONFIG_FAILED");
+    if(settings?.analysis_enabled!==true)return json({status:"DISABLED"});
+  }
   const model=Deno.env.get("PROMO_V7_MODEL")?.trim()||requireEnv("OPENAI_MODEL");
   const key=requireEnv("OPENAI_API_KEY");
   if(!pilot){
